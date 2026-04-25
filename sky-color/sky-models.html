@@ -116,6 +116,48 @@
     font-size: 0.7rem; color: #666; text-transform: uppercase;
     letter-spacing: 0.5px; margin-bottom: 4px;
   }
+  /* Preset buttons */
+  .presets-wrap {
+    margin-bottom: 24px; background: #16213e; border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .presets-wrap h2 { font-size: 1rem; margin-bottom: 10px; color: #fff; font-weight: 600; }
+  .preset-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .preset-grid .earth-row { grid-column: 1 / -1; }
+  .preset-btn {
+    background: #1a1a2e; border: 1px solid #2a3a5a; color: #ccc;
+    border-radius: 6px; padding: 8px 10px; cursor: pointer;
+    font-size: 0.78rem; text-align: left; transition: all 0.15s;
+    line-height: 1.4;
+  }
+  .preset-btn:hover { background: #2a3a5a; border-color: #4a6a8a; color: #fff; }
+  .preset-btn.active { background: #2a4a6a; border-color: #7ec8e3; color: #fff; }
+  .preset-btn .preset-name { font-weight: 600; display: block; }
+  .preset-btn .preset-source { font-size: 0.68rem; color: #666; }
+  .preset-btn .preset-star { font-size: 0.68rem; color: #887733; }
+  /* Planet-specific sliders */
+  .controls.planet { background: #1a2430; border: 1px solid #2a3a4a; }
+  .controls.planet .control .val { color: #e3c87e; }
+  .controls.planet input[type=range] { accent-color: #e3c87e; }
+  .stellar-temp-slider {
+    -webkit-appearance: none; appearance: none; height: 8px; border-radius: 4px;
+    background: linear-gradient(to right,
+      #ff3300 0%, #ff6633 10%, #ffaa55 20%, #ffcc77 30%,
+      #ffeedd 40%, #ffffff 50%, #ccd8ff 60%, #aabbff 70%,
+      #8899ff 80%, #6677ee 90%, #5566dd 100%);
+    outline: none;
+  }
+  .stellar-temp-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; border: 2px solid #333; cursor: pointer;
+    box-shadow: 0 0 4px rgba(0,0,0,0.5);
+  }
+  .stellar-temp-slider::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; border: 2px solid #333; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -125,15 +167,15 @@
 
 <div class="controls">
   <div class="control">
-    <label>Turbidity <span class="val" id="vTurb">3.0</span></label>
+    <label><a href="https://en.wikipedia.org/wiki/Turbidity" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Turbidity</a> <span class="val" id="vTurb">3.0</span></label>
     <input type="range" id="turbidity" min="1" max="10" step="0.5" value="3">
   </div>
   <div class="control">
-    <label>Latitude <span class="val" id="vLat">40°</span> <button class="geo-btn" id="geoBtn" title="Use current location">&#x2316;</button></label>
+    <label><a href="https://en.wikipedia.org/wiki/Latitude" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Latitude</a> <span class="val" id="vLat">40°</span> <button class="geo-btn" id="geoBtn" title="Use current location">&#x2316;</button></label>
     <input type="range" id="latitude" min="-70" max="70" step="1" value="40">
   </div>
   <div class="control">
-    <label>View Elevation <span class="val" id="vElev">90°</span></label>
+    <label><a href="https://en.wikipedia.org/wiki/Horizontal_coordinate_system" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">View Elevation</a> <span class="val" id="vElev">90°</span></label>
     <input type="range" id="viewElev" min="5" max="90" step="1" value="90">
   </div>
   <div class="control">
@@ -141,11 +183,11 @@
     <input type="range" id="dayOfYear" min="1" max="365" step="1" value="183">
   </div>
   <div class="control">
-    <label>Ground Albedo <span class="val" id="vAlbedo">0.3</span></label>
+    <label><a href="https://en.wikipedia.org/wiki/Albedo" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Ground Albedo</a> <span class="val" id="vAlbedo">0.3</span></label>
     <input type="range" id="albedo" min="0" max="1" step="0.05" value="0.3">
   </div>
   <div class="control">
-    <label>Ozone <span class="val" id="vOzone">1.00</span></label>
+    <label><a href="https://en.wikipedia.org/wiki/Ozone_layer" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Ozone</a> <span class="val" id="vOzone">1.00</span></label>
     <input type="range" id="ozoneStrength" min="0" max="3" step="0.05" value="1">
   </div>
   <div class="control">
@@ -189,6 +231,113 @@
     <input type="range" id="nightTint" min="0" max="1" step="0.05" value="0">
   </div>
   <button class="reset-btn" id="resetStyle">Reset Style</button>
+</div>
+
+<div class="presets-wrap">
+  <h2>Planetary Presets</h2>
+  <div class="preset-grid">
+    <button class="preset-btn earth-row active" data-preset="earth">
+      <span class="preset-name">Earth</span>
+      <span class="preset-source">Sol III</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="mars">
+      <span class="preset-name">Mars</span>
+      <span class="preset-source">Sol IV</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="venus">
+      <span class="preset-name">Venus</span>
+      <span class="preset-source">Sol II</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="titan">
+      <span class="preset-name">Titan</span>
+      <span class="preset-source">Saturn VI</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="jupiter">
+      <span class="preset-name">Jupiter</span>
+      <span class="preset-source">Sol V</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="saturn">
+      <span class="preset-name">Saturn</span>
+      <span class="preset-source">Sol VI</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="arrakis">
+      <span class="preset-name">Arrakis</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Arrakis" target="_blank">Dune</a></span>
+      <span class="preset-star">G-type — 5800 K</span>
+    </button>
+    <button class="preset-btn" data-preset="vulcan">
+      <span class="preset-name">Vulcan</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Vulcan_(Star_Trek)" target="_blank">Star Trek</a></span>
+      <span class="preset-star">K1V — 5000 K</span>
+    </button>
+    <button class="preset-btn" data-preset="krypton">
+      <span class="preset-name">Krypton</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Krypton_(planet)" target="_blank">DC</a></span>
+      <span class="preset-star">Red dwarf — 3800 K</span>
+    </button>
+    <button class="preset-btn" data-preset="pandora">
+      <span class="preset-name">Pandora</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Pandora_(Avatar)" target="_blank">Avatar</a></span>
+      <span class="preset-star">A-type — 8500 K</span>
+    </button>
+    <button class="preset-btn" data-preset="tatooine">
+      <span class="preset-name">Tatooine</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Tatooine" target="_blank">Star Wars</a></span>
+      <span class="preset-star">Binary: G2V + K1V</span>
+    </button>
+    <button class="preset-btn" data-preset="hoth">
+      <span class="preset-name">Hoth</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Hoth" target="_blank">Star Wars</a></span>
+      <span class="preset-star">Blue-white — 9000 K</span>
+    </button>
+    <button class="preset-btn" data-preset="qonos">
+      <span class="preset-name">Qo'noS</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Qo%27noS" target="_blank">Star Trek</a></span>
+      <span class="preset-star">K-type — 4600 K</span>
+    </button>
+    <button class="preset-btn" data-preset="namek">
+      <span class="preset-name">Namek</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Namek" target="_blank">Dragon Ball</a></span>
+      <span class="preset-star">Triple: 3× G-type</span>
+    </button>
+    <button class="preset-btn" data-preset="gallifrey">
+      <span class="preset-name">Gallifrey</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Gallifrey" target="_blank">Doctor Who</a></span>
+      <span class="preset-star">Binary: G + K</span>
+    </button>
+    <button class="preset-btn" data-preset="vormir">
+      <span class="preset-name">Vormir</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Vormir" target="_blank">MCU</a></span>
+      <span class="preset-star">Binary: K + M</span>
+    </button>
+    <button class="preset-btn" data-preset="thessia">
+      <span class="preset-name">Thessia</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Mass_Effect" target="_blank">Mass Effect</a></span>
+      <span class="preset-star">F-type — 6500 K</span>
+    </button>
+  </div>
+</div>
+
+<div class="controls planet" id="planetControls">
+  <div class="controls-label">Planet Physics</div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Atmosphere" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Atmo Density</a> <span class="val" id="vAtmoDens">1.00</span></label>
+    <input type="range" id="atmoDensity" min="0.01" max="5" step="0.01" value="1">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Astronomical_unit" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Sun Distance</a> <span class="val" id="vSunDist">1.00 AU</span></label>
+    <input type="range" id="sunDistance" min="0.3" max="10" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Stellar_classification" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Stellar Temp</a> <span class="val" id="vStellarTemp">5778 K</span></label>
+    <input type="range" id="stellarTemp" min="2500" max="12000" step="50" value="5778" class="stellar-temp-slider">
+  </div>
 </div>
 
 <div class="strip-container">
@@ -1041,13 +1190,169 @@ function preethamColor(sunElev, turbidity, viewElevDeg) {
 // ============================================================
 // NISHITA MODEL
 // ============================================================
-const EARTH_R = 6371e3;
-const ATMO_R = 6471e3;
-const HR = 8000;     // Rayleigh scale height
-const HM = 1200;     // Mie scale height
-const BETA_R = [5.5e-6, 13.0e-6, 22.4e-6]; // Rayleigh scattering at sea level (RGB)
-const BETA_M = 21e-6; // Mie scattering at sea level
-const SUN_INTENSITY = 20;
+let EARTH_R = 6371e3;
+let ATMO_R = 6471e3;
+let HR = 8000;     // Rayleigh scale height
+let HM = 1200;     // Mie scale height
+let BETA_R = [5.5e-6, 13.0e-6, 22.4e-6]; // Rayleigh scattering at sea level (RGB)
+let BETA_M = 21e-6; // Mie scattering at sea level
+let SUN_INTENSITY = 20;
+
+// Default Earth values for reset
+const EARTH_DEFAULTS = {
+  EARTH_R: 6371e3, ATMO_R: 6471e3, HR: 8000, HM: 1200,
+  BETA_R: [5.5e-6, 13.0e-6, 22.4e-6], BETA_M: 21e-6, SUN_INTENSITY: 20
+};
+
+// ============================================================
+// BLACKBODY / STELLAR COLOR
+// ============================================================
+function blackbodyRGB(tempK) {
+  // Attempt CIE 1931 2-degree observer approximation for sRGB
+  // Using Planckian locus fit by Kim et al.
+  const t = tempK;
+  let x, y;
+  if (t <= 4000) {
+    x = -0.2661239e9/(t*t*t) - 0.2343589e6/(t*t) + 0.8776956e3/t + 0.179910;
+  } else {
+    x = -3.0258469e9/(t*t*t) + 2.1070379e6/(t*t) + 0.2226347e3/t + 0.240390;
+  }
+  if (t <= 2222) {
+    y = -1.1063814*x*x*x - 1.34811020*x*x + 2.18555832*x - 0.20219683;
+  } else if (t <= 4000) {
+    y = -0.9549476*x*x*x - 1.37418593*x*x + 2.09137015*x - 0.16748867;
+  } else {
+    y = 3.0817580*x*x*x - 5.87338670*x*x + 3.75112997*x - 0.37001483;
+  }
+  // Convert xyY (Y=1) to linear RGB
+  if (y < 1e-6) return [1, 1, 1];
+  const Y = 1, X = x / y, Z = (1 - x - y) / y;
+  let r =  3.2406 * X - 1.5372 * Y - 0.4986 * Z;
+  let g = -0.9689 * X + 1.8758 * Y + 0.0415 * Z;
+  let b =  0.0557 * X - 0.2040 * Y + 1.0570 * Z;
+  // Normalize so max channel = 1
+  const mx = Math.max(r, g, b, 1e-6);
+  return [Math.max(0, r/mx), Math.max(0, g/mx), Math.max(0, b/mx)];
+}
+
+// ============================================================
+// PLANETARY PRESETS
+// ============================================================
+const PRESETS = {
+  earth: {
+    planetR: 6371e3, atmoR: 6471e3, hr: 8000, hm: 1200,
+    betaR: [5.5e-6, 13.0e-6, 22.4e-6], betaM: 21e-6, sunIntensity: 20,
+    atmoDensity: 1, sunDist: 1, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 3, ozone: 1, albedo: 0.3, scatterTweak: null
+  },
+  mars: {
+    planetR: 3390e3, atmoR: 3500e3, hr: 11000, hm: 2000,
+    betaR: [19.918e-6, 13.57e-6, 5.75e-6], betaM: 40e-6, sunIntensity: 12,
+    atmoDensity: 0.006, sunDist: 1.52, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 8, ozone: 0, albedo: 0.25, scatterTweak: null
+  },
+  venus: {
+    planetR: 6052e3, atmoR: 6300e3, hr: 15000, hm: 3000,
+    betaR: [8e-6, 10e-6, 11e-6], betaM: 80e-6, sunIntensity: 8,
+    atmoDensity: 90, sunDist: 0.72, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 10, ozone: 0, albedo: 0.7, scatterTweak: null
+  },
+  titan: {
+    planetR: 2575e3, atmoR: 2775e3, hr: 20000, hm: 5000,
+    betaR: [6e-6, 9e-6, 5e-6], betaM: 100e-6, sunIntensity: 4,
+    atmoDensity: 1.5, sunDist: 9.5, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 10, ozone: 0, albedo: 0.2, scatterTweak: null
+  },
+  jupiter: {
+    planetR: 69911e3, atmoR: 70411e3, hr: 27000, hm: 4000,
+    betaR: [3e-6, 7e-6, 15e-6], betaM: 50e-6, sunIntensity: 6,
+    atmoDensity: 3, sunDist: 5.2, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 5, ozone: 0, albedo: 0.5, scatterTweak: null
+  },
+  saturn: {
+    planetR: 58232e3, atmoR: 58832e3, hr: 36000, hm: 5000,
+    betaR: [5e-6, 10e-6, 14e-6], betaM: 40e-6, sunIntensity: 4,
+    atmoDensity: 2.5, sunDist: 9.5, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 4, ozone: 0, albedo: 0.47, scatterTweak: null
+  },
+  arrakis: {
+    planetR: 6200e3, atmoR: 6280e3, hr: 7000, hm: 1500,
+    betaR: [15e-6, 10e-6, 4e-6], betaM: 60e-6, sunIntensity: 22,
+    atmoDensity: 0.8, sunDist: 1.1, stars: [{temp: 5800, intensity: 1}],
+    turbidity: 9, ozone: 0.3, albedo: 0.4, scatterTweak: null
+  },
+  vulcan: {
+    planetR: 7500e3, atmoR: 7580e3, hr: 6500, hm: 1000,
+    betaR: [12e-6, 9e-6, 5e-6], betaM: 30e-6, sunIntensity: 18,
+    atmoDensity: 0.6, sunDist: 0.8, stars: [{temp: 5000, intensity: 1}],
+    turbidity: 4, ozone: 0.5, albedo: 0.2, scatterTweak: null
+  },
+  krypton: {
+    planetR: 8000e3, atmoR: 8120e3, hr: 9000, hm: 1500,
+    betaR: [14e-6, 8e-6, 4e-6], betaM: 35e-6, sunIntensity: 14,
+    atmoDensity: 1.2, sunDist: 0.6, stars: [{temp: 3800, intensity: 1}],
+    turbidity: 5, ozone: 0.8, albedo: 0.3, scatterTweak: null
+  },
+  pandora: {
+    planetR: 5800e3, atmoR: 5950e3, hr: 10000, hm: 2000,
+    betaR: [4e-6, 8e-6, 22e-6], betaM: 15e-6, sunIntensity: 25,
+    atmoDensity: 1.2, sunDist: 0.9, stars: [{temp: 8500, intensity: 1}],
+    turbidity: 2, ozone: 1.5, albedo: 0.15, scatterTweak: null
+  },
+  tatooine: {
+    planetR: 6100e3, atmoR: 6190e3, hr: 7500, hm: 1100,
+    betaR: [10e-6, 11e-6, 8e-6], betaM: 45e-6, sunIntensity: 24,
+    atmoDensity: 0.9, sunDist: 1.0,
+    stars: [{temp: 5778, intensity: 0.6}, {temp: 4900, intensity: 0.4}],
+    turbidity: 7, ozone: 0.2, albedo: 0.35, scatterTweak: null
+  },
+  hoth: {
+    planetR: 6400e3, atmoR: 6490e3, hr: 8500, hm: 1400,
+    betaR: [4e-6, 11e-6, 24e-6], betaM: 12e-6, sunIntensity: 22,
+    atmoDensity: 0.85, sunDist: 1.3, stars: [{temp: 9000, intensity: 1}],
+    turbidity: 2, ozone: 1.2, albedo: 0.85, scatterTweak: null
+  },
+  qonos: {
+    planetR: 7200e3, atmoR: 7320e3, hr: 9000, hm: 1800,
+    betaR: [4e-6, 18e-6, 6e-6], betaM: 35e-6, sunIntensity: 16,
+    atmoDensity: 1.3, sunDist: 0.95, stars: [{temp: 4600, intensity: 1}],
+    turbidity: 6, ozone: 0.6, albedo: 0.25,
+    scatterTweak: {hueShift: 85, satBoost: 1.3}
+  },
+  namek: {
+    planetR: 6000e3, atmoR: 6120e3, hr: 8500, hm: 1600,
+    betaR: [3.5e-6, 20e-6, 5e-6], betaM: 25e-6, sunIntensity: 20,
+    atmoDensity: 1.1, sunDist: 0.9,
+    stars: [{temp: 5600, intensity: 0.4}, {temp: 5400, intensity: 0.3}, {temp: 5200, intensity: 0.3}],
+    turbidity: 3, ozone: 0.8, albedo: 0.2,
+    scatterTweak: {hueShift: 100, satBoost: 1.2}
+  },
+  gallifrey: {
+    planetR: 6800e3, atmoR: 6920e3, hr: 8000, hm: 1300,
+    betaR: [14e-6, 10e-6, 5e-6], betaM: 30e-6, sunIntensity: 22,
+    atmoDensity: 1.0, sunDist: 0.85,
+    stars: [{temp: 5500, intensity: 0.55}, {temp: 4500, intensity: 0.45}],
+    turbidity: 4, ozone: 0.7, albedo: 0.3, scatterTweak: null
+  },
+  vormir: {
+    planetR: 5500e3, atmoR: 5620e3, hr: 7500, hm: 1400,
+    betaR: [10e-6, 5e-6, 18e-6], betaM: 30e-6, sunIntensity: 14,
+    atmoDensity: 1.1, sunDist: 1.2,
+    stars: [{temp: 4500, intensity: 0.6}, {temp: 3200, intensity: 0.4}],
+    turbidity: 5, ozone: 0.4, albedo: 0.2,
+    scatterTweak: {hueShift: -60, satBoost: 1.4}
+  },
+  thessia: {
+    planetR: 6500e3, atmoR: 6630e3, hr: 9000, hm: 1600,
+    betaR: [8e-6, 5e-6, 20e-6], betaM: 20e-6, sunIntensity: 24,
+    atmoDensity: 1.15, sunDist: 0.85, stars: [{temp: 6500, intensity: 1}],
+    turbidity: 3, ozone: 1.0, albedo: 0.2,
+    scatterTweak: {hueShift: -45, satBoost: 1.3}
+  },
+};
+
+let activePreset = 'earth';
+let stellarColor = [1, 1, 1]; // current stellar illuminant RGB weights
 
 function raySphereIntersect(ro, rd, r) {
   // ro = [0, EARTH_R + altitude, 0], rd = normalized direction
@@ -1400,7 +1705,46 @@ const canvases = {
 const HOUR_START = 3;
 const HOUR_END = 22;
 
+function applyPresetPhysics(preset, atmoDensity, sunDist, stellarTemp) {
+  EARTH_R = preset.planetR;
+  ATMO_R = preset.atmoR;
+  HR = preset.hr;
+  HM = preset.hm;
+  BETA_R = preset.betaR.map(v => v * atmoDensity);
+  BETA_M = preset.betaM * atmoDensity;
+  // Sun intensity scales with inverse square of distance
+  SUN_INTENSITY = preset.sunIntensity / (sunDist * sunDist);
+  // Compute blended stellar color from star(s)
+  if (stellarTemp !== null) {
+    // Single manual override
+    stellarColor = blackbodyRGB(stellarTemp);
+  } else {
+    // Blend from preset stars
+    let r = 0, g = 0, b = 0;
+    for (const star of preset.stars) {
+      const c = blackbodyRGB(star.temp);
+      r += c[0] * star.intensity;
+      g += c[1] * star.intensity;
+      b += c[2] * star.intensity;
+    }
+    const mx = Math.max(r, g, b, 1e-6);
+    stellarColor = [r/mx, g/mx, b/mx];
+  }
+}
+
 function renderAll() {
+  // Apply preset physics before reading sliders
+  const preset = PRESETS[activePreset];
+  const atmoDens = parseFloat(document.getElementById('atmoDensity').value);
+  const sunDist = parseFloat(document.getElementById('sunDistance').value);
+  const stellarTempVal = parseFloat(document.getElementById('stellarTemp').value);
+  applyPresetPhysics(preset, atmoDens, sunDist, stellarTempVal);
+
+  // Update planet slider labels
+  document.getElementById('vAtmoDens').textContent = atmoDens.toFixed(2);
+  document.getElementById('vSunDist').textContent = sunDist.toFixed(2) + ' AU';
+  document.getElementById('vStellarTemp').textContent = Math.round(stellarTempVal) + ' K';
+
   const T = parseFloat(document.getElementById('turbidity').value);
   const lat = parseFloat(document.getElementById('latitude').value);
   const ve = parseFloat(document.getElementById('viewElev').value);
@@ -1502,6 +1846,21 @@ function renderAll() {
         rgb = hosekColor(sElev, T, ve, alt, alb);
       }
 
+      // Apply stellar color tint
+      rgb[0] *= stellarColor[0];
+      rgb[1] *= stellarColor[1];
+      rgb[2] *= stellarColor[2];
+
+      // Apply non-physical scatter tweaks for exotic skies
+      if (preset.scatterTweak) {
+        let [rr, gg, bb] = rgb;
+        let [hh, ss, ll] = rgbToHsl(clamp(rr,0,255), clamp(gg,0,255), clamp(bb,0,255));
+        hh += preset.scatterTweak.hueShift / 360;
+        ss *= preset.scatterTweak.satBoost;
+        ss = clamp(ss, 0, 1);
+        rgb = hslToRgb(hh, ss, ll);
+      }
+
       rgb = applyStyle(rgb, sElev, style);
 
       ctx.fillStyle = `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
@@ -1583,6 +1942,35 @@ document.getElementById('resetStyle').addEventListener('click', () => {
     document.getElementById(id).value = val;
   }
   scheduleRender();
+});
+
+// Preset button handlers
+function selectPreset(name) {
+  activePreset = name;
+  const preset = PRESETS[name];
+  // Update active button styling
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector(`[data-preset="${name}"]`).classList.add('active');
+  // Set planet sliders to preset values
+  document.getElementById('atmoDensity').value = preset.atmoDensity;
+  document.getElementById('sunDistance').value = preset.sunDist;
+  // For multi-star systems, use weighted average temp for the slider
+  let avgTemp = 0;
+  for (const s of preset.stars) avgTemp += s.temp * s.intensity;
+  document.getElementById('stellarTemp').value = Math.round(avgTemp);
+  // Set physics sliders too
+  document.getElementById('turbidity').value = preset.turbidity;
+  document.getElementById('albedo').value = preset.albedo;
+  document.getElementById('ozoneStrength').value = preset.ozone;
+  scheduleRender();
+}
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    // Don't trigger if clicking a link inside the button
+    if (e.target.tagName === 'A') return;
+    selectPreset(btn.dataset.preset);
+  });
 });
 
 // Initial render
