@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sky Color Models — Zenith Color vs Time of Day</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 24px 32px;
+    min-height: 100vh;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; color: #fff; }
+  .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 20px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 20px 32px;
+    background: #16213e; border-radius: 10px; padding: 16px 20px;
+    margin-bottom: 24px;
+  }
+  .control { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+  .control label { font-size: 0.78rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+  .control .val { font-size: 0.85rem; color: #7ec8e3; font-weight: 600; }
+  .control input[type=range] { width: 200px; accent-color: #7ec8e3; cursor: pointer; }
+  .controls-label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px;
+    color: #555; margin-bottom: 6px; width: 100%;
+  }
+  .controls.style { background: #1a1630; border: 1px solid #2a2445; }
+  .controls.style .control .val { color: #c8a2e3; }
+  .controls.style input[type=range] { accent-color: #c8a2e3; }
+  .geo-btn {
+    background: none; border: 1px solid #3a4a6a; color: #7ec8e3;
+    border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+    padding: 0 4px; margin-left: 4px; line-height: 1.2; vertical-align: middle;
+  }
+  .geo-btn:hover { background: #2a3a5a; }
+  .reset-btn {
+    align-self: flex-end; background: #2a2445; border: 1px solid #3a3460;
+    color: #aaa; border-radius: 6px; padding: 4px 12px; cursor: pointer;
+    font-size: 0.75rem; margin-top: 14px;
+  }
+  .reset-btn:hover { background: #3a3460; color: #ddd; }
+  .strip-container {
+    margin-bottom: 20px;
+    background: #16213e;
+    border-radius: 10px;
+    padding: 16px 20px 12px;
+  }
+  .strip-header {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 8px;
+  }
+  .strip-title { font-size: 1rem; font-weight: 600; }
+  .strip-desc { font-size: 0.75rem; color: #888; }
+  canvas.strip { width: 100%; height: 70px; border-radius: 6px; display: block; }
+  .time-axis {
+    display: flex; justify-content: space-between;
+    font-size: 0.7rem; color: #666; margin-top: 4px; padding: 0 2px;
+  }
+  .iq-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 1000; justify-content: center; align-items: center;
+  }
+  .iq-modal-overlay.show { display: flex; }
+  .iq-modal {
+    background: #1e1e2e; border: 2px solid #9146ff; border-radius: 12px;
+    padding: 60px 80px; text-align: center; max-width: 640px; min-width: 500px;
+    box-shadow: 0 0 40px rgba(145,70,255,0.3);
+  }
+  .iq-modal h2 { color: #9146ff; font-size: 1.8rem; margin-bottom: 20px; }
+  .iq-modal p { color: #aaa; font-size: 1.1rem; line-height: 1.6; margin-bottom: 20px; }
+  .iq-modal .spinner {
+    width: 40px; height: 40px; border: 4px solid #333; border-top-color: #9146ff;
+    border-radius: 50%; animation: iqspin 0.8s linear infinite; margin: 0 auto 12px;
+  }
+  .iq-modal .countdown { color: #666; font-size: 0.75rem; }
+  @keyframes iqspin { to { transform: rotate(360deg); } }
+  .legend {
+    font-size: 0.75rem; color: #666; margin-top: 16px; line-height: 1.6;
+  }
+  .param-table-wrap {
+    margin-top: 20px; background: #16213e; border-radius: 10px;
+    padding: 16px 20px; overflow-x: auto;
+  }
+  .param-table-wrap h2 { font-size: 1rem; margin-bottom: 10px; color: #fff; font-weight: 600; }
+  .param-table {
+    width: 100%; border-collapse: collapse; font-size: 0.78rem; white-space: nowrap;
+  }
+  .param-table th, .param-table td {
+    padding: 6px 10px; text-align: center; border-bottom: 1px solid #1a1a2e;
+  }
+  .param-table th { color: #7ec8e3; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; font-size: 0.7rem; }
+  .param-table th:first-child, .param-table td:first-child { text-align: left; color: #ccc; font-weight: 500; }
+  .param-table tr:hover td { background: rgba(126,200,227,0.04); }
+  .param-table .group-header td {
+    color: #666; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px;
+    padding-top: 12px; border-bottom: 1px solid #2a3a5a; font-weight: 600;
+  }
+  .param-table .y { color: #6ee6a0; }
+  .param-table .n { color: #444; }
+  .param-table .note { color: #aaa; font-size: 0.72rem; }
+  .param-table .sym { font-size: 1.15rem; color: #e0d0f0; }
+  .param-table a { color: #7ec8e3; text-decoration: none; border-bottom: 1px dotted #4a7a8a; }
+  .param-table a:hover { color: #aee0f0; border-bottom-style: solid; }
+  .math-block {
+    margin-top: 8px; padding: 10px 14px;
+    background: rgba(0,0,0,0.25); border-radius: 6px;
+    overflow-x: auto; font-size: 0.9rem; color: #ccc;
+    display: flex; flex-wrap: nowrap; gap: 12px 24px;
+  }
+  .math-cell { flex: 0 0 auto; }
+  .math-cell math { display: block; margin: 6px 0; }
+  .math-label {
+    font-size: 0.7rem; color: #666; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Atmospheric Sky Color Models</h1>
+<p class="subtitle">Zenith sky color across the day — comparing Preetham, Nishita, and Hosek-Wilkie</p>
+
+<div class="controls">
+  <div class="control">
+    <label>Turbidity <span class="val" id="vTurb">3.0</span></label>
+    <input type="range" id="turbidity" min="1" max="10" step="0.5" value="3">
+  </div>
+  <div class="control">
+    <label>Latitude <span class="val" id="vLat">40°</span> <button class="geo-btn" id="geoBtn" title="Use current location">&#x2316;</button></label>
+    <input type="range" id="latitude" min="-70" max="70" step="1" value="40">
+  </div>
+  <div class="control">
+    <label>View Elevation <span class="val" id="vElev">90°</span></label>
+    <input type="range" id="viewElev" min="5" max="90" step="1" value="90">
+  </div>
+  <div class="control">
+    <label>Day of Year <span class="val" id="vDay">172 (Jun 21)</span> <button class="geo-btn" id="doyBtn" title="Use today">&#x2316;</button></label>
+    <input type="range" id="dayOfYear" min="1" max="365" step="1" value="183">
+  </div>
+  <div class="control">
+    <label>Ground Albedo <span class="val" id="vAlbedo">0.3</span></label>
+    <input type="range" id="albedo" min="0" max="1" step="0.05" value="0.3">
+  </div>
+  <div class="control">
+    <label>Ozone <span class="val" id="vOzone">1.00</span></label>
+    <input type="range" id="ozoneStrength" min="0" max="3" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>IQ <span class="val" id="vIq">100</span></label>
+    <input type="range" id="iq" min="0" max="200" step="1" value="100">
+  </div>
+</div>
+
+<div class="controls style">
+  <div class="controls-label">Style Adjustments</div>
+  <div class="control">
+    <label>Hue Shift <span class="val" id="vHue">0°</span></label>
+    <input type="range" id="hueShift" min="-180" max="180" step="1" value="0">
+  </div>
+  <div class="control">
+    <label>Saturation <span class="val" id="vSat">1.00</span></label>
+    <input type="range" id="saturation" min="0" max="3" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>Vibrance <span class="val" id="vVib">0.00</span></label>
+    <input type="range" id="vibrance" min="-1" max="1" step="0.05" value="0">
+  </div>
+  <div class="control">
+    <label>Exposure <span class="val" id="vExp">0.0</span></label>
+    <input type="range" id="exposure" min="-2" max="2" step="0.1" value="0">
+  </div>
+  <div class="control">
+    <label>Contrast <span class="val" id="vCont">1.00</span></label>
+    <input type="range" id="contrast" min="0.3" max="2.5" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>Warmth <span class="val" id="vWarm">0.00</span></label>
+    <input type="range" id="warmth" min="-1" max="1" step="0.05" value="0">
+  </div>
+  <div class="control">
+    <label>Twilight Glow <span class="val" id="vGlow">1.00</span></label>
+    <input type="range" id="twilightGlow" min="0" max="3" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>Night Tint <span class="val" id="vNight">0.00</span></label>
+    <input type="range" id="nightTint" min="0" max="1" step="0.05" value="0">
+  </div>
+  <button class="reset-btn" id="resetStyle">Reset Style</button>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <span class="strip-title">Rayleigh Only</span>
+    <span class="strip-desc">Nishita with Mie scattering disabled — pure molecular scattering baseline</span>
+  </div>
+  <canvas class="strip" id="cRayleigh"></canvas>
+  <div class="time-axis" id="axRayleigh"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Rayleigh Scattering Only</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mi>&lambda;</mi></msub><mo>=</mo>
+          <msub><mi>I</mi><mtext>sun</mtext></msub>
+          <msubsup><mo>&int;</mo><mn>0</mn><mi>D</mi></msubsup>
+          <msub><mi>&beta;</mi><mi>R</mi></msub><mo>(</mo><mi>&lambda;</mi><mo>)</mo>
+          <msub><mi>&rho;</mi><mi>R</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <msub><mi>P</mi><mi>R</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <msup><mi>e</mi><mrow><mo>-</mo><msub><mi>&tau;</mi><mi>R</mi></msub></mrow></msup>
+          <mi>d</mi><mi>s</mi>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Scattering Coefficient</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&beta;</mi><mi>R</mi></msub><mo>&prop;</mo>
+          <mfrac><mn>1</mn><msup><mi>&lambda;</mi><mn>4</mn></msup></mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">No Mie Term</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&beta;</mi><mi>M</mi></msub><mo>=</mo><mn>0</mn>
+        </mrow>
+      </math>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <span class="strip-title">Preetham (1999)</span>
+    <span class="strip-desc">Analytical — Perez sky luminance/chromaticity model</span>
+  </div>
+  <canvas class="strip" id="cPreetham"></canvas>
+  <div class="time-axis" id="axPreetham"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Perez Sky Function</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mrow><mo>(</mo>
+            <mn>1</mn><mo>+</mo><mi>A</mi><mo>&InvisibleTimes;</mo>
+            <msup><mi>e</mi><mfrac><mi>B</mi><mrow><mi>cos</mi><mi>&theta;</mi></mrow></mfrac></msup>
+          <mo>)</mo></mrow>
+          <mrow><mo>(</mo>
+            <mn>1</mn><mo>+</mo>
+            <mi>C</mi><mo>&InvisibleTimes;</mo><msup><mi>e</mi><mrow><mi>D</mi><mi>&gamma;</mi></mrow></msup>
+            <mo>+</mo><mi>E</mi><mo>&InvisibleTimes;</mo><msup><mrow><mi>cos</mi></mrow><mn>2</mn></msup><mi>&gamma;</mi>
+          <mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Sky Radiance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>L</mi><mi>&lambda;</mi></msub>
+          <mo>=</mo>
+          <msub><mi>L</mi><mi>z</mi></msub>
+          <mo>&sdot;</mo>
+          <mfrac>
+            <mrow><mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo></mrow>
+            <mrow><mi>F</mi><mo>(</mo><mn>0</mn><mo>,</mo><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow>
+          </mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Zenith Luminance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>Y</mi><mi>z</mi></msub><mo>=</mo>
+          <mrow><mo>(</mo><mn>4.0453</mn><mi>T</mi><mo>-</mo><mn>4.971</mn><mo>)</mo></mrow>
+          <mi>tan</mi><mi>&chi;</mi>
+          <mo>-</mo><mn>0.2155</mn><mi>T</mi><mo>+</mo><mn>2.4192</mn>
+        </mrow>
+      </math>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>&chi;</mi><mo>=</mo>
+          <mrow><mo>(</mo>
+            <mfrac><mn>4</mn><mn>9</mn></mfrac><mo>-</mo><mfrac><mi>T</mi><mn>120</mn></mfrac>
+          <mo>)</mo></mrow>
+          <mrow><mo>(</mo><mi>&pi;</mi><mo>-</mo><mn>2</mn><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <span class="strip-title">Nishita (1993)</span>
+    <span class="strip-desc">Ray-marching — single-scattering Rayleigh + Mie</span>
+  </div>
+  <canvas class="strip" id="cNishita"></canvas>
+  <div class="time-axis" id="axNishita"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Single-Scattering Integral</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mi>&lambda;</mi></msub>
+          <mo>=</mo>
+          <msub><mi>I</mi><mtext>sun</mtext></msub>
+          <msubsup><mo>&int;</mo><mn>0</mn><mi>D</mi></msubsup>
+          <mrow><mo>[</mo>
+            <msub><mi>&beta;</mi><mi>R</mi></msub><mo>(</mo><mi>&lambda;</mi><mo>)</mo>
+            <msub><mi>&rho;</mi><mi>R</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+            <msub><mi>P</mi><mi>R</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+            <mo>+</mo>
+            <msub><mi>&beta;</mi><mi>M</mi></msub>
+            <msub><mi>&rho;</mi><mi>M</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+            <msub><mi>P</mi><mi>M</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <mo>]</mo></mrow>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mi>&tau;</mi><mo>(</mo><mover><mi>x</mi><mo>&rarr;</mo></mover><mo>,</mo><mover><mi>s</mi><mo>&rarr;</mo></mover><mo>)</mo>
+            <mo>-</mo><mi>&tau;</mi><mo>(</mo><mover><mi>x</mi><mo>&rarr;</mo></mover><mo>,</mo><mover><mi>v</mi><mo>&rarr;</mo></mover><mo>)</mo></mrow>
+          </msup>
+          <mi>d</mi><mi>s</mi>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Rayleigh Phase</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>P</mi><mi>R</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac>
+          <mrow><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Henyey-Greenstein Mie Phase</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>P</mi><mi>M</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mfrac>
+            <mrow><mn>3</mn><mo>(</mo><mn>1</mn><mo>-</mo><msup><mi>g</mi><mn>2</mn></msup><mo>)</mo>
+            <mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></mrow>
+            <mrow><mn>8</mn><mi>&pi;</mi><mo>(</mo><mn>2</mn><mo>+</mo><msup><mi>g</mi><mn>2</mn></msup><mo>)</mo>
+            <msup><mrow><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>g</mi><mn>2</mn></msup><mo>-</mo><mn>2</mn><mi>g</mi><mi>cos</mi><mi>&theta;</mi><mo>)</mo></mrow>
+            <mfrac><mn>3</mn><mn>2</mn></mfrac></msup></mrow>
+          </mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Density Profiles</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&rho;</mi><mi>R</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mo>=</mo>
+          <msup><mi>e</mi><mrow><mo>-</mo><mi>h</mi><mo>/</mo><msub><mi>H</mi><mi>R</mi></msub></mrow></msup>
+        </mrow>
+      </math>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&rho;</mi><mi>M</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mo>=</mo>
+          <msup><mi>e</mi><mrow><mo>-</mo><mi>h</mi><mo>/</mo><msub><mi>H</mi><mi>M</mi></msub></mrow></msup>
+        </mrow>
+      </math>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <span class="strip-title">Hosek-Wilkie (2012)</span>
+    <span class="strip-desc">Enhanced analytical — improved horizon, ground albedo feedback</span>
+  </div>
+  <canvas class="strip" id="cHosek"></canvas>
+  <div class="time-axis" id="axHosek"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">9-Parameter Sky Radiance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mrow><mo>(</mo>
+            <mn>1</mn><mo>+</mo><mi>A</mi><msup><mi>e</mi>
+              <mfrac><mi>B</mi><mrow><mi>cos</mi><mi>&theta;</mi><mo>+</mo><mn>0.01</mn></mrow></mfrac>
+            </msup>
+          <mo>)</mo></mrow>
+          <mrow><mo>(</mo>
+            <mi>C</mi>
+            <mo>+</mo><mi>D</mi><msup><mi>e</mi><mrow><mi>E</mi><mi>&gamma;</mi></mrow></msup>
+            <mo>+</mo><mi>F</mi><msup><mi>cos</mi><mn>2</mn></msup><mi>&gamma;</mi>
+            <mo>+</mo><mi>G</mi><mi>&chi;</mi><mo>(</mo><mi>H</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo>
+            <mo>+</mo><mi>I</mi><msqrt><mrow><mi>cos</mi><mi>&theta;</mi></mrow></msqrt>
+          <mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Multiple Scattering</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mtext>ms</mtext></msub>
+          <mo>&approx;</mo>
+          <msub><mi>I</mi><mtext>ss</mtext></msub>
+          <mo>&sdot;</mo>
+          <msub><mi>k</mi><mtext>ms</mtext></msub>
+          <mo>(</mo><mn>1</mn><mo>+</mo>
+          <mfrac><mi>A</mi><mn>2</mn></mfrac>
+          <mo>)</mo>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Ground Albedo Feedback</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mtext>ground</mtext></msub>
+          <mo>=</mo>
+          <mi>A</mi>
+          <mo>&sdot;</mo>
+          <msub><mi>E</mi><mtext>sun</mtext></msub>
+          <mo>&sdot;</mo>
+          <mi>sin</mi><msub><mi>&alpha;</mi><mi>s</mi></msub>
+          <mo>&sdot;</mo>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mi>&tau;</mi><mo>(</mo><mtext>g</mtext><mo>&rarr;</mo><mtext>s</mtext><mo>)</mo></mrow>
+          </msup>
+          <mo>&sdot;</mo>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mi>&tau;</mi><mo>(</mo><mtext>g</mtext><mo>&rarr;</mo><mtext>v</mtext><mo>)</mo></mrow>
+          </msup>
+        </mrow>
+      </math>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <span class="strip-title">Nishita + Ozone</span>
+    <span class="strip-desc">Adds Chappuis band absorption — deeper blues during twilight</span>
+  </div>
+  <canvas class="strip" id="cOzone"></canvas>
+  <div class="time-axis" id="axOzone"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Total Optical Depth</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>&tau;</mi><mo>=</mo>
+          <msub><mi>&tau;</mi><mi>R</mi></msub><mo>+</mo>
+          <msub><mi>&tau;</mi><mi>M</mi></msub><mo>+</mo>
+          <msub><mi>&tau;</mi><msub><mi>O</mi><mn>3</mn></msub></msub>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Ozone Density</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&rho;</mi><msub><mi>O</mi><mn>3</mn></msub></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mo>=</mo>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mn>2</mn>
+              <mfrac>
+                <mrow><mo>|</mo><mi>h</mi><mo>-</mo><mn>25</mn><mtext>km</mtext><mo>|</mo></mrow>
+                <mrow><mn>15</mn><mtext>km</mtext></mrow>
+              </mfrac>
+            </mrow>
+          </msup>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Chappuis Absorption</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&tau;</mi><msub><mi>O</mi><mn>3</mn></msub></msub>
+          <mo>=</mo>
+          <mo>&int;</mo>
+          <msub><mi>&beta;</mi><msub><mi>O</mi><mn>3</mn></msub></msub><mo>(</mo><mi>&lambda;</mi><mo>)</mo>
+          <msub><mi>&rho;</mi><msub><mi>O</mi><mn>3</mn></msub></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mi>d</mi><mi>s</mi>
+        </mrow>
+      </math>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <span class="strip-title">CIE Standard Clear Sky (Type 12)</span>
+    <span class="strip-desc">Empirical luminance model — ISO 15469 architectural standard</span>
+  </div>
+  <canvas class="strip" id="cCie"></canvas>
+  <div class="time-axis" id="axCie"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Sky Luminance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mfrac>
+            <mrow><mi>L</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo></mrow>
+            <msub><mi>L</mi><mi>z</mi></msub>
+          </mfrac>
+          <mo>=</mo>
+          <mfrac>
+            <mrow><mi>&phi;</mi><mo>(</mo><mi>&theta;</mi><mo>)</mo><mo>&sdot;</mo><mi>f</mi><mo>(</mo><mi>&gamma;</mi><mo>)</mo></mrow>
+            <mrow><mi>&phi;</mi><mo>(</mo><mn>0</mn><mo>)</mo><mo>&sdot;</mo><mi>f</mi><mo>(</mo><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow>
+          </mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Gradation</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>&phi;</mi><mo>(</mo><mi>&theta;</mi><mo>)</mo><mo>=</mo>
+          <mn>1</mn><mo>+</mo><mi>a</mi>
+          <msup><mi>e</mi><mrow><mi>b</mi><mo>/</mo><mi>cos</mi><mi>&theta;</mi></mrow></msup>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Indicatrix</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>f</mi><mo>(</mo><mi>&gamma;</mi><mo>)</mo><mo>=</mo>
+          <mn>1</mn><mo>+</mo><mi>c</mi>
+          <mrow><mo>(</mo><msup><mi>e</mi><mrow><mi>d</mi><mi>&gamma;</mi></mrow></msup>
+          <mo>-</mo><msup><mi>e</mi><mrow><mi>d</mi><mi>&pi;</mi><mo>/</mo><mn>2</mn></mrow></msup><mo>)</mo></mrow>
+          <mo>+</mo><mi>e</mi><msup><mi>cos</mi><mn>2</mn></msup><mi>&gamma;</mi>
+        </mrow>
+      </math>
+    </div>
+  </div>
+</div>
+
+<div class="param-table-wrap">
+  <h2>Parameter Matrix</h2>
+  <table class="param-table">
+    <thead>
+      <tr>
+        <th>Parameter</th>
+        <th></th>
+        <th>Rayleigh</th>
+        <th>Preetham</th>
+        <th>Nishita</th>
+        <th>Hosek-Wilkie</th>
+        <th>Nishita+O&#x2083;</th>
+        <th>CIE Clear</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="group-header"><td colspan="8">Geometry</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Position_of_the_Sun" target="_blank">Sun position</a></td>
+        <td class="sym"><math><msub><mi>&alpha;</mi><mi>s</mi></msub></math></td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Zenith_angle" target="_blank">Viewing elevation</a></td>
+        <td class="sym"><math><mi>&theta;</mi></math></td>
+        <td class="note">ray direction</td>
+        <td class="note">Perez <math><mfrac><mrow><mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo></mrow><mrow><mi>F</mi><mo>(</mo><mn>0</mn><mo>,</mo><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow></mfrac></math></td>
+        <td class="note">ray direction</td>
+        <td class="note">ray direction</td>
+        <td class="note">ray direction</td>
+        <td class="note"><math><mi>&phi;</mi><mo>(</mo><mi>&theta;</mi><mo>)</mo></math> gradation</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Air_mass_(astronomy)" target="_blank">Observer altitude</a></td>
+        <td class="sym"><math><msub><mi>h</mi><mn>0</mn></msub></math></td>
+        <td class="y">ray origin</td>
+        <td class="n">&mdash;</td>
+        <td class="y">ray origin</td>
+        <td class="y">ray origin</td>
+        <td class="y">ray origin</td>
+        <td class="n">&mdash;</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Atmospheric Scattering</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Rayleigh_scattering" target="_blank">Rayleigh coefficient</a></td>
+        <td class="sym"><math><msub><mi>&beta;</mi><mi>R</mi></msub></math></td>
+        <td class="y">sole scatter term</td>
+        <td class="note">implicit in Perez fit</td>
+        <td class="y">per-channel</td>
+        <td class="y">per-channel</td>
+        <td class="y">per-channel</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Mie_scattering" target="_blank">Mie coefficient</a></td>
+        <td class="sym"><math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="note"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>=</mo><mn>0</mn></math></td>
+        <td class="note">implicit in Perez fit</td>
+        <td class="y"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>&prop;</mo><mi>T</mi></math></td>
+        <td class="y"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>&prop;</mo><mi>T</mi></math></td>
+        <td class="y"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>&prop;</mo><mi>T</mi></math></td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Scale_height" target="_blank">Rayleigh scale height</a></td>
+        <td class="sym"><math><msub><mi>H</mi><mi>R</mi></msub></math></td>
+        <td class="y">8 km</td>
+        <td class="n">&mdash;</td>
+        <td class="y">8 km</td>
+        <td class="y">8 km</td>
+        <td class="y">8 km</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Scale_height" target="_blank">Mie scale height</a></td>
+        <td class="sym"><math><msub><mi>H</mi><mi>M</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y">1.2 km</td>
+        <td class="y">1.2 km</td>
+        <td class="y">1.2 km</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Turbidity" target="_blank">Turbidity</a></td>
+        <td class="sym"><math><mi>T</mi></math></td>
+        <td class="note">scales <math><msub><mi>&rho;</mi><mi>R</mi></msub></math></td>
+        <td class="y">drives all Perez coeffs</td>
+        <td class="y">scales <math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="y">scales <math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="y">scales <math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="note">affects CCT</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Phase Functions</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Rayleigh_scattering" target="_blank">Rayleigh phase</a></td>
+        <td class="sym"><math><msub><mi>P</mi><mi>R</mi></msub></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="note">baked into Perez <math><mi>E</mi></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Mie_scattering" target="_blank">Mie phase</a></td>
+        <td class="sym"><math><msub><mi>P</mi><mi>M</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">baked into Perez <math><mi>C</mi><mo>,</mo><mi>D</mi></math></td>
+        <td class="note"><a href="https://en.wikipedia.org/wiki/Henyey%E2%80%93Greenstein_phase_function" target="_blank">Henyey-Greenstein</a></td>
+        <td class="note"><a href="https://en.wikipedia.org/wiki/Mie_scattering" target="_blank">Cornette-Shanks</a></td>
+        <td class="note"><a href="https://en.wikipedia.org/wiki/Henyey%E2%80%93Greenstein_phase_function" target="_blank">Henyey-Greenstein</a></td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Henyey%E2%80%93Greenstein_phase_function#The_asymmetry_parameter_(g)" target="_blank">Asymmetry parameter</a></td>
+        <td class="sym"><math><mi>g</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y"><math><mn>0.76</mn></math> (fixed)</td>
+        <td class="y"><math><mn>0.76</mn></math> (fixed)</td>
+        <td class="y"><math><mn>0.76</mn></math> (fixed)</td>
+        <td class="n">&mdash;</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Absorption &amp; Ozone</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Ozone_layer" target="_blank">Ozone absorption</a></td>
+        <td class="sym"><math><msub><mi>&beta;</mi><msub><mi>O</mi><mn>3</mn></msub></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y"><a href="https://en.wikipedia.org/wiki/Chappuis_absorption" target="_blank">Chappuis band</a>, 3-ch</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Ozone_layer#Distribution_in_the_stratosphere" target="_blank">Ozone density</a></td>
+        <td class="sym"><math><msub><mi>&rho;</mi><msub><mi>O</mi><mn>3</mn></msub></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="note"><math><msup><mi>e</mi><mrow><mo>-</mo><mn>2</mn><mfrac><mrow><mo>|</mo><mi>h</mi><mo>-</mo><mn>25</mn><mo>|</mo></mrow><mn>15</mn></mfrac></mrow></msup></math> km</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Dobson_unit" target="_blank">Ozone column strength</a></td>
+        <td class="sym"><math><msub><mi>S</mi><msub><mi>O</mi><mn>3</mn></msub></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y">slider <math><mo>(</mo><mn>0</mn><mo>&ndash;</mo><mn>3</mn><mo>)</mo></math></td>
+        <td class="n">&mdash;</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Surface &amp; Multi-Scatter</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Albedo" target="_blank">Ground albedo</a></td>
+        <td class="sym"><math><mi>A</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y"><math><msub><mi>I</mi><mtext>g</mtext></msub><mo>=</mo><mi>A</mi><mo>&sdot;</mo><msub><mi>E</mi><mo>&#x2609;</mo></msub><msup><mi>e</mi><mrow><mo>-</mo><mi>&tau;</mi></mrow></msup></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Radiative_transfer" target="_blank">Multiple scattering</a></td>
+        <td class="sym"><math><msub><mi>I</mi><mtext>ms</mtext></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">implicit in empirical fit</td>
+        <td class="n">&mdash;</td>
+        <td class="note">order-2, <math><msub><mi>k</mi><mtext>ms</mtext></msub><mo>=</mo><mn>0.075</mn></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">implicit in empirical fit</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Color &amp; Tone Mapping</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/SRGB" target="_blank">Color space</a></td>
+        <td class="sym"></td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">CIE <math><mi>Y</mi><mi>x</mi><mi>y</mi></math> &rarr; sRGB</td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">CCT &rarr; <math><mi>Y</mi><mi>x</mi><mi>y</mi></math> &rarr; sRGB</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Tone_mapping" target="_blank">Tone mapping</a></td>
+        <td class="sym"><math><mi>k</mi></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>0.04</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>0.15</mn></math></td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Twilight" target="_blank">Twilight handling</a></td>
+        <td class="sym"></td>
+        <td class="note">indirect glow</td>
+        <td class="note">fade to <math><mo>-</mo><mn>6</mn><mo>&deg;</mo></math></td>
+        <td class="note">indirect glow</td>
+        <td class="note">indirect glow</td>
+        <td class="note">indirect glow</td>
+        <td class="note">fade to <math><mo>-</mo><mn>6</mn><mo>&deg;</mo></math></td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">CIE-Specific</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/International_Commission_on_Illumination" target="_blank">Sky type coefficients</a></td>
+        <td class="sym"><math><mi>a</mi><mo>&ndash;</mo><mi>e</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y">Type 12 (clear, polluted)</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Correlated_color_temperature" target="_blank">Correlated color temp</a></td>
+        <td class="sym"><math><msub><mi>T</mi><mtext>cc</mtext></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="note"><math><mn>3500</mn><mo>&ndash;</mo><mn>15000</mn></math> K</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Preetham-Specific</td></tr>
+      <tr>
+        <td><a href="https://docs.agi32.com/AGi32/Content/references/Perez_All-Weather_Sky_Model.htm" target="_blank">Perez coefficients</a></td>
+        <td class="sym"><math><mi>A</mi><mo>&ndash;</mo><mi>E</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="y">3 sets <math><mo>(</mo><mi>Y</mi><mo>,</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo>)</mo><mo>&times;</mo><mi>T</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/CIE_1931_color_space#Chromaticity_diagram" target="_blank">Zenith chromaticity</a></td>
+        <td class="sym"><math><msub><mi>x</mi><mi>z</mi></msub><mo>,</mo><msub><mi>y</mi><mi>z</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">polynomial in <math><mi>T</mi><mo>,</mo><msub><mi>&theta;</mi><mi>s</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="iq-modal-overlay" id="iqModal">
+  <div class="iq-modal">
+    <h2>Redirecting...</h2>
+    <div class="spinner"></div>
+    <p>Redirecting you to more intellectually appropriate content.</p>
+    <p style="color:#9146ff; font-weight:600; font-size:1.3rem;">twitch.tv/hasanabi</p>
+    <div class="countdown" id="iqCountdown">Redirecting in 5...</div>
+  </div>
+</div>
+
+<div class="legend">
+  <strong>Notes:</strong> All models show the sky color at the selected viewing elevation angle.
+  Below the horizon the sun is shown as dark.
+  Hosek-Wilkie uses an analytical approximation of the published model (full dataset is ~100KB of coefficients).
+  Colors are tone-mapped to sRGB and may clip in extreme conditions.
+</div>
+
+<script>
+// ============================================================
+// UTILITIES
+// ============================================================
+const PI = Math.PI, TAU = 2 * PI;
+const deg = a => a * PI / 180;
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+
+// Sun elevation in radians given latitude (deg), day of year, hour (local solar time)
+function sunElevation(latDeg, doy, hour) {
+  const decl = 23.4393 * Math.sin(TAU * (284 + doy) / 365);
+  const declR = deg(decl);
+  const latR = deg(latDeg);
+  const ha = deg((hour - 12) * 15);
+  return Math.asin(Math.sin(latR) * Math.sin(declR) + Math.cos(latR) * Math.cos(declR) * Math.cos(ha));
+}
+
+// CIE Yxy -> linear RGB
+function YxyToRGB(Y, x, y) {
+  if (y < 1e-6) return [0, 0, 0];
+  const X = x * Y / y;
+  const Z = (1 - x - y) * Y / y;
+  // sRGB D65 matrix
+  let r =  3.2406 * X - 1.5372 * Y - 0.4986 * Z;
+  let g = -0.9689 * X + 1.8758 * Y + 0.0415 * Z;
+  let b =  0.0557 * X - 0.2040 * Y + 1.0570 * Z;
+  return [r, g, b];
+}
+
+// Attempt to preserve hue during tone mapping
+function toneMapAndGamma(rgb, exposure) {
+  let [r, g, b] = rgb.map(v => v * exposure);
+  // Reinhard tone mapping
+  r = r / (1 + r); g = g / (1 + g); b = b / (1 + b);
+  // sRGB gamma
+  const gamma = v => v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+  return [clamp(gamma(Math.max(0, r)), 0, 1) * 255,
+          clamp(gamma(Math.max(0, g)), 0, 1) * 255,
+          clamp(gamma(Math.max(0, b)), 0, 1) * 255];
+}
+
+// ============================================================
+// COLOR MANIPULATION (post-process)
+// ============================================================
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h, s, l = (max + min) / 2;
+  if (max === min) { h = s = 0; }
+  else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return [h, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  h = ((h % 1) + 1) % 1;
+  if (s === 0) return [l * 255, l * 255, l * 255];
+  const hue2rgb = (p, q, t) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [hue2rgb(p, q, h + 1/3) * 255, hue2rgb(p, q, h) * 255, hue2rgb(p, q, h - 1/3) * 255];
+}
+
+function applyStyle(rgb, sunElev, style) {
+  let [r, g, b] = rgb;
+
+  // Exposure (applied in linear-ish space before other ops)
+  const expMul = Math.pow(2, style.exposure);
+  r *= expMul; g *= expMul; b *= expMul;
+
+  // Warmth: shift color temperature (boost red/reduce blue or vice versa)
+  if (style.warmth !== 0) {
+    const w = style.warmth;
+    r *= 1 + w * 0.15;
+    g *= 1 + w * 0.05;
+    b *= 1 - w * 0.2;
+  }
+
+  // Twilight glow: boost colors near sunrise/sunset
+  if (style.twilightGlow !== 1 && sunElev > deg(-6) && sunElev < deg(15)) {
+    const proximity = 1 - Math.abs(sunElev) / deg(15);
+    const boost = 1 + (style.twilightGlow - 1) * proximity * proximity;
+    // Preferentially boost warm channels
+    r *= 1 + (boost - 1) * 1.2;
+    g *= 1 + (boost - 1) * 0.6;
+    b *= 1 + (boost - 1) * 0.3;
+  }
+
+  // Night tint: add subtle blue-purple to dark areas
+  if (style.nightTint > 0 && sunElev < deg(2)) {
+    const darkness = clamp((deg(2) - sunElev) / deg(10), 0, 1);
+    const lum = (r + g + b) / 3;
+    const tintStrength = style.nightTint * darkness * (1 - lum / 255) * 0.5;
+    r += 15 * tintStrength;
+    g += 5 * tintStrength;
+    b += 40 * tintStrength;
+  }
+
+  // Clamp before HSL conversion
+  r = clamp(r, 0, 255); g = clamp(g, 0, 255); b = clamp(b, 0, 255);
+
+  // Convert to HSL for hue/sat/vibrance
+  let [h, s, l] = rgbToHsl(r, g, b);
+
+  // Hue shift
+  h += style.hueShift / 360;
+
+  // Saturation
+  s *= style.saturation;
+
+  // Vibrance (boosts low-saturation colors more than already-saturated ones)
+  if (style.vibrance !== 0) {
+    const vibranceBoost = style.vibrance * (1 - s) * 0.8;
+    s = clamp(s + vibranceBoost, 0, 1);
+  }
+
+  s = clamp(s, 0, 1);
+
+  [r, g, b] = hslToRgb(h, s, l);
+
+  // Contrast (around midpoint 128)
+  r = clamp((r - 128) * style.contrast + 128, 0, 255);
+  g = clamp((g - 128) * style.contrast + 128, 0, 255);
+  b = clamp((b - 128) * style.contrast + 128, 0, 255);
+
+  return [r, g, b];
+}
+
+// ============================================================
+// PREETHAM MODEL
+// ============================================================
+function preethamColor(sunElev, turbidity, viewElevDeg) {
+  const sunTheta = PI / 2 - sunElev; // sun zenith angle
+  if (sunElev < deg(-6)) return [0, 0, 0]; // deep twilight
+
+  const T = turbidity;
+  const T2 = T * T;
+  const st = clamp(sunTheta, 0, PI / 2 - 0.01);
+  const st2 = st * st;
+  const st3 = st2 * st;
+
+  // Zenith luminance (kcd/m²)
+  const chi = (4.0 / 9.0 - T / 120.0) * (PI - 2.0 * st);
+  let Yz = (4.0453 * T - 4.9710) * Math.tan(chi) - 0.2155 * T + 2.4192;
+  Yz = Math.max(0, Yz);
+
+  // Zenith chromaticity
+  const xz = ( 0.00166 * st3 - 0.00375 * st2 + 0.00209 * st) * T2 +
+             (-0.02903 * st3 + 0.06377 * st2 - 0.03202 * st + 0.00394) * T +
+             ( 0.11693 * st3 - 0.21196 * st2 + 0.06052 * st + 0.25886);
+  const yz = ( 0.00275 * st3 - 0.00610 * st2 + 0.00317 * st) * T2 +
+             (-0.04214 * st3 + 0.08970 * st2 - 0.04153 * st + 0.00516) * T +
+             ( 0.15346 * st3 - 0.26756 * st2 + 0.06670 * st + 0.26688);
+
+  // Perez coefficients for Y, x, y
+  function perezCoeffs(a0,a1,a2,a3,a4) {
+    return { A: a0, B: a1, C: a2, D: a3, E: a4 };
+  }
+  const pY = perezCoeffs(
+     0.1787*T - 1.4630,  -0.3554*T + 0.4275,
+    -0.0227*T + 5.3251,   0.1206*T - 2.5771,
+    -0.0670*T + 0.3703);
+  const px = perezCoeffs(
+    -0.0193*T - 0.2592,  -0.0665*T + 0.0008,
+    -0.0004*T + 0.2125,  -0.0641*T - 0.8989,
+    -0.0033*T + 0.0452);
+  const py = perezCoeffs(
+    -0.0167*T - 0.2608,  -0.0950*T + 0.0092,
+    -0.0079*T + 0.2102,  -0.0441*T - 1.6537,
+    -0.0109*T + 0.0529);
+
+  function perez(p, theta, gamma) {
+    const cosG = Math.cos(gamma);
+    return (1 + p.A * Math.exp(p.B / (Math.cos(theta) + 0.01))) *
+           (1 + p.C * Math.exp(p.D * gamma) + p.E * cosG * cosG);
+  }
+
+  // View direction
+  const viewTheta = PI / 2 - deg(viewElevDeg); // view zenith angle
+  const gamma = Math.abs(viewTheta - st); // simplified: view in sun's vertical plane
+
+  // Sky color at view direction = zenith value * F(viewTheta, gamma) / F(0, sunTheta)
+  const fRatioY = perez(pY, viewTheta, gamma) / perez(pY, 0, st);
+  const fRatioX = perez(px, viewTheta, gamma) / perez(px, 0, st);
+  const fRatioYc = perez(py, viewTheta, gamma) / perez(py, 0, st);
+
+  const Y = Math.max(0, Yz * fRatioY);
+  const x = xz * fRatioX;
+  const y = yz * fRatioYc;
+
+  // Twilight fade
+  let twilightFade = clamp((sunElev + deg(6)) / deg(6), 0, 1);
+  const rgb = YxyToRGB(Y * twilightFade, x, y);
+  return toneMapAndGamma(rgb, 0.04);
+}
+
+// ============================================================
+// NISHITA MODEL
+// ============================================================
+const EARTH_R = 6371e3;
+const ATMO_R = 6471e3;
+const HR = 8000;     // Rayleigh scale height
+const HM = 1200;     // Mie scale height
+const BETA_R = [5.5e-6, 13.0e-6, 22.4e-6]; // Rayleigh scattering at sea level (RGB)
+const BETA_M = 21e-6; // Mie scattering at sea level
+const SUN_INTENSITY = 20;
+
+function raySphereIntersect(ro, rd, r) {
+  // ro = [0, EARTH_R + altitude, 0], rd = normalized direction
+  // sphere centered at origin with radius r
+  const b = 2 * (ro[0]*rd[0] + ro[1]*rd[1] + ro[2]*rd[2]);
+  const c = ro[0]*ro[0] + ro[1]*ro[1] + ro[2]*ro[2] - r*r;
+  const disc = b*b - 4*c;
+  if (disc < 0) return -1;
+  return (-b + Math.sqrt(disc)) / 2;
+}
+
+function nishitaColor(sunElev, turbidity, viewElevDeg, altitude, mieScale) {
+  if (mieScale === undefined) mieScale = 1;
+  if (sunElev < deg(-8)) return [0, 0, 0];
+
+  const numSamples = 24;
+  const numSamplesLight = 8;
+
+  const mieCoeff = BETA_M * (turbidity / 3) * mieScale;
+
+  // Observer position
+  const observerH = EARTH_R + altitude;
+  const ro = [0, observerH, 0];
+
+  // View direction (in sun's plane: x=toward sun horizontal, y=up)
+  const ve = deg(viewElevDeg);
+  const viewDir = [0, Math.sin(ve), Math.cos(ve)]; // looking south-ish at given elevation
+
+  // Sun direction
+  const sunDir = [0, Math.sin(sunElev), Math.cos(sunElev)];
+
+  // Recompute view dir relative to sun for scattering angle
+  // Actually, let's set up coordinates so we can compute the angle between view and sun
+  const cosViewSun = viewDir[0]*sunDir[0] + viewDir[1]*sunDir[1] + viewDir[2]*sunDir[2];
+  const gamma = Math.acos(clamp(cosViewSun, -1, 1));
+
+  // Ray march from observer along view direction through atmosphere
+  const tMax = raySphereIntersect(ro, viewDir, ATMO_R);
+  if (tMax < 0) return [0, 0, 0];
+
+  const ds = tMax / numSamples;
+
+  let totalR = [0, 0, 0];
+  let opticalDepthR = 0, opticalDepthM = 0;
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = (i + 0.5) * ds;
+    const px = ro[0] + viewDir[0] * t;
+    const py = ro[1] + viewDir[1] * t;
+    const pz = ro[2] + viewDir[2] * t;
+    const height = Math.sqrt(px*px + py*py + pz*pz) - EARTH_R;
+
+    if (height < 0) break; // hit ground
+
+    const hr = Math.exp(-height / HR) * ds;
+    const hm = Math.exp(-height / HM) * ds;
+    opticalDepthR += hr;
+    opticalDepthM += hm;
+
+    // Sun ray optical depth from this point
+    const sro = [px, py, pz];
+    const tSun = raySphereIntersect(sro, sunDir, ATMO_R);
+    if (tSun < 0) continue;
+
+    const dsSun = tSun / numSamplesLight;
+    let odR_sun = 0, odM_sun = 0;
+    let hitGround = false;
+
+    for (let j = 0; j < numSamplesLight; j++) {
+      const ts = (j + 0.5) * dsSun;
+      const sx = px + sunDir[0] * ts;
+      const sy = py + sunDir[1] * ts;
+      const sz = pz + sunDir[2] * ts;
+      const sh = Math.sqrt(sx*sx + sy*sy + sz*sz) - EARTH_R;
+      if (sh < 0) { hitGround = true; break; }
+      odR_sun += Math.exp(-sh / HR) * dsSun;
+      odM_sun += Math.exp(-sh / HM) * dsSun;
+    }
+    if (hitGround) continue;
+
+    for (let c = 0; c < 3; c++) {
+      const tau = BETA_R[c] * (opticalDepthR + odR_sun) + mieCoeff * 1.1 * (opticalDepthM + odM_sun);
+      const attn = Math.exp(-tau);
+      // Rayleigh phase: 3/(16π)(1+cos²γ)
+      const phaseR = 3.0 / (16.0 * PI) * (1 + cosViewSun * cosViewSun);
+      // Mie phase: Henyey-Greenstein, g=0.76
+      const g = 0.76;
+      const phaseM = 3.0 / (8.0 * PI) * ((1 - g*g) * (1 + cosViewSun*cosViewSun)) /
+                     ((2 + g*g) * Math.pow(1 + g*g - 2*g*cosViewSun, 1.5));
+
+      totalR[c] += attn * (BETA_R[c] * hr * phaseR + mieCoeff * hm * phaseM);
+    }
+  }
+
+  // Twilight boost: add some indirect illumination during twilight
+  const twilightBoost = sunElev < 0 ? Math.exp(sunElev * 4) * 0.3 : 0;
+
+  const rgb = totalR.map(v => (v + twilightBoost * 0.001) * SUN_INTENSITY);
+  return toneMapAndGamma(rgb, 1.0);
+}
+
+// ============================================================
+// HOSEK-WILKIE APPROXIMATION
+// ============================================================
+// Uses an enhanced Nishita-style scattering with:
+// - Ground albedo feedback (light reflected off ground re-enters atmosphere)
+// - Multiple scattering approximation
+// - Cornette-Shanks phase function for Mie
+function hosekColor(sunElev, turbidity, viewElevDeg, altitude, albedo) {
+  if (sunElev < deg(-8)) return [0, 0, 0];
+
+  const numSamples = 24;
+  const numSamplesLight = 8;
+  const mieCoeff = BETA_M * (turbidity / 3);
+  const g = 0.76;
+
+  const observerH = EARTH_R + altitude;
+  const ro = [0, observerH, 0];
+
+  const ve = deg(viewElevDeg);
+  const viewDir = [0, Math.sin(ve), Math.cos(ve)];
+  const sunDir = [0, Math.sin(sunElev), Math.cos(sunElev)];
+
+  const cosViewSun = viewDir[0]*sunDir[0] + viewDir[1]*sunDir[1] + viewDir[2]*sunDir[2];
+
+  const tMax = raySphereIntersect(ro, viewDir, ATMO_R);
+  if (tMax < 0) return [0, 0, 0];
+
+  const ds = tMax / numSamples;
+  let totalR = [0, 0, 0];
+  let opticalDepthR = 0, opticalDepthM = 0;
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = (i + 0.5) * ds;
+    const px = ro[0] + viewDir[0] * t;
+    const py = ro[1] + viewDir[1] * t;
+    const pz = ro[2] + viewDir[2] * t;
+    const height = Math.sqrt(px*px + py*py + pz*pz) - EARTH_R;
+
+    if (height < 0) break;
+
+    const hr = Math.exp(-height / HR) * ds;
+    const hm = Math.exp(-height / HM) * ds;
+    opticalDepthR += hr;
+    opticalDepthM += hm;
+
+    const sro = [px, py, pz];
+    const tSun = raySphereIntersect(sro, sunDir, ATMO_R);
+    if (tSun < 0) continue;
+
+    const dsSun = tSun / numSamplesLight;
+    let odR_sun = 0, odM_sun = 0;
+    let hitGround = false;
+
+    for (let j = 0; j < numSamplesLight; j++) {
+      const ts = (j + 0.5) * dsSun;
+      const sx = px + sunDir[0] * ts;
+      const sy = py + sunDir[1] * ts;
+      const sz = pz + sunDir[2] * ts;
+      const sh = Math.sqrt(sx*sx + sy*sy + sz*sz) - EARTH_R;
+      if (sh < 0) { hitGround = true; break; }
+      odR_sun += Math.exp(-sh / HR) * dsSun;
+      odM_sun += Math.exp(-sh / HM) * dsSun;
+    }
+    if (hitGround) continue;
+
+    // Cornette-Shanks phase function (improved Mie)
+    const phaseR = 3.0 / (16.0 * PI) * (1 + cosViewSun * cosViewSun);
+    const cs_num = 3.0 * (1 - g*g) * (1 + cosViewSun*cosViewSun);
+    const cs_den = (8.0 * PI) * (2 + g*g) * Math.pow(1 + g*g - 2*g*cosViewSun, 1.5);
+    const phaseM = cs_num / cs_den;
+
+    for (let c = 0; c < 3; c++) {
+      const tau = BETA_R[c] * (opticalDepthR + odR_sun) + mieCoeff * 1.1 * (opticalDepthM + odM_sun);
+      const attn = Math.exp(-tau);
+
+      const scatter = BETA_R[c] * hr * phaseR + mieCoeff * hm * phaseM;
+      totalR[c] += attn * scatter;
+
+      // Multiple scattering approximation: fraction of scattered light
+      // gets scattered again isotropically (order-2 approximation)
+      const ms = scatter * 0.075 * (1 + albedo * 0.5);
+      totalR[c] += attn * ms;
+    }
+  }
+
+  // Ground albedo contribution: sunlight hitting ground, reflecting up
+  if (sunElev > 0) {
+    // Direct sun transmittance to ground
+    const tGround = raySphereIntersect(ro, sunDir, ATMO_R);
+    if (tGround > 0) {
+      const dsG = tGround / numSamplesLight;
+      let odR_g = 0, odM_g = 0;
+      for (let j = 0; j < numSamplesLight; j++) {
+        const ts = (j + 0.5) * dsG;
+        const h = Math.sqrt((ro[1] + sunDir[1]*ts)**2) - EARTH_R;
+        if (h >= 0) {
+          odR_g += Math.exp(-Math.max(0,h) / HR) * dsG;
+          odM_g += Math.exp(-Math.max(0,h) / HM) * dsG;
+        }
+      }
+      for (let c = 0; c < 3; c++) {
+        const tauG = BETA_R[c] * odR_g + mieCoeff * 1.1 * odM_g;
+        const groundIrrad = Math.exp(-tauG) * Math.sin(sunElev);
+        // Reflected light, scattered isotropically up through atmosphere
+        totalR[c] += albedo * groundIrrad * 0.015 * Math.exp(-BETA_R[c] * opticalDepthR);
+      }
+    }
+  }
+
+  // Twilight contribution
+  const twilightBoost = sunElev < 0 ? Math.exp(sunElev * 4) * 0.3 : 0;
+  const rgb = totalR.map(v => (v + twilightBoost * 0.001) * SUN_INTENSITY);
+  return toneMapAndGamma(rgb, 1.0);
+}
+
+// ============================================================
+// CIE STANDARD CLEAR SKY (Type 12)
+// ============================================================
+function cieClearColor(sunElev, turbidity, viewElevDeg) {
+  if (sunElev < deg(-6)) return [0, 0, 0];
+  const sunTheta = PI / 2 - sunElev;
+  const viewTheta = PI / 2 - deg(viewElevDeg);
+  const gamma = Math.abs(viewTheta - sunTheta);
+
+  // CIE Type 12 parameters (Clear sky, polluted)
+  const a = -1.0, b = -0.32, c = 10.0, d = -3.0, e = 0.45;
+  // Gradation: φ(θ) = 1 + a·exp(b/cosθ)
+  const phi = theta => 1 + a * Math.exp(b / (Math.cos(theta) + 0.01));
+  // Indicatrix: f(γ) = 1 + c·(exp(d·γ) - exp(d·π/2)) + e·cos²γ
+  const f = g => 1 + c * (Math.exp(d * g) - Math.exp(d * PI / 2)) + e * Math.cos(g) * Math.cos(g);
+
+  let L = phi(viewTheta) * f(gamma);
+  const Lz = phi(0) * f(sunTheta);
+  L = Math.max(0, L / Lz);
+
+  // Scale luminance with sun elevation
+  const sunScale = clamp(Math.sin(sunElev) * 1.5, 0, 1);
+  const Y = L * sunScale * 2.5;
+
+  // Approximate daylight chromaticity from correlated color temperature
+  // CCT varies: ~15000K at zenith midday → ~3000K near horizon/sunset
+  const elevFactor = clamp(sunElev / deg(60), 0, 1);
+  const viewFactor = clamp(deg(viewElevDeg) / deg(90), 0.3, 1);
+  const cct = lerp(3500, 12000 + 3000 * viewFactor, elevFactor * viewFactor);
+
+  // Hernandez-Andres approximation for daylight chromaticity
+  const cctInv = 1e3 / cct, cctInv2 = cctInv * cctInv, cctInv3 = cctInv2 * cctInv;
+  let x;
+  if (cct <= 7000) x = -4.6070e9/(cct*cct*cct) + 2.9678e6/(cct*cct) + 0.09911e3/cct + 0.244063;
+  else x = -2.0064e9/(cct*cct*cct) + 1.9018e6/(cct*cct) + 0.24748e3/cct + 0.237040;
+  const y = -3 * x * x + 2.87 * x - 0.275;
+
+  const twilightFade = clamp((sunElev + deg(6)) / deg(6), 0, 1);
+  const rgb = YxyToRGB(Y * twilightFade, x, y);
+  return toneMapAndGamma(rgb, 0.15);
+}
+
+// ============================================================
+// NISHITA + OZONE (Chappuis band absorption)
+// ============================================================
+// Ozone absorption coefficients (RGB, approximate Chappuis band)
+const OZONE_BETA = [3.426e-7, 8.298e-7, 0.356e-7];
+const OZONE_PEAK = 25000; // peak altitude (m)
+const OZONE_SCALE = 15000; // scale width (m)
+
+function nishitaOzoneColor(sunElev, turbidity, viewElevDeg, altitude, ozoneStrength) {
+  if (ozoneStrength === undefined) ozoneStrength = 1;
+  if (sunElev < deg(-8)) return [0, 0, 0];
+
+  const numSamples = 24, numSamplesLight = 8;
+  const mieCoeff = BETA_M * (turbidity / 3);
+  const observerH = EARTH_R + altitude;
+  const ro = [0, observerH, 0];
+  const ve = deg(viewElevDeg);
+  const viewDir = [0, Math.sin(ve), Math.cos(ve)];
+  const sunDir = [0, Math.sin(sunElev), Math.cos(sunElev)];
+  const cosViewSun = viewDir[0]*sunDir[0] + viewDir[1]*sunDir[1] + viewDir[2]*sunDir[2];
+
+  const tMax = raySphereIntersect(ro, viewDir, ATMO_R);
+  if (tMax < 0) return [0, 0, 0];
+  const ds = tMax / numSamples;
+  let totalR = [0, 0, 0];
+  let opticalDepthR = 0, opticalDepthM = 0, opticalDepthO = [0, 0, 0];
+
+  const ozoneDensity = h => Math.exp(-2 * Math.abs(h - OZONE_PEAK) / OZONE_SCALE) * ozoneStrength;
+
+  for (let i = 0; i < numSamples; i++) {
+    const t = (i + 0.5) * ds;
+    const px = ro[0] + viewDir[0]*t, py = ro[1] + viewDir[1]*t, pz = ro[2] + viewDir[2]*t;
+    const height = Math.sqrt(px*px + py*py + pz*pz) - EARTH_R;
+    if (height < 0) break;
+
+    const hr = Math.exp(-height / HR) * ds;
+    const hm = Math.exp(-height / HM) * ds;
+    const ho = ozoneDensity(height) * ds;
+    opticalDepthR += hr; opticalDepthM += hm;
+    for (let c = 0; c < 3; c++) opticalDepthO[c] += OZONE_BETA[c] * ho;
+
+    const sro = [px, py, pz];
+    const tSun = raySphereIntersect(sro, sunDir, ATMO_R);
+    if (tSun < 0) continue;
+    const dsSun = tSun / numSamplesLight;
+    let odR_sun = 0, odM_sun = 0, odO_sun = [0, 0, 0];
+    let hitGround = false;
+
+    for (let j = 0; j < numSamplesLight; j++) {
+      const ts = (j + 0.5) * dsSun;
+      const sx = px + sunDir[0]*ts, sy = py + sunDir[1]*ts, sz = pz + sunDir[2]*ts;
+      const sh = Math.sqrt(sx*sx + sy*sy + sz*sz) - EARTH_R;
+      if (sh < 0) { hitGround = true; break; }
+      odR_sun += Math.exp(-sh / HR) * dsSun;
+      odM_sun += Math.exp(-sh / HM) * dsSun;
+      const oS = ozoneDensity(sh) * dsSun;
+      for (let c = 0; c < 3; c++) odO_sun[c] += OZONE_BETA[c] * oS;
+    }
+    if (hitGround) continue;
+
+    const phaseR = 3.0 / (16.0 * PI) * (1 + cosViewSun * cosViewSun);
+    const g = 0.76;
+    const phaseM = 3.0 / (8.0 * PI) * ((1 - g*g) * (1 + cosViewSun*cosViewSun)) /
+                   ((2 + g*g) * Math.pow(1 + g*g - 2*g*cosViewSun, 1.5));
+
+    for (let c = 0; c < 3; c++) {
+      const tau = BETA_R[c] * (opticalDepthR + odR_sun) +
+                  mieCoeff * 1.1 * (opticalDepthM + odM_sun) +
+                  opticalDepthO[c] + odO_sun[c];
+      const attn = Math.exp(-tau);
+      totalR[c] += attn * (BETA_R[c] * hr * phaseR + mieCoeff * hm * phaseM);
+    }
+  }
+
+  const twilightBoost = sunElev < 0 ? Math.exp(sunElev * 4) * 0.3 : 0;
+  const rgb = totalR.map(v => (v + twilightBoost * 0.001) * SUN_INTENSITY);
+  return toneMapAndGamma(rgb, 1.0);
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+const canvases = {
+  rayleigh: document.getElementById('cRayleigh'),
+  preetham: document.getElementById('cPreetham'),
+  nishita:  document.getElementById('cNishita'),
+  hosek:    document.getElementById('cHosek'),
+  ozone:    document.getElementById('cOzone'),
+  cie:      document.getElementById('cCie'),
+};
+
+const HOUR_START = 3;
+const HOUR_END = 22;
+
+function renderAll() {
+  const T = parseFloat(document.getElementById('turbidity').value);
+  const lat = parseFloat(document.getElementById('latitude').value);
+  const ve = parseFloat(document.getElementById('viewElev').value);
+  const doySlider = parseInt(document.getElementById('dayOfYear').value);
+  const doy = ((doySlider - 1 + 354) % 365) + 1; // slider centered on winter solstice
+  const alb = parseFloat(document.getElementById('albedo').value);
+  const ozone = parseFloat(document.getElementById('ozoneStrength').value);
+  const alt = 0; // sea level
+
+  // Style params
+  const style = {
+    hueShift:     parseFloat(document.getElementById('hueShift').value),
+    saturation:   parseFloat(document.getElementById('saturation').value),
+    vibrance:     parseFloat(document.getElementById('vibrance').value),
+    exposure:     parseFloat(document.getElementById('exposure').value),
+    contrast:     parseFloat(document.getElementById('contrast').value),
+    warmth:       parseFloat(document.getElementById('warmth').value),
+    twilightGlow: parseFloat(document.getElementById('twilightGlow').value),
+    nightTint:    parseFloat(document.getElementById('nightTint').value),
+  };
+
+  // Update labels
+  document.getElementById('vTurb').textContent = T.toFixed(1);
+  document.getElementById('vLat').textContent = lat + '°';
+  document.getElementById('vElev').textContent = ve + '°';
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const approxDate = new Date(2024, 0, doy);
+  document.getElementById('vDay').textContent = `${doy} (${monthNames[approxDate.getMonth()]} ${approxDate.getDate()})`;
+  document.getElementById('vAlbedo').textContent = alb.toFixed(2);
+  document.getElementById('vOzone').textContent = ozone.toFixed(2);
+
+  const iq = parseInt(document.getElementById('iq').value);
+  document.getElementById('vIq').textContent = iq;
+  document.querySelectorAll('.math-block').forEach(el => {
+    el.style.display = iq > 145 ? '' : 'none';
+  });
+  document.querySelector('.param-table-wrap').style.display = iq >= 120 ? '' : 'none';
+
+  const modal = document.getElementById('iqModal');
+  if (iq < 60 && !modal.classList.contains('show') && !modal.dataset.dismissed) {
+    modal.classList.add('show');
+    let t = 5;
+    const cd = document.getElementById('iqCountdown');
+    cd.textContent = 'Redirecting in 5...';
+    clearInterval(window._iqTimer);
+    window._iqTimer = setInterval(() => {
+      t--;
+      if (t > 0) cd.textContent = 'Redirecting in ' + t + '...';
+      else {
+        cd.textContent = 'Just kidding.';
+        clearInterval(window._iqTimer);
+        setTimeout(() => {
+          modal.classList.remove('show'); modal.dataset.dismissed = '1';
+          document.getElementById('iq').value = 100;
+          scheduleRender();
+        }, 1500);
+      }
+    }, 1000);
+  } else if (iq >= 60) {
+    modal.classList.remove('show');
+    clearInterval(window._iqTimer);
+    delete modal.dataset.dismissed;
+  }
+
+  document.getElementById('vHue').textContent = style.hueShift + '°';
+  document.getElementById('vSat').textContent = style.saturation.toFixed(2);
+  document.getElementById('vVib').textContent = style.vibrance.toFixed(2);
+  document.getElementById('vExp').textContent = style.exposure.toFixed(1);
+  document.getElementById('vCont').textContent = style.contrast.toFixed(2);
+  document.getElementById('vWarm').textContent = style.warmth.toFixed(2);
+  document.getElementById('vGlow').textContent = style.twilightGlow.toFixed(2);
+  document.getElementById('vNight').textContent = style.nightTint.toFixed(2);
+
+  for (const [name, canvas] of Object.entries(canvases)) {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    for (let x = 0; x < w; x++) {
+      const hour = HOUR_START + (x / w) * (HOUR_END - HOUR_START);
+      const sElev = sunElevation(lat, doy, hour);
+
+      let rgb;
+      if (name === 'rayleigh') {
+        rgb = nishitaColor(sElev, T, ve, alt, 0);
+      } else if (name === 'preetham') {
+        rgb = preethamColor(sElev, T, ve);
+      } else if (name === 'nishita') {
+        rgb = nishitaColor(sElev, T, ve, alt);
+      } else if (name === 'ozone') {
+        rgb = nishitaOzoneColor(sElev, T, ve, alt, ozone);
+      } else if (name === 'cie') {
+        rgb = cieClearColor(sElev, T, ve);
+      } else {
+        rgb = hosekColor(sElev, T, ve, alt, alb);
+      }
+
+      rgb = applyStyle(rgb, sElev, style);
+
+      ctx.fillStyle = `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
+      ctx.fillRect(x, 0, 1, h);
+    }
+
+    // Sun elevation indicator (thin line)
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x < w; x++) {
+      const hour = HOUR_START + (x / w) * (HOUR_END - HOUR_START);
+      const sElev = sunElevation(lat, doy, hour);
+      const y = h - (sElev / (PI/2)) * (h * 0.8) - h * 0.1;
+      if (x === 0) ctx.moveTo(x, clamp(y, 0, h));
+      else ctx.lineTo(x, clamp(y, 0, h));
+    }
+    ctx.stroke();
+
+    // Horizon line
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.setLineDash([4, 4]);
+    const horizY = h * 0.9;
+    ctx.beginPath(); ctx.moveTo(0, horizY); ctx.lineTo(w, horizY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Time axis labels
+  for (const id of ['axRayleigh', 'axPreetham', 'axNishita', 'axHosek', 'axOzone', 'axCie']) {
+    const el = document.getElementById(id);
+    el.innerHTML = '';
+    for (let h = HOUR_START; h <= HOUR_END; h += 2) {
+      const span = document.createElement('span');
+      const hr = h % 12 || 12;
+      const ampm = h < 12 ? 'a' : 'p';
+      span.textContent = `${hr}${ampm}`;
+      el.appendChild(span);
+    }
+  }
+}
+
+// Debounced rendering
+let raf = null;
+function scheduleRender() {
+  if (raf) cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(renderAll);
+}
+
+document.querySelectorAll('input[type=range]').forEach(el => {
+  el.addEventListener('input', scheduleRender);
+});
+
+// Geolocation
+document.getElementById('geoBtn').addEventListener('click', () => {
+  if (!navigator.geolocation) return;
+  const btn = document.getElementById('geoBtn');
+  btn.textContent = '...';
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = Math.round(clamp(pos.coords.latitude, -70, 70));
+    document.getElementById('latitude').value = lat;
+    btn.textContent = '\u2316';
+    scheduleRender();
+  }, () => { btn.textContent = '\u2316'; });
+});
+
+// Day of year from today
+document.getElementById('doyBtn').addEventListener('click', () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const actualDoy = Math.floor((now - start) / 86400000);
+  document.getElementById('dayOfYear').value = ((actualDoy + 10) % 365) + 1;
+  scheduleRender();
+});
+
+// Reset style sliders
+document.getElementById('resetStyle').addEventListener('click', () => {
+  const defaults = { hueShift:0, saturation:1, vibrance:0, exposure:0, contrast:1, warmth:0, twilightGlow:1, nightTint:0 };
+  for (const [id, val] of Object.entries(defaults)) {
+    document.getElementById(id).value = val;
+  }
+  scheduleRender();
+});
+
+// Initial render
+renderAll();
+window.addEventListener('resize', scheduleRender);
+</script>
+</body>
+</html>
