@@ -1973,6 +1973,18 @@ document.querySelectorAll('.preset-btn').forEach(btn => {
   });
 });
 
+// IQ query param sync
+const iqParam = new URLSearchParams(window.location.search).get('iq');
+if (iqParam !== null) {
+  const v = clamp(parseInt(iqParam, 10) || 100, 0, 200);
+  document.getElementById('iq').value = v;
+}
+document.getElementById('iq').addEventListener('input', () => {
+  const url = new URL(window.location);
+  url.searchParams.set('iq', document.getElementById('iq').value);
+  history.replaceState(null, '', url);
+});
+
 // Initial render
 renderAll();
 window.addEventListener('resize', scheduleRender);
