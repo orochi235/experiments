@@ -1353,6 +1353,7 @@ const PRESETS = {
 
 let activePreset = 'earth';
 let stellarColor = [1, 1, 1]; // current stellar illuminant RGB weights
+let activeStars = [{temp: 5778, intensity: 1, hourOffset: 0, color: [1,1,1]}];
 
 function raySphereIntersect(ro, rd, r) {
   // ro = [0, EARTH_R + altitude, 0], rd = normalized direction
@@ -1714,22 +1715,29 @@ function applyPresetPhysics(preset, atmoDensity, sunDist, stellarTemp) {
   BETA_M = preset.betaM * atmoDensity;
   // Sun intensity scales with inverse square of distance
   SUN_INTENSITY = preset.sunIntensity / (sunDist * sunDist);
-  // Compute blended stellar color from star(s)
-  if (stellarTemp !== null) {
-    // Single manual override
-    stellarColor = blackbodyRGB(stellarTemp);
-  } else {
-    // Blend from preset stars
-    let r = 0, g = 0, b = 0;
-    for (const star of preset.stars) {
-      const c = blackbodyRGB(star.temp);
-      r += c[0] * star.intensity;
-      g += c[1] * star.intensity;
-      b += c[2] * star.intensity;
-    }
-    const mx = Math.max(r, g, b, 1e-6);
-    stellarColor = [r/mx, g/mx, b/mx];
+
+  // Build per-star data for multi-star rendering
+  // Hour offsets spread secondary stars slightly apart in the sky
+  const offsets = [0, -0.6, 0.5]; // primary, secondary, tertiary
+  activeStars = preset.stars.map((star, i) => {
+    const c = blackbodyRGB(star.temp);
+    return {
+      temp: star.temp,
+      intensity: star.intensity,
+      hourOffset: offsets[i] || 0,
+      color: c
+    };
+  });
+
+  // Blended stellar color (for the label / single-star fallback)
+  let r = 0, g = 0, b = 0;
+  for (const s of activeStars) {
+    r += s.color[0] * s.intensity;
+    g += s.color[1] * s.intensity;
+    b += s.color[2] * s.intensity;
   }
+  const mx = Math.max(r, g, b, 1e-6);
+  stellarColor = [r/mx, g/mx, b/mx];
 }
 
 function renderAll() {
@@ -1827,58 +1835,74 @@ function renderAll() {
     const w = canvas.width;
     const h = canvas.height;
 
+    const nStars = activeStars.length;
+
     for (let x = 0; x < w; x++) {
       const hour = HOUR_START + (x / w) * (HOUR_END - HOUR_START);
-      const sElev = sunElevation(lat, doy, hour);
 
-      let rgb;
-      if (name === 'rayleigh') {
-        rgb = nishitaColor(sElev, T, ve, alt, 0);
-      } else if (name === 'preetham') {
-        rgb = preethamColor(sElev, T, ve);
-      } else if (name === 'nishita') {
-        rgb = nishitaColor(sElev, T, ve, alt);
-      } else if (name === 'ozone') {
-        rgb = nishitaOzoneColor(sElev, T, ve, alt, ozone);
-      } else if (name === 'cie') {
-        rgb = cieClearColor(sElev, T, ve);
-      } else {
-        rgb = hosekColor(sElev, T, ve, alt, alb);
+      // Sum scattering contributions from each star
+      let rgb = [0, 0, 0];
+      let primaryElev = 0;
+
+      for (let si = 0; si < nStars; si++) {
+        const star = activeStars[si];
+        const sElev = sunElevation(lat, doy, hour + star.hourOffset);
+        if (si === 0) primaryElev = sElev;
+
+        let contrib;
+        if (name === 'rayleigh') {
+          contrib = nishitaColor(sElev, T, ve, alt, 0);
+        } else if (name === 'preetham') {
+          contrib = preethamColor(sElev, T, ve);
+        } else if (name === 'nishita') {
+          contrib = nishitaColor(sElev, T, ve, alt);
+        } else if (name === 'ozone') {
+          contrib = nishitaOzoneColor(sElev, T, ve, alt, ozone);
+        } else if (name === 'cie') {
+          contrib = cieClearColor(sElev, T, ve);
+        } else {
+          contrib = hosekColor(sElev, T, ve, alt, alb);
+        }
+
+        // Tint by this star's blackbody color and scale by intensity
+        rgb[0] += contrib[0] * star.color[0] * star.intensity;
+        rgb[1] += contrib[1] * star.color[1] * star.intensity;
+        rgb[2] += contrib[2] * star.color[2] * star.intensity;
       }
-
-      // Apply stellar color tint
-      rgb[0] *= stellarColor[0];
-      rgb[1] *= stellarColor[1];
-      rgb[2] *= stellarColor[2];
 
       // Apply non-physical scatter tweaks for exotic skies
       if (preset.scatterTweak) {
-        let [rr, gg, bb] = rgb;
-        let [hh, ss, ll] = rgbToHsl(clamp(rr,0,255), clamp(gg,0,255), clamp(bb,0,255));
+        let [hh, ss, ll] = rgbToHsl(clamp(rgb[0],0,255), clamp(rgb[1],0,255), clamp(rgb[2],0,255));
         hh += preset.scatterTweak.hueShift / 360;
         ss *= preset.scatterTweak.satBoost;
         ss = clamp(ss, 0, 1);
         rgb = hslToRgb(hh, ss, ll);
       }
 
-      rgb = applyStyle(rgb, sElev, style);
+      rgb = applyStyle(rgb, primaryElev, style);
 
       ctx.fillStyle = `rgb(${Math.round(rgb[0])},${Math.round(rgb[1])},${Math.round(rgb[2])})`;
       ctx.fillRect(x, 0, 1, h);
     }
 
-    // Sun elevation indicator (thin line)
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x < w; x++) {
-      const hour = HOUR_START + (x / w) * (HOUR_END - HOUR_START);
-      const sElev = sunElevation(lat, doy, hour);
-      const y = h - (sElev / (PI/2)) * (h * 0.8) - h * 0.1;
-      if (x === 0) ctx.moveTo(x, clamp(y, 0, h));
-      else ctx.lineTo(x, clamp(y, 0, h));
+    // Sun elevation arcs — one per star, color-coded
+    const arcColors = ['rgba(255,255,255,0.15)', 'rgba(255,180,100,0.18)', 'rgba(150,200,255,0.18)'];
+    for (let si = 0; si < nStars; si++) {
+      const star = activeStars[si];
+      ctx.strokeStyle = arcColors[si] || arcColors[0];
+      ctx.lineWidth = 1;
+      ctx.setLineDash(si === 0 ? [] : [3, 3]);
+      ctx.beginPath();
+      for (let x = 0; x < w; x++) {
+        const hour = HOUR_START + (x / w) * (HOUR_END - HOUR_START);
+        const sElev = sunElevation(lat, doy, hour + star.hourOffset);
+        const y = h - (sElev / (PI/2)) * (h * 0.8) - h * 0.1;
+        if (x === 0) ctx.moveTo(x, clamp(y, 0, h));
+        else ctx.lineTo(x, clamp(y, 0, h));
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
-    ctx.stroke();
 
     // Horizon line
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
