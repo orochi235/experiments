@@ -151,12 +151,12 @@
   }
   .stellar-temp-slider::-webkit-slider-thumb {
     -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
-    background: #fff; border: 2px solid #333; cursor: pointer;
+    background: var(--thumb-color, #fff); border: 2px solid #333; cursor: pointer;
     box-shadow: 0 0 4px rgba(0,0,0,0.5);
   }
   .stellar-temp-slider::-moz-range-thumb {
     width: 18px; height: 18px; border-radius: 50%;
-    background: #fff; border: 2px solid #333; cursor: pointer;
+    background: var(--thumb-color, #fff); border: 2px solid #333; cursor: pointer;
   }
 </style>
 </head>
@@ -1752,6 +1752,9 @@ function renderAll() {
   document.getElementById('vAtmoDens').textContent = atmoDens.toFixed(2);
   document.getElementById('vSunDist').textContent = sunDist.toFixed(2) + ' AU';
   document.getElementById('vStellarTemp').textContent = Math.round(stellarTempVal) + ' K';
+  const thumbRGB = blackbodyRGB(stellarTempVal);
+  const thumbColor = `rgb(${Math.round(thumbRGB[0]*255)},${Math.round(thumbRGB[1]*255)},${Math.round(thumbRGB[2]*255)})`;
+  document.getElementById('stellarTemp').style.setProperty('--thumb-color', thumbColor);
 
   const T = parseFloat(document.getElementById('turbidity').value);
   const lat = parseFloat(document.getElementById('latitude').value);
