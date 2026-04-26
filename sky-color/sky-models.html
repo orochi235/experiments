@@ -23,6 +23,15 @@
   .control label { font-size: 0.78rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
   .control .val { font-size: 0.85rem; color: #7ec8e3; font-weight: 600; }
   .control input[type=range] { width: 200px; accent-color: #7ec8e3; cursor: pointer; }
+  .control .slider-row { display: flex; align-items: center; position: relative; }
+  .control .slider-reset {
+    position: absolute; right: 0; bottom: 100%;
+    background: none; border: 1px solid #3a4a6a; color: #7ec8e3; cursor: pointer;
+    font-size: 0.85rem; padding: 0 4px; line-height: 1.2; display: none;
+    border-radius: 4px; margin-bottom: 4px;
+  }
+  .control .slider-reset:hover { background: #2a3a5a; color: #aee0f0; }
+  .control .slider-reset.show { display: block; }
   .controls-label {
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px;
     color: #555; margin-bottom: 6px; width: 100%;
@@ -1788,9 +1797,8 @@ function renderAll() {
   document.getElementById('vTurb').textContent = T.toFixed(1);
   document.getElementById('vLat').textContent = lat + '°';
   document.getElementById('vElev').textContent = ve + '°';
-  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const approxDate = new Date(2024, 0, doy);
-  document.getElementById('vDay').textContent = `${doy} (${monthNames[approxDate.getMonth()]} ${approxDate.getDate()})`;
+  document.getElementById('vDay').textContent = `${doy} (${approxDate.getMonth()+1}/${approxDate.getDate()})`;
   document.getElementById('vAlbedo').textContent = alb.toFixed(2);
   document.getElementById('vOzone').textContent = ozone.toFixed(2);
 
@@ -1943,8 +1951,29 @@ function scheduleRender() {
   raf = requestAnimationFrame(renderAll);
 }
 
+// Wrap each slider in a slider-row with a per-slider reset button
 document.querySelectorAll('input[type=range]').forEach(el => {
-  el.addEventListener('input', scheduleRender);
+  if (el.id === 'iq') { el.addEventListener('input', scheduleRender); return; }
+  const defaultVal = el.value;
+  el.dataset.default = defaultVal;
+  const wrap = document.createElement('div');
+  wrap.className = 'slider-row';
+  const resetBtn = document.createElement('button');
+  resetBtn.className = 'slider-reset';
+  resetBtn.textContent = '↺';
+  resetBtn.title = 'Reset to default';
+  resetBtn.addEventListener('click', () => {
+    el.value = el.dataset.default;
+    resetBtn.classList.remove('show');
+    scheduleRender();
+  });
+  el.parentNode.insertBefore(wrap, el);
+  wrap.appendChild(resetBtn);
+  wrap.appendChild(el);
+  el.addEventListener('input', () => {
+    resetBtn.classList.toggle('show', el.value !== el.dataset.default);
+    scheduleRender();
+  });
 });
 
 // Geolocation
@@ -2013,23 +2042,35 @@ document.getElementById('resetStyle').addEventListener('click', () => {
 });
 
 // Preset button handlers
+function updateResetButtons() {
+  document.querySelectorAll('input[type=range]').forEach(el => {
+    if (el.id === 'iq' || !el.dataset.default) return;
+    const btn = el.parentNode.querySelector('.slider-reset');
+    if (btn) btn.classList.toggle('show', el.value !== el.dataset.default);
+  });
+}
+
 function selectPreset(name) {
   activePreset = name;
   const preset = PRESETS[name];
   // Update active button styling
   document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
   document.querySelector(`[data-preset="${name}"]`).classList.add('active');
-  // Set planet sliders to preset values
-  document.getElementById('atmoDensity').value = preset.atmoDensity;
-  document.getElementById('sunDistance').value = preset.sunDist;
-  // For multi-star systems, use weighted average temp for the slider
+  // Set planet sliders to preset values and update their defaults
+  const setSlider = (id, val) => {
+    const el = document.getElementById(id);
+    el.value = val;
+    el.dataset.default = val;
+  };
+  setSlider('atmoDensity', preset.atmoDensity);
+  setSlider('sunDistance', preset.sunDist);
   let avgTemp = 0;
   for (const s of preset.stars) avgTemp += s.temp * s.intensity;
-  document.getElementById('stellarTemp').value = Math.round(avgTemp);
-  // Set physics sliders too
-  document.getElementById('turbidity').value = preset.turbidity;
-  document.getElementById('albedo').value = preset.albedo;
-  document.getElementById('ozoneStrength').value = preset.ozone;
+  setSlider('stellarTemp', Math.round(avgTemp));
+  setSlider('turbidity', preset.turbidity);
+  setSlider('albedo', preset.albedo);
+  setSlider('ozoneStrength', preset.ozone);
+  updateResetButtons();
   scheduleRender();
 }
 
