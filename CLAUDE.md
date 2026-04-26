@@ -14,6 +14,8 @@ When adding, removing, or renaming an experiment, regenerate or update the root 
 
 To discover experiments: each subdirectory of the repo root (excluding `.git`) is an experiment. The main page is typically `index.html` or the only `.html` file in the directory.
 
+Each card shows a "Last modified" date (from the last git commit touching that subdirectory). Cards are sorted newest-first.
+
 ## Conventions
 
 - Single HTML files preferred (inline CSS/JS)

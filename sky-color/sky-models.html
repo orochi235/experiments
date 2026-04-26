@@ -175,7 +175,7 @@
     <input type="range" id="latitude" min="-70" max="70" step="1" value="40">
   </div>
   <div class="control">
-    <label><a href="https://en.wikipedia.org/wiki/Horizontal_coordinate_system" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">View Elevation</a> <span class="val" id="vElev">90°</span></label>
+    <label><a href="https://en.wikipedia.org/wiki/Horizontal_coordinate_system" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">View Elevation</a> <span class="val" id="vElev">90°</span> <button class="geo-btn" id="oriBtn" title="Use device orientation">&#x2316;</button></label>
     <input type="range" id="viewElev" min="5" max="90" step="1" value="90">
   </div>
   <div class="control">
@@ -233,9 +233,9 @@
   <button class="reset-btn" id="resetStyle">Reset Style</button>
 </div>
 
-<div class="presets-wrap">
-  <h2>Planetary Presets</h2>
-  <div class="preset-grid">
+<details class="presets-wrap" open>
+  <summary><h2 style="display:inline;cursor:pointer">Planetary Presets</h2></summary>
+  <div class="preset-grid" style="margin-top:10px">
     <button class="preset-btn earth-row active" data-preset="earth">
       <span class="preset-name">Earth</span>
       <span class="preset-source">Sol III</span>
@@ -322,7 +322,7 @@
       <span class="preset-star">F-type — 6500 K</span>
     </button>
   </div>
-</div>
+</details>
 
 <div class="controls planet" id="planetControls">
   <div class="controls-label">Planet Physics</div>
@@ -1924,6 +1924,40 @@ document.getElementById('geoBtn').addEventListener('click', () => {
     btn.textContent = '\u2316';
     scheduleRender();
   }, () => { btn.textContent = '\u2316'; });
+});
+
+// Device orientation → view elevation
+let _oriTracking = false, _oriHandler = null;
+document.getElementById('oriBtn').addEventListener('click', () => {
+  const btn = document.getElementById('oriBtn');
+  if (_oriTracking) {
+    // Stop tracking
+    window.removeEventListener('deviceorientation', _oriHandler);
+    _oriTracking = false;
+    btn.style.color = '';
+    return;
+  }
+  // iOS 13+ requires permission request
+  const start = () => {
+    btn.style.color = '#6ee6a0';
+    _oriTracking = true;
+    _oriHandler = e => {
+      if (e.beta === null) return;
+      // beta: -180..180, phone flat=0, pointing at sky=90
+      const elev = Math.round(clamp(e.beta, 5, 90));
+      document.getElementById('viewElev').value = elev;
+      scheduleRender();
+    };
+    window.addEventListener('deviceorientation', _oriHandler);
+  };
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    DeviceOrientationEvent.requestPermission().then(r => {
+      if (r === 'granted') start();
+    }).catch(() => {});
+  } else if ('DeviceOrientationEvent' in window) {
+    start();
+  }
 });
 
 // Day of year from today
