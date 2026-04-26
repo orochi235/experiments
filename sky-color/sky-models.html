@@ -1719,17 +1719,24 @@ function applyPresetPhysics(preset, atmoDensity, sunDist, stellarTemp) {
   // Build per-star data for multi-star rendering
   // Hour offsets spread secondary stars slightly apart in the sky
   const offsets = [0, -0.6, 0.5]; // primary, secondary, tertiary
+
+  // Compute temperature offset from slider vs preset default
+  let presetAvgTemp = 0;
+  for (const s of preset.stars) presetAvgTemp += s.temp * s.intensity;
+  const tempDelta = stellarTemp - presetAvgTemp;
+
   activeStars = preset.stars.map((star, i) => {
-    const c = blackbodyRGB(star.temp);
+    const adjustedTemp = clamp(star.temp + tempDelta, 2500, 12000);
+    const c = blackbodyRGB(adjustedTemp);
     return {
-      temp: star.temp,
+      temp: adjustedTemp,
       intensity: star.intensity,
       hourOffset: offsets[i] || 0,
       color: c
     };
   });
 
-  // Blended stellar color (for the label / single-star fallback)
+  // Blended stellar color
   let r = 0, g = 0, b = 0;
   for (const s of activeStars) {
     r += s.color[0] * s.intensity;
