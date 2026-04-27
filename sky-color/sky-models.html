@@ -135,6 +135,17 @@
     padding: 16px 20px;
   }
   .presets-wrap h2 { font-size: 1rem; margin-bottom: 10px; color: #fff; font-weight: 600; }
+  .presets-wrap[open] > summary > .preset-summary { display: none; }
+  .preset-summary {
+    display: inline-flex; align-items: baseline; gap: 10px;
+    margin-left: 16px;
+    color: #ccc; font-size: 0.82rem;
+    background: #000; border: 1px solid #2a3a5a; border-radius: 6px;
+    padding: 4px 10px;
+  }
+  .preset-summary .ps-name { color: #fff; font-weight: 600; }
+  .preset-summary .ps-source { color: #aaa; font-size: 0.72rem; }
+  .preset-summary .ps-star { color: #887733; font-size: 0.72rem; }
   .preset-grid {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
   }
@@ -148,7 +159,9 @@
   .preset-btn:hover { background: #2a3a5a; border-color: #4a6a8a; color: #fff; }
   .preset-btn.active { background: #2a4a6a; border-color: #7ec8e3; color: #fff; }
   .preset-btn .preset-name { font-weight: 600; display: block; }
-  .preset-btn .preset-source { font-size: 0.68rem; color: #666; }
+  .preset-btn .preset-source { font-size: 0.68rem; color: #aaa; }
+  .preset-btn .preset-source a { color: #6a9aaa; text-decoration: none; }
+  .preset-btn .preset-source a:hover { color: #8abaca; }
   .preset-btn .preset-star { font-size: 0.68rem; color: #887733; }
   /* Planet-specific sliders */
   .controls.planet { background: #1a2430; border: 1px solid #2a3a4a; }
@@ -247,7 +260,7 @@
 </div>
 
 <details class="presets-wrap" open>
-  <summary><h2 style="display:inline;cursor:pointer">Planetary Presets</h2></summary>
+  <summary><h2 style="display:inline;cursor:pointer">Planetary Presets</h2><span class="preset-summary" id="presetSummary"></span></summary>
   <div class="preset-grid" style="margin-top:10px">
     <button class="preset-btn earth-row active" data-preset="earth">
       <span class="preset-name">Earth</span>
@@ -2079,6 +2092,15 @@ function selectPreset(name) {
   setSlider('turbidity', preset.turbidity);
   setSlider('albedo', preset.albedo);
   setSlider('ozoneStrength', preset.ozone);
+  // Update compact summary shown when planetary presets is collapsed
+  const btn = document.querySelector(`[data-preset="${name}"]`);
+  const sum = document.getElementById('presetSummary');
+  if (btn && sum) {
+    sum.innerHTML =
+      `<span class="ps-name">${btn.querySelector('.preset-name').innerHTML}</span>` +
+      `<span class="ps-source">${btn.querySelector('.preset-source').innerHTML}</span>` +
+      `<span class="ps-star">${btn.querySelector('.preset-star').innerHTML}</span>`;
+  }
   updateResetButtons();
   scheduleRender();
 }
@@ -2102,6 +2124,18 @@ document.getElementById('iq').addEventListener('input', () => {
   url.searchParams.set('iq', document.getElementById('iq').value);
   history.replaceState(null, '', url);
 });
+
+// Initial preset summary population
+(() => {
+  const btn = document.querySelector('.preset-btn.active');
+  const sum = document.getElementById('presetSummary');
+  if (btn && sum) {
+    sum.innerHTML =
+      `<span class="ps-name">${btn.querySelector('.preset-name').innerHTML}</span>` +
+      `<span class="ps-source">${btn.querySelector('.preset-source').innerHTML}</span>` +
+      `<span class="ps-star">${btn.querySelector('.preset-star').innerHTML}</span>`;
+  }
+})();
 
 // Initial render
 renderAll();
