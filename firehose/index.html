@@ -403,8 +403,29 @@ body {
   <div id="floating-drawer"></div>
 </div>
 
+<script src="word-lists.js"></script>
 <script>
 // === DATA ===
+
+function buildWordsDataset() {
+  const cats = ['birds', 'reptiles', 'mammals', 'fruits', 'vegetables'];
+  const labels = { birds: 'Birds', reptiles: 'Reptiles', mammals: 'Mammals', fruits: 'Fruits', vegetables: 'Vegetables' };
+  const fields = [];
+  let id = 1;
+  cats.forEach(cat => {
+    WORD_LISTS[cat].forEach((word, i) => {
+      const isWrong = (i % 7 === 3);
+      const otherCats = cats.filter(c => c !== cat);
+      const wrongCat = otherCats[(i * 3 + 1) % otherCats.length];
+      const confidence = isWrong
+        ? Math.round((0.25 + (i % 5) * 0.05) * 100) / 100
+        : Math.round((0.82 + (i % 5) * 0.04) * 100) / 100;
+      fields.push({ id: id++, category: labels[cat], label: word, value: isWrong ? labels[wrongCat] : labels[cat], confidence });
+    });
+  });
+  return fields;
+}
+
 const DATASETS = [
  {
   id: 'legal',
@@ -518,6 +539,11 @@ const DATASETS = [
   { id: 41, category: 'Contact',    label: 'Showing Availability',      value: 'Weekdays 10am–6pm',                   confidence: 0.85 },
   { id: 42, category: 'Contact',    label: 'Listing URL',               value: 'urbannest.com/listings/2847val',      confidence: 0.90 },
  ]},
+ {
+  id: 'words',
+  name: 'Word Classification',
+  fields: buildWordsDataset(),
+ },
 ]; // end DATASETS
 
 let FIELDS = DATASETS[0].fields;
