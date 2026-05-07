@@ -559,9 +559,24 @@
 <h1 style="font: 700 1.6rem/1.1 'Oswald', 'IBM Plex Mono', monospace; margin: 0 0 16px; color: var(--cs-fg);">Perceptually Uniform Color System</h1>
 
 <div class="panel">
-  <h2>Shared scale parameters</h2>
-  <div class="help">
-    All families share these. Lightness maps from index via a power curve. Chroma is a triangle that peaks at a configurable position along the L range and tapers to the two endpoints. Hue can shift linearly across the scale. Click any chip below to copy its hex.
+  <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 12px;">
+    <div style="flex: 1;">
+      <h2 style="margin-bottom: 6px;">Shared scale parameters</h2>
+      <div class="help" style="margin-bottom: 0;">
+        All families share these. Lightness maps from index via a power curve. Chroma is a triangle that peaks at a configurable position along the L range and tapers to the two endpoints. Hue can shift linearly across the scale. Click any chip below to copy its hex.
+      </div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex-shrink: 0; margin-left: auto;">
+      <canvas id="gamutDiagram" width="200" height="200"
+        style="width: 200px; height: 200px; border-radius: 4px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);"
+        title="CIE 1931 chromaticity — colors painted at each xy point, selected gamut outlined"></canvas>
+      <select id="gamut" style="width: 200px; font-size: 0.6rem;">
+        <option value="srgb" selected>sRGB</option>
+        <option value="p3">P3</option>
+        <option value="adobe">Adobe RGB</option>
+        <option value="rec2020">Rec. 2020</option>
+      </select>
+    </div>
   </div>
   <div class="row-inline" style="margin-bottom: 12px; align-items: center; gap: 8px;">
     <button id="undoBtn" title="Undo (Cmd/Ctrl+Z)" disabled>↶ Undo</button>
@@ -577,17 +592,6 @@
       <input type="checkbox" id="gamutWarn" checked>
       <span>Out-of-gamut warning</span>
     </label>
-    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-left: 4px;">
-      <canvas id="gamutDiagram" width="200" height="200"
-        style="width: 64px; height: 64px; border-radius: 4px; background: transparent;"
-        title="CIE 1931 chromaticity — colors painted at each xy point, selected gamut outlined"></canvas>
-      <select id="gamut" style="width: 64px; font-size: 0.6rem;">
-        <option value="srgb" selected>sRGB</option>
-        <option value="p3">P3</option>
-        <option value="adobe">Adobe RGB</option>
-        <option value="rec2020">Rec. 2020</option>
-      </select>
-    </div>
   </div>
 
   <div class="panel-body">
@@ -610,13 +614,7 @@
         <div><span class="ax" style="color:#3366FF;">C</span><span id="axisC">Chroma (radius)</span></div>
         <div><span class="ax" style="color:#F79009;">H</span><span id="axisH">Hue (angle)</span></div>
       </div>
-      <div style="font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-fainter); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 12px; margin-bottom: 4px;">Diagram L curve</div>
-      <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-faint);">
-        <span>γ</span>
-        <input type="range" id="diagramLGamma" class="grad" min="0.4" max="2.5" step="0.01" value="1.00" style="flex: 1;">
-        <span id="diagramLGammaVal" style="min-width: 28px; text-align: right;">1.00</span>
-      </label>
-      <div class="hatch-panel" style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);">
+<div class="hatch-panel" style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);">
         <div style="font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-fainter); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Hatch</div>
         <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
           <span style="min-width: 40px;">Angle</span>
@@ -2231,14 +2229,6 @@ const multiLRefresh = (function setupMultiL() {
     redraw();
   });
   dim.addEventListener('change', pushHistory);
-  const dlg = document.getElementById('diagramLGamma');
-  const dlgVal = document.getElementById('diagramLGammaVal');
-  dlg.addEventListener('input', () => {
-    params.diagramLGamma = parseFloat(dlg.value);
-    dlgVal.textContent = params.diagramLGamma.toFixed(2);
-    updateModelDiagram();
-  });
-  dlg.addEventListener('change', pushHistory);
   // Drag on the L bar to set diagramL (which the donut samples at).
   const lBar = document.querySelector('.dgm-l-bar');
   if (lBar) {
