@@ -1,0 +1,2583 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="colors_and_type.css">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html {
+    font-size: 20px;  /* base — +4px above the default 16px so 1rem = 20px */
+    /* Prevent horizontal scrollbar flicker when slider drags briefly push
+       elements (eyedropper, family rows) past the viewport edge. */
+    overflow-x: clip;
+  }
+  body {
+    padding: 16px 20px 16px 20px; background: var(--cs-bg, #fff);
+    font-family: 'IBM Plex Sans', sans-serif; color: var(--cs-fg, #161921);
+    overflow-x: clip;
+  }
+
+  /* Theme variables */
+  :root {
+    --cs-bg: #fff;
+    --cs-panel-bg: #FAFBFC;
+    --cs-fg: #161921;
+    --cs-fg-muted: #3E424F;
+    --cs-fg-faint: #676E83;
+    --cs-fg-fainter: #98A3B3;
+    --cs-border: #E1E2E6;
+    --cs-border-strong: #C2C5CD;
+    --cs-input-bg: #fff;
+    --cs-card-bg: #fff;
+  }
+  [data-theme="dark"] {
+    --cs-bg: #14161B;
+    --cs-panel-bg: #242832;
+    --cs-fg: #ECEEF2;
+    --cs-fg-muted: #B0B4BD;
+    --cs-fg-faint: #8B909C;
+    --cs-fg-fainter: #5E6371;
+    --cs-border: #2A2D35;
+    --cs-border-strong: #3A3D47;
+    --cs-input-bg: #232730;
+    --cs-card-bg: #242832;
+  }
+
+  /* Frosted-glass button — same vibe as the hue picker markers. */
+  .cs-btn,
+  .picker-actions button,
+  .family-head .remove,
+  #themeToggle, #undoBtn, #redoBtn, #addFamily, #copyParams {
+    background: rgba(255, 255, 255, 0.40);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    border: 1px solid rgba(0, 0, 0, 0.45);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--cs-fg);
+    cursor: pointer;
+    font: 500 0.7rem/1 'IBM Plex Mono', monospace;
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.4);
+    transition: background 80ms ease, border-color 80ms ease;
+  }
+  .cs-btn:hover,
+  .picker-actions button:hover,
+  .family-head .remove:hover,
+  #themeToggle:hover, #undoBtn:not(:disabled):hover, #redoBtn:not(:disabled):hover,
+  #addFamily:hover, #copyParams:hover {
+    background: rgba(255, 255, 255, 0.65);
+    border-color: #3366FF;
+    color: #3366FF;
+  }
+  .cs-btn:disabled, #undoBtn:disabled, #redoBtn:disabled {
+    opacity: 0.4; cursor: not-allowed;
+  }
+  .family-head .remove { color: #B42318; }
+  .family-head .remove:hover { color: #D92D20; border-color: #FDA29B; background: rgba(254, 243, 242, 0.7); }
+
+  [data-theme="dark"] .cs-btn,
+  [data-theme="dark"] .picker-actions button,
+  [data-theme="dark"] .family-head .remove,
+  [data-theme="dark"] #themeToggle,
+  [data-theme="dark"] #undoBtn,
+  [data-theme="dark"] #redoBtn,
+  [data-theme="dark"] #addFamily,
+  [data-theme="dark"] #copyParams {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: var(--cs-fg);
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+  }
+  [data-theme="dark"] .cs-btn:hover,
+  [data-theme="dark"] .picker-actions button:hover,
+  [data-theme="dark"] .family-head .remove:hover,
+  [data-theme="dark"] #themeToggle:hover,
+  [data-theme="dark"] #undoBtn:not(:disabled):hover,
+  [data-theme="dark"] #redoBtn:not(:disabled):hover,
+  [data-theme="dark"] #addFamily:hover,
+  [data-theme="dark"] #copyParams:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: #5C85FF;
+    color: #ADC2FF;
+  }
+  [data-theme="dark"] .family-head .remove { color: #FDA29B; }
+
+  /* Floating eyedropper swatch that follows the dragged slider thumb. */
+  .cs-eyedropper {
+    position: fixed;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.4);
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, calc(-100% - 12px)) scale(0.8);
+    transition: opacity 120ms ease, transform 120ms ease;
+    z-index: 1000;
+  }
+  .cs-eyedropper.visible {
+    opacity: 1;
+    transform: translate(-50%, calc(-100% - 12px)) scale(1);
+  }
+  .cs-eyedropper::after {
+    content: '';
+    position: absolute;
+    bottom: -8px; left: 50%; transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #fff;
+  }
+
+  /* Theme toggle position override (it shares everything else with .cs-btn). */
+  #themeToggle {
+    position: fixed; top: 8px; right: 8px; z-index: 100;
+    width: 32px; height: 32px; padding: 0;
+    font: 1rem/1 'IBM Plex Sans', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* Dark-mode overrides — color values targeted to keep chips/visualizations
+     untouched while flipping page chrome. */
+  [data-theme="dark"] body { background: #14161B; color: #ECEEF2; }
+  [data-theme="dark"] h2 { color: #ECEEF2; }
+  [data-theme="dark"] .help { color: #8B909C; }
+  [data-theme="dark"] .panel { background: #242832; border-color: #2A2D35; }
+  [data-theme="dark"] .grid label { color: #B0B4BD; }
+  [data-theme="dark"] .grid .val { color: #ECEEF2; }
+  [data-theme="dark"] .grid select,
+  [data-theme="dark"] .grid input[type=text],
+  [data-theme="dark"] .row-inline select,
+  [data-theme="dark"] .row-inline input[type=text] {
+    background-color: #232730; color: #ECEEF2; border-color: #3A3D47;
+  }
+  [data-theme="dark"] .section-divider { background: #2A2D35; }
+  [data-theme="dark"] .section-label { color: #5E6371; }
+  [data-theme="dark"] input[type=range].grad { border-color: #3A3D47; }
+  [data-theme="dark"] .model-diagram { border-color: #2A2D35; }
+  [data-theme="dark"] .model-diagram .caption { color: #5E6371; }
+  [data-theme="dark"] .model-diagram .axis-key { color: #B0B4BD; }
+  [data-theme="dark"] .dgm-l-bar { border-color: #3A3D47; }
+  [data-theme="dark"] .dgm-disc { border-color: #3A3D47; }
+  [data-theme="dark"] .dgm-disc-center { background: #242832; border-color: #3A3D47; }
+  [data-theme="dark"] .dgm-disc-arrow { background: #ECEEF2; }
+  [data-theme="dark"] .dgm-disc-arrow::after { border-left-color: #ECEEF2; }
+  [data-theme="dark"] .dgm-label-l { color: #ECEEF2; }
+  [data-theme="dark"] #hue-band, [data-theme="dark"] #gradation-band { border-color: #5E6371; }
+  [data-theme="dark"] .swatch { border-color: #3A3D47; }
+  [data-theme="dark"] .picker-actions button,
+  [data-theme="dark"] #undoBtn, [data-theme="dark"] #redoBtn {
+    background: #232730; color: #B0B4BD; border-color: #3A3D47;
+  }
+  [data-theme="dark"] .family { background: #242832; border-color: #2A2D35; }
+  [data-theme="dark"] .family.selected { border-color: #3366FF; }
+  [data-theme="dark"] .family-head input[type=text] { background: #232730; color: #ECEEF2; border-color: #3A3D47; }
+  [data-theme="dark"] .family-head .index { color: #5E6371; }
+  [data-theme="dark"] .family-head .hue-display { color: #B0B4BD; }
+  [data-theme="dark"] .family-head .remove { background: #232730; color: #FDA29B; border-color: #3A3D47; }
+  [data-theme="dark"] .chip-meta { background: #242832; border-color: rgba(255,255,255,0.06); }
+  [data-theme="dark"] .chip-num { color: #ECEEF2; }
+  [data-theme="dark"] .chip-hex { color: #8B909C; }
+  [data-theme="dark"] .oog-list { border-left-color: #FDB022; color: #FEDF89; }
+  [data-theme="dark"] .oog-list .oog-item .idx { color: #FEC84B; }
+  [data-theme="dark"] .oog-list .oog-item .ch-r { color: #FDA29B; }
+  [data-theme="dark"] .oog-list .oog-item .ch-g { color: #6CE9A6; }
+  [data-theme="dark"] .oog-list .oog-item .ch-b { color: #ADC2FF; }
+  [data-theme="dark"] .legend { color: #5E6371; }
+
+  h2 { font: 700 0.935rem/1.2 'Oswald', monospace; color: var(--cs-fg); margin-bottom: 6px; }
+  .help { font-size: 0.7rem; color: var(--cs-fg-faint); line-height: 1.5; max-width: 760px; margin-bottom: 12px; }
+
+  .panel { border: 1px solid var(--cs-border); border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; background: var(--cs-panel-bg); }
+
+  .grid { display: grid; grid-template-columns: 220px 1fr 56px; column-gap: 12px; row-gap: 8px; align-items: center; }
+  .panel-body { display: flex; gap: 16px; align-items: stretch; }
+  .panel-body .grid { flex: 1; }
+  .model-diagram {
+    flex: 0 0 280px;
+    align-self: flex-start;
+    border-right: 1px solid #E1E2E6;
+    padding-right: 14px;
+  }
+  .model-diagram svg { display: block; }
+  .model-diagram .caption {
+    font: 600 0.7rem/1.4 'IBM Plex Mono', monospace;
+    color: #98A3B3;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .model-diagram .axis-key {
+    font: 500 0.6rem/1.5 'IBM Plex Mono', monospace;
+    color: #3E424F;
+    margin-top: 8px;
+  }
+  .model-diagram .axis-key .ax { display: inline-block; width: 14px; color: #98A3B3; }
+  .diagram-figure { position: relative; height: 200px; width: 260px; }
+  .dgm-l-bar {
+    position: absolute; left: 8px; top: 8px; width: 28px; height: 184px;
+    /* Background painted in JS using OKLCH-uniform stops for a perceptually
+       linear black-to-white sweep. Fallback in case JS hasn't run yet. */
+    background: linear-gradient(to top in oklab, #000, #FFF);
+    border: 1px solid #C2C5CD; border-radius: 4px;
+    cursor: ns-resize;
+    user-select: none;
+  }
+  .dgm-l-thumb {
+    position: absolute; left: 4px; width: 36px; height: 6px;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border: 1px solid rgba(0, 0, 0, 0.5); border-radius: 2px;
+    pointer-events: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    transform: translateY(-50%);
+  }
+  .dgm-disc {
+    position: absolute; left: 70px; top: 30px; width: 160px; height: 160px;
+    border: 1px solid #C2C5CD; border-radius: 50%;
+    overflow: hidden;
+  }
+  .dgm-disc-canvas {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+  }
+  .dgm-disc-center {
+    position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+    background: #fff; border: 1px solid #C2C5CD; border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .dgm-disc-arrow {
+    position: absolute; top: 50%; left: 50%; width: 60px; height: 2px;
+    background: #161921; transform-origin: 0 50%;
+    transform: translateY(-50%) rotate(-30deg);
+  }
+  .dgm-disc-arrow::after {
+    content: ''; position: absolute; right: -3px; top: -4px;
+    border: 5px solid transparent; border-left-color: #161921; border-right-width: 0;
+  }
+  .dgm-label-l {
+    position: absolute; left: 42px; top: 92px; font: 700 0.85rem/1 'IBM Plex Mono', monospace; color: #161921;
+  }
+  .dgm-label-h {
+    position: absolute; right: 8px; top: 8px; font: 700 0.85rem/1 'IBM Plex Mono', monospace; color: #F79009;
+  }
+  .dgm-label-c {
+    position: absolute; left: 138px; top: 70px; font: 700 0.85rem/1 'IBM Plex Mono', monospace; color: #3366FF;
+  }
+
+  .row-inline { display: flex; gap: 12px; align-items: center; }
+  .row-inline label {
+    font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #3E424F;
+    flex: 0 0 auto;
+  }
+  [data-theme="dark"] .row-inline label { color: #B0B4BD; }
+  .row-inline select {
+    font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #161921;
+    border: 1px solid #C2C5CD; border-radius: 6px;
+    /* Chevron at fixed offset from the right edge — bigger than the system one. */
+    appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    padding: 6px 32px 6px 8px;
+    background-color: #fff;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23676E83' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='1.5,1.5 6,6.5 10.5,1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 12px 8px;
+    flex: 1;
+  }
+  .row-inline select:focus { outline: none; border-color: #3366FF; box-shadow: 0 0 0 3px rgba(51,102,255,0.15); }
+  [data-theme="dark"] .row-inline select {
+    background-color: #232730;
+    background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%23B0B4BD' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='1.5,1.5 6,6.5 10.5,1.5'/%3E%3C/svg%3E");
+  }
+  .grid label { font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #3E424F; }
+  .grid input[type=range] { width: 100%; }
+  .grid select, .grid input[type=text] {
+    font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #161921;
+    border: 1px solid #C2C5CD; border-radius: 6px; padding: 6px 8px; background: #fff;
+  }
+  .grid select:focus, .grid input[type=text]:focus { outline: none; border-color: #3366FF; box-shadow: 0 0 0 3px rgba(51,102,255,0.15); }
+  .grid .val {
+    font: 500 0.7rem/1 'Oswald', 'IBM Plex Mono', monospace; color: #161921;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .grid .span2 { grid-column: span 2; }
+
+  .section-divider { grid-column: 1 / -1; height: 1px; background: #E1E2E6; margin: 4px 0; }
+  .section-label { grid-column: 1 / -1; font: 600 0.7rem/1 'IBM Plex Mono', monospace; color: #98A3B3; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 6px; padding-bottom: 2px; }
+
+  /* Range sliders with a gradient-painted track. The browser's default track styling is hidden;
+     we let the input's own background show through. */
+  input[type=range].grad {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 24px;
+    border-radius: 3px;
+    border: 1px solid #C2C5CD;
+    background-clip: border-box;
+    background-origin: border-box;
+    cursor: pointer;
+  }
+  input[type=range].grad::-webkit-slider-runnable-track { background: transparent; height: 24px; }
+  input[type=range].grad::-moz-range-track { background: transparent; height: 24px; }
+  /* Flatten the L-curve gamma bar so its 2-D gradient doesn't read as 3D
+     next to the rest of the (1-D) sliders. */
+  #lGamma { filter: contrast(0.85) saturate(0.55); }
+
+  /* Toggle visibility based on the shared condensed/component checkbox. */
+  body:has(#condensedSliders:checked) .chroma-component,
+  body:has(#condensedSliders:checked) .l-component { display: none; }
+  body:has(#condensedSliders:not(:checked)) .chroma-condensed,
+  body:has(#condensedSliders:not(:checked)) .l-condensed { display: none; }
+
+  /* Per-thumb readouts shown below each multi-thumb. */
+  .mt-readout {
+    position: absolute;
+    bottom: -1.05rem;
+    transform: translateX(-50%);
+    font: 500 0.55rem/1 'Oswald', 'IBM Plex Mono', monospace;
+    color: var(--cs-fg-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  [data-theme="dark"] .mt-readout { color: #ECEEF2; }
+
+  /* Multi-thumb chroma slider — replaces three separate cTop/cPeak/cBot
+     sliders. Each thumb can pass its neighbours; only the per-key bounded
+     cap is enforced. */
+  .multi-slider {
+    position: relative;
+    height: 24px;
+    border: 1px solid var(--cs-border-strong);
+    border-radius: 3px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .mt-thumb {
+    position: absolute;
+    top: -3px;
+    width: 22px;
+    height: 30px;
+    margin-left: -11px;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border: 1px solid var(--cs-border-strong);
+    border-radius: 2px;
+    cursor: ew-resize;
+    font: 500 0.55rem/28px 'Oswald', monospace;
+    text-align: center;
+    color: #161921;
+    text-shadow: 0 0 2px rgba(255, 255, 255, 0.7);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    font-variant-numeric: tabular-nums;
+  }
+  input[type=range].grad::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 30px;
+    background: rgba(255,255,255,0.65); backdrop-filter: blur(3px);
+    border: 1px solid var(--cs-border-strong); border-radius: 2px;
+    margin-top: -3px;
+  }
+  input[type=range].grad::-moz-range-thumb {
+    width: 14px; height: 30px;
+    background: rgba(255,255,255,0.65);
+    border: 1px solid var(--cs-border-strong); border-radius: 2px;
+  }
+
+  /* Hue band */
+  #hue-band-wrap { position: relative; margin: 8px 0 6px; }
+  #hue-band {
+    position: relative; height: 24px; border: 1px solid var(--cs-border-strong); border-radius: 3px;
+    user-select: none; cursor: crosshair;
+  }
+  .hue-marker {
+    position: absolute; top: -3px; width: 22px; height: 28px; margin-left: -11px;
+    background: transparent; border: none;
+    cursor: ew-resize;
+    font: 500 0.7rem/28px 'Oswald', 'IBM Plex Mono', monospace; text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: #000; text-shadow: 0 0 2px rgba(255,255,255,0.7);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+  }
+  .hue-marker .marker-fill {
+    position: absolute; inset: 0;
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(0, 0, 0, 0.5);
+    border-radius: 2px;
+  }
+  .hue-marker .marker-stroke {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: none;  /* shown only when notched */
+    overflow: visible;
+  }
+  .hue-marker .marker-stroke polygon,
+  .hue-marker .marker-stroke path {
+    fill: none;
+    stroke: rgba(0, 0, 0, 0.5);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .hue-marker .marker-label {
+    position: relative; z-index: 2;
+  }
+  /* Notched variant: cuts a wide triangular notch out of the TOP edge so the
+     exact underlying gradient color shows through.
+     Borders along clip-path cutouts: a regular CSS border is drawn around the
+     original rectangle (then clipped), so the inside-edges of the notch get
+     no border. We use a stack of 1px directional drop-shadows to simulate a
+     stroke that follows the *clipped* shape, which DOES include the notch. */
+  /* Notched marker: clip the fill to a polygon and reveal the SVG stroke
+     that traces the same shape (so the border follows the cut edge). The
+     marker's wrapper itself stays unclipped so the SVG can paint outside
+     the polygon's interior — the stroke renders over the cut edges. */
+  .notched .hue-marker {
+    line-height: 14px;
+    padding-top: 11px;
+  }
+  .notched .hue-marker .marker-fill {
+    border: none;
+    border-radius: 2px;
+    /* Actual clip-path is set inline per-marker so it can be sized to the
+       marker's exact pixel dimensions (which vary between hue / gradation). */
+  }
+  .notched .hue-marker .marker-stroke { display: block; }
+  /* Range sliders: when .notched is added, the thumb's polygon (fill +
+     stroke) is delivered as an inline SVG via `--thumb-svg`. The polygon's
+     viewBox uses the thumb's actual aspect (default 12×22) so stroke-width
+     stays consistent regardless of CSS scaling. To customize per slider,
+     set a different value for --thumb-svg on that input.
+
+     Default points: same notch shape as the hue markers — top edge bites
+     in to ~50% × 9px; sides 18% / 82%. */
+  input[type=range].grad.notched::-webkit-slider-thumb {
+    background:
+      var(--thumb-svg, url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 30' preserveAspectRatio='none'%3E%3Cpolygon points='0,0 2.52,0 7,10.3 11.48,0 14,0 14,30 0,30' fill='rgba(255,255,255,0.62)' stroke='rgba(0,0,0,0.55)' stroke-width='0.75' stroke-linejoin='miter'/%3E%3C/svg%3E"))
+      center / 100% 100% no-repeat;
+    border: none;
+    backdrop-filter: none;
+    clip-path: none;
+    filter: none;
+  }
+  input[type=range].grad.notched::-moz-range-thumb {
+    background:
+      var(--thumb-svg, url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 30' preserveAspectRatio='none'%3E%3Cpolygon points='0,0 2.52,0 7,10.3 11.48,0 14,0 14,30 0,30' fill='rgba(255,255,255,0.62)' stroke='rgba(0,0,0,0.55)' stroke-width='0.75' stroke-linejoin='miter'/%3E%3C/svg%3E"))
+      center / 100% 100% no-repeat;
+    border: none;
+    backdrop-filter: none;
+    clip-path: none;
+    filter: none;
+  }
+  .hue-marker.selected { border-color: #3366FF; box-shadow: 0 0 0 2px rgba(51,102,255,0.35); }
+
+  #swatches-row { display: flex; gap: 4px; margin-top: 8px; }
+  .swatch {
+    flex: 1; height: 14px; border: 1px solid #888; border-radius: 3px;
+    cursor: grab;
+  }
+  .swatch:active { cursor: grabbing; }
+
+  .picker-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .picker-actions button {
+    border: 1px solid #C2C5CD; background: #fff; border-radius: 6px; padding: 6px 12px;
+    cursor: pointer; font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #3E424F;
+  }
+  .picker-actions button:hover { border-color: #3366FF; color: #3366FF; }
+
+  /* Families list */
+  #families { display: flex; flex-direction: column; gap: 10px; }
+  .family { border: 1px solid #E1E2E6; border-radius: 8px; padding: 10px 12px; background: #fff; transition: border-color 100ms ease; }
+  .family.selected { border-color: #3366FF; box-shadow: 0 0 0 2px rgba(51,102,255,0.15); }
+  .family-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .family-head .index {
+    font: 700 0.7rem/1 'IBM Plex Mono', monospace; color: #98A3B3;
+    width: 24px; text-align: center;
+  }
+  .family-head input[type=text] {
+    font: 600 0.7rem/1 'IBM Plex Mono', monospace; border: 1px solid #C2C5CD; border-radius: 6px;
+    padding: 6px 8px; width: 200px; color: #161921; background: #fff;
+  }
+  .family-head input[type=text]:focus { outline: none; border-color: #3366FF; box-shadow: 0 0 0 3px rgba(51,102,255,0.15); }
+  .family-head .hue-display {
+    flex: 1;
+    font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #676E83;
+  }
+  .family-head .remove {
+    background: none; border: 1px solid #C2C5CD; border-radius: 6px; color: #B42318;
+    padding: 4px 10px; cursor: pointer; font: 500 0.7rem/1 'IBM Plex Mono', monospace;
+  }
+  .family-head .remove:hover { background: #FEF3F2; border-color: #FDA29B; }
+
+  .row-wrap { display: flex; gap: 12px; align-items: flex-start; }
+  .row { display: flex; gap: 6px; align-items: flex-end; }
+  .oog-list {
+    flex: 1;
+    border-left: 2px solid #FEDF89; padding: 4px 0 4px 10px;
+    font: 500 0.7rem/1.4 'Oswald', 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    color: #B54708;
+    align-self: stretch;
+    min-height: 40px;
+    /* Wrap entries side-by-side rather than stacking; keeps the family card
+       at a fixed height even when many indices are out of gamut. */
+    display: flex; flex-flow: row wrap; align-content: flex-start;
+    column-gap: 12px; row-gap: 2px;
+  }
+  .oog-list:empty { display: none; }
+  .oog-list .oog-item { white-space: nowrap; }
+  .oog-list .oog-item .idx { color: #93370D; font-weight: 700; margin-right: 6px; }
+  .oog-list .oog-item .ch-r,
+  .oog-list .oog-item .ch-g,
+  .oog-list .oog-item .ch-b { font-weight: 300; }
+  .oog-list .oog-item .ch-r { color: #D92D20; }
+  .oog-list .oog-item .ch-g { color: #027A48; }
+  .oog-list .oog-item .ch-b { color: #2952CC; }
+  .chip { width: 64px; cursor: pointer; }
+  .chip-fill { width: 64px; height: 40px; border-radius: 6px 6px 0 0; border: 1px solid rgba(0,0,0,0.06); border-bottom: none; transition: transform 60ms ease; }
+  .chip:hover .chip-fill { transform: translateY(-1px); }
+  .chip.oog {
+    /* Drawn via `outline` with negative offset so it sits INSIDE the chip's
+       bounds — `border` would have pushed the inner color region past the
+       64px column width. */
+    outline: 2px dashed #F79009;
+    outline-offset: -2px;
+    border-radius: 8px;
+    box-shadow: inset 0 0 0 1px rgba(247,144,9,0.35);
+  }
+  .chip-meta { background: #fff; border: 1px solid rgba(0,0,0,0.06); border-top: none; border-radius: 0 0 6px 6px; padding: 4px 6px; }
+  .chip-num { font: 300 0.7rem/1.2 'Oswald', 'IBM Plex Mono', monospace; color: #161921; font-variant-numeric: tabular-nums; }
+  .chip-hex { font: 300 0.6rem/1.2 'Oswald', 'IBM Plex Mono', monospace; color: #676E83; font-variant-numeric: tabular-nums; }
+  .chip.copied .chip-hex { color: #027A48; }
+
+  .legend { font: 0.6rem/1.4 'IBM Plex Mono', monospace; color: #98A3B3; margin-top: 8px; }
+</style>
+</head><body>
+<button id="themeToggle" title="Toggle light/dark mode">☾</button>
+<h1 style="font: 700 1.6rem/1.1 'Oswald', 'IBM Plex Mono', monospace; margin: 0 0 16px; color: var(--cs-fg);">Perceptually Uniform Color System</h1>
+
+<div class="panel">
+  <h2>Shared scale parameters</h2>
+  <div class="help">
+    All families share these. Lightness maps from index via a power curve. Chroma is a triangle that peaks at a configurable position along the L range and tapers to the two endpoints. Hue can shift linearly across the scale. Click any chip below to copy its hex.
+  </div>
+  <div class="row-inline" style="margin-bottom: 12px; justify-content: space-between;">
+    <div class="row-inline" style="flex: 1;">
+      <label style="min-width: 90px;">Color model</label>
+      <select id="model">
+      <option value="oklch" selected>OKLCH (perceptual, recommended)</option>
+      <option value="lch">LCH (CIE Lab, perceptual-ish)</option>
+      <option value="hsl">HSL (browser-native, NOT perceptual)</option>
+    </select>
+    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-left: 12px;">
+      <input type="checkbox" id="gamutWarn" checked>
+      <span>Out-of-gamut warning</span>
+    </label>
+    <select id="gamut" style="flex: 0 0 160px;">
+      <option value="srgb" selected>sRGB</option>
+      <option value="p3">Display P3</option>
+      <option value="adobe">Adobe RGB (1998)</option>
+      <option value="rec2020">Rec. 2020 (HDR)</option>
+    </select>
+    </div>
+    <div class="row-inline" style="flex: 0 0 auto; gap: 6px;">
+      <button id="undoBtn" title="Undo (Cmd/Ctrl+Z)" disabled>↶ Undo</button>
+      <button id="redoBtn" title="Redo (Shift+Cmd/Ctrl+Z)" disabled>↷ Redo</button>
+      <canvas id="gamutDiagram" width="200" height="200"
+        style="width: 64px; height: 64px; border-radius: 4px; background: transparent;"
+        title="CIE 1931 chromaticity — colors painted at each xy point, selected gamut outlined"></canvas>
+    </div>
+  </div>
+
+  <div class="panel-body">
+    <div class="model-diagram">
+      <div class="caption" id="modelCaption">OKLCH</div>
+      <div class="diagram-figure" id="modelFigure">
+        <div class="dgm-l-bar"></div>
+        <div class="dgm-l-thumb"></div>
+        <div class="dgm-label-l">L</div>
+        <div class="dgm-disc">
+          <canvas class="dgm-disc-canvas" width="160" height="160"></canvas>
+          <div class="dgm-disc-center"></div>
+          <div class="dgm-disc-arrow"></div>
+        </div>
+        <div class="dgm-label-h">H</div>
+        <div class="dgm-label-c">C</div>
+      </div>
+      <div class="axis-key">
+        <div><span class="ax" style="color:#161921;">L</span><span id="axisL">Lightness</span></div>
+        <div><span class="ax" style="color:#3366FF;">C</span><span id="axisC">Chroma (radius)</span></div>
+        <div><span class="ax" style="color:#F79009;">H</span><span id="axisH">Hue (angle)</span></div>
+      </div>
+      <div style="font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-fainter); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 12px; margin-bottom: 4px;">Diagram L curve</div>
+      <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-faint);">
+        <span>γ</span>
+        <input type="range" id="diagramLGamma" class="grad" min="0.4" max="2.5" step="0.01" value="1.00" style="flex: 1;">
+        <span id="diagramLGammaVal" style="min-width: 28px; text-align: right;">1.00</span>
+      </label>
+      <div class="hatch-panel" style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);">
+        <div style="font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-fainter); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Hatch</div>
+        <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
+          <span style="min-width: 40px;">Angle</span>
+          <input type="range" id="hatchAngle" min="0" max="180" step="1" value="135" style="flex: 1;">
+          <span id="hatchAngleVal" style="min-width: 32px; text-align: right;">135°</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
+          <span style="min-width: 40px;">Stripe</span>
+          <input type="range" id="hatchStripe" min="1" max="10" step="1" value="2" style="flex: 1;">
+          <span id="hatchStripeVal" style="min-width: 32px; text-align: right;">2px</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
+          <span style="min-width: 40px;">Gap</span>
+          <input type="range" id="hatchGap" min="1" max="20" step="1" value="4" style="flex: 1;">
+          <span id="hatchGapVal" style="min-width: 32px; text-align: right;">4px</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint);">
+          <span style="min-width: 40px;">Dim</span>
+          <input type="range" id="hatchDim" min="0" max="100" step="1" value="75" style="flex: 1;">
+          <span id="hatchDimVal" style="min-width: 32px; text-align: right;">75%</span>
+        </label>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="section-label" style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <span>Lightness</span>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);">
+          <input type="checkbox" id="condensedSliders" checked>
+          <span>Condensed multi-thumb sliders</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);">
+          <input type="checkbox" id="boundedChroma" checked>
+          <span>Bound to safe sRGB ranges</span>
+        </label>
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);" title="When bounded, draw the slider's full unbounded range and visually lock out the disallowed portion. When off, the slider just shrinks to the bounded range.">
+          <input type="checkbox" id="fullRangeSlider" checked>
+          <span>Show full range with locked-out region</span>
+        </label>
+      </div>
+
+      <!-- Condensed: 2-thumb L range slider -->
+      <label class="l-condensed">L range (min — max)</label>
+      <div id="lMulti" class="multi-slider notched l-condensed"></div>
+      <span class="val l-condensed">&nbsp;</span>
+
+      <!-- Componentwise: two separate L sliders -->
+      <label class="l-component">L at index 0 (lightest)</label>
+      <input type="range" id="lMax" class="grad l-component" min="0.80" max="1.00" step="0.005" value="0.97">
+      <span class="val l-component" id="lMaxVal">0.970</span>
+
+      <label class="l-component">L at index 1000 (darkest)</label>
+      <input type="range" id="lMin" class="grad l-component" min="0.00" max="0.40" step="0.005" value="0.16">
+      <span class="val l-component" id="lMinVal">0.160</span>
+
+      <label>L curve gamma</label>
+      <input type="range" id="lGamma" class="grad" min="0.40" max="2.50" step="0.01" value="1.00">
+      <span class="val" id="lGammaVal">1.000</span>
+
+      <div class="section-divider"></div>
+      <div class="section-label">Chroma (triangle along L)</div>
+
+      <!-- Condensed: single slider with three thumbs -->
+      <label class="chroma-condensed" title="T = top (lightest L) · P = peak (mid L) · B = bottom (darkest L)">Chroma — top / peak / bottom</label>
+      <div id="chromaMulti" class="multi-slider chroma-condensed"></div>
+      <span class="val chroma-condensed">&nbsp;</span>
+
+      <!-- Componentwise: three separate sliders -->
+      <label class="chroma-component">Chroma at top (lightest)</label>
+      <input type="range" id="cTop" class="grad chroma-component" min="0" max="0.06" step="0.005" value="0.04">
+      <span class="val chroma-component" id="cTopVal">0.040</span>
+
+      <label class="chroma-component">Chroma at peak</label>
+      <input type="range" id="cPeak" class="grad chroma-component" min="0" max="0.22" step="0.005" value="0.16">
+      <span class="val chroma-component" id="cPeakVal">0.160</span>
+
+      <label class="chroma-component">Chroma at bottom (darkest)</label>
+      <input type="range" id="cBot" class="grad chroma-component" min="0" max="0.10" step="0.005" value="0.08">
+      <span class="val chroma-component" id="cBotVal">0.080</span>
+
+      <label>Peak position (along L)</label>
+      <input type="range" id="cPeakPos" class="grad" min="0.10" max="0.90" step="0.01" value="0.50">
+      <span class="val" id="cPeakPosVal">0.500</span>
+
+      <div class="section-divider"></div>
+      <div class="section-label">Hue</div>
+
+      <label>Hue shift across L (°)</label>
+      <input type="range" id="hueShift" class="grad" min="-40" max="40" step="1" value="0">
+      <span class="val" id="hueShiftVal">0°</span>
+    </div>
+  </div>
+
+  <div style="margin-top: 14px;">
+    <div class="caption" style="font: 600 0.7rem/1 'IBM Plex Mono', monospace; color: #98A3B3; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Indices (drag markers — Shift to translate, drag off vertically or right-click to remove, click band to add)</div>
+    <div id="gradation-band-wrap" style="position: relative;">
+      <div id="gradation-band" style="position: relative; height: 24px; border: 1px solid var(--cs-border-strong); border-radius: 3px; user-select: none; cursor: crosshair; background: linear-gradient(to right, #fff, #000);"></div>
+    </div>
+  </div>
+
+  <div class="row-inline" style="margin-top: 10px;">
+    <label style="min-width: 90px;">Indices (text)</label>
+    <input type="text" id="indices" style="flex: 1; font: 500 0.7rem/1 'IBM Plex Mono', monospace; padding: 6px 8px; border: 1px solid #C2C5CD; border-radius: 6px;"
+      value="25,50,100,200,300,400,500,600,700,800,900">
+    <button id="copyIndices" class="cs-btn" title="Copy the comma-separated index list">Copy</button>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Categorical / chart colors</h2>
+  <div style="display: flex; gap: 16px; align-items: flex-start;">
+    <div class="help" style="flex: 1; margin: 0;">
+      A separate set of standalone hues — for charts, multi-series visualizations, or anywhere you need a small set of distinct colors that aren't part of a graded family. Each marker is one color. Drag horizontally to change its hue. Hold <b>Shift</b> while dragging to translate all hues together. Click empty space on the band to add a marker. Drag a swatch onto another to reorder. The mid-L / peak-C from the shared params is used to render the swatches.
+    </div>
+    <div id="swatches-row" style="flex: 1; min-width: 240px; margin: 0;"></div>
+  </div>
+  <div id="hue-band-wrap" style="margin-top: 12px;">
+    <div id="hue-band"></div>
+  </div>
+  <div class="picker-actions" style="margin-top: 10px;">
+    <button id="addCat">+ Add color</button>
+    <button id="removeCat">− Remove last</button>
+    <button id="distribute">Distribute evenly</button>
+    <button id="copyCat">Copy hex list</button>
+  </div>
+</div>
+
+<div style="display:flex; align-items:center; gap:12px; margin-top: 4px;">
+  <h2 style="margin: 0;">Families (graded scales)</h2>
+  <button id="addFamily">+ Add family</button>
+  <button id="copyParams">Copy params (CSS)</button>
+</div>
+<div id="families" style="margin-top: 10px;"></div>
+
+<div class="legend">
+  Dashed orange border = the requested point falls outside the selected gamut and is being clipped on display. Lower chroma to bring it in range.
+</div>
+
+<script>
+//// ---------- color math ----------
+function oklchToLinearRgb(L, C, Hdeg) {
+  const h = Hdeg * Math.PI / 180;
+  const a = C * Math.cos(h), b = C * Math.sin(h);
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+  const l = l_ ** 3, m = m_ ** 3, s = s_ ** 3;
+  return {
+    r:  4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    g: -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    b: -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  };
+}
+function lchToLinearRgb(L, C, Hdeg) {
+  const h = Hdeg * Math.PI / 180;
+  const a = C * Math.cos(h), b = C * Math.sin(h);
+  const fy = (L + 16) / 116, fx = a / 500 + fy, fz = fy - b / 200;
+  const eps = 216/24389, kappa = 24389/27;
+  const fInv = t => { const t3 = t ** 3; return t3 > eps ? t3 : (116 * t - 16) / kappa; };
+  const Xn = 0.95047, Yn = 1.00000, Zn = 1.08883;
+  const X = fInv(fx) * Xn, Y = fInv(fy) * Yn, Z = fInv(fz) * Zn;
+  return {
+    r:  3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z,
+    g: -0.9692660 * X + 1.8760108 * Y + 0.0415560 * Z,
+    b:  0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z,
+  };
+}
+function hslToLinearRgb(H, S, Lh) {
+  const C = (1 - Math.abs(2 * Lh - 1)) * S;
+  const Hp = H / 60;
+  const X = C * (1 - Math.abs((Hp % 2) - 1));
+  let r1=0, g1=0, b1=0;
+  if      (Hp < 1) { r1=C; g1=X; }
+  else if (Hp < 2) { r1=X; g1=C; }
+  else if (Hp < 3) { g1=C; b1=X; }
+  else if (Hp < 4) { g1=X; b1=C; }
+  else if (Hp < 5) { r1=X; b1=C; }
+  else             { r1=C; b1=X; }
+  const m = Lh - C / 2;
+  const srgbToLin = c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  return { r: srgbToLin(r1 + m), g: srgbToLin(g1 + m), b: srgbToLin(b1 + m) };
+}
+// Matrices map linear sRGB → the target gamut's linear-light coordinates.
+// Out-of-range (negative or >1) means out of gamut.
+const SRGB_TO_P3 = [
+  [0.8224621, 0.1775380, 0.0000000],
+  [0.0331941, 0.9668058, 0.0000000],
+  [0.0170827, 0.0723974, 0.9105199],
+];
+const SRGB_TO_ADOBE = [
+  [0.7151849, 0.2848052, 0.0000100],
+  [0.0000000, 1.0000000, 0.0000000],
+  [0.0000000, 0.0411709, 0.9588272],
+];
+const SRGB_TO_REC2020 = [
+  [0.6274039, 0.3292820, 0.0433141],
+  [0.0690973, 0.9195402, 0.0113625],
+  [0.0163914, 0.0880133, 0.8955952],
+];
+function applyMatrix(M, r, g, b) {
+  return {
+    r: M[0][0] * r + M[0][1] * g + M[0][2] * b,
+    g: M[1][0] * r + M[1][1] * g + M[1][2] * b,
+    b: M[2][0] * r + M[2][1] * g + M[2][2] * b,
+  };
+}
+function srgbLinToP3Lin(r, g, b) { return applyMatrix(SRGB_TO_P3, r, g, b); }
+function srgbLinToTarget(linRgb, target) {
+  switch (target) {
+    case 'p3':      return applyMatrix(SRGB_TO_P3,      linRgb.r, linRgb.g, linRgb.b);
+    case 'adobe':   return applyMatrix(SRGB_TO_ADOBE,   linRgb.r, linRgb.g, linRgb.b);
+    case 'rec2020': return applyMatrix(SRGB_TO_REC2020, linRgb.r, linRgb.g, linRgb.b);
+    default:        return linRgb; // 'srgb'
+  }
+}
+function gammaEncode(c) {
+  if (c <= 0) return 0;
+  if (c >= 1) return 1;
+  return c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1/2.4) - 0.055;
+}
+function linearToHex(r, g, b) {
+  const R = Math.round(gammaEncode(Math.max(0, Math.min(1, r))) * 255);
+  const G = Math.round(gammaEncode(Math.max(0, Math.min(1, g))) * 255);
+  const B = Math.round(gammaEncode(Math.max(0, Math.min(1, b))) * 255);
+  return '#' + [R, G, B].map(n => n.toString(16).padStart(2, '0').toUpperCase()).join('');
+}
+
+//// ---------- model adapters ----------
+const models = {
+  oklch: {
+    cssColor: (L, C, H) => `oklch(${L.toFixed(3)} ${C.toFixed(3)} ${H.toFixed(1)})`,
+    linearRgb: (L, C, H) => oklchToLinearRgb(L, C, H),
+  },
+  lch: {
+    cssColor: (L, C, H) => `lch(${(L * 100).toFixed(2)} ${(C * 375).toFixed(2)} ${H.toFixed(1)})`,
+    linearRgb: (L, C, H) => lchToLinearRgb(L * 100, C * 375, H),
+  },
+  hsl: {
+    cssColor: (L, C, H) => `hsl(${H.toFixed(1)} ${(Math.min(1, C * 2.5) * 100).toFixed(0)}% ${(L * 100).toFixed(0)}%)`,
+    linearRgb: (L, C, H) => hslToLinearRgb(H, Math.min(1, C * 2.5), L),
+  },
+};
+const EPS = 0.001;
+function isOutOfGamut(linRgb, target) {
+  if (!params.gamutWarn || target === 'off') return false;
+  const { r, g, b } = srgbLinToTarget(linRgb, target);
+  return r < -EPS || g < -EPS || b < -EPS || r > 1 + EPS || g > 1 + EPS || b > 1 + EPS;
+}
+// Returns an array of {channel, dir, amount} for each out-of-range channel,
+// or [] if in-gamut. `amount` is the % overshoot (0–100+).
+function gamutBreakdown(linRgb, target) {
+  if (!params.gamutWarn || target === 'off') return [];
+  const rgb = srgbLinToTarget(linRgb, target);
+  const out = [];
+  for (const [ch, v] of [['R', rgb.r], ['G', rgb.g], ['B', rgb.b]]) {
+    if (v < -EPS)     out.push({ channel: ch, dir: 'under', amount: -v * 100 });
+    else if (v > 1 + EPS) out.push({ channel: ch, dir: 'over',  amount: (v - 1) * 100 });
+  }
+  return out;
+}
+function formatOog(breakdown) {
+  return breakdown.map(b => {
+    const sign = b.dir === 'over' ? '+' : '−';
+    return `<span class="ch-${b.channel.toLowerCase()}">${b.channel}${sign}${b.amount.toFixed(0)}%</span>`;
+  }).join(' ');
+}
+
+//// ---------- state ----------
+const params = {
+  model: 'oklch',
+  gamut: 'srgb',
+  lMax: 0.97, lMin: 0.16, lGamma: 1.00,
+  cTop: 0.04, cPeak: 0.16, cBot: 0.08, cPeakPos: 0.50,
+  hueShift: 0,
+  indices: [25,50,100,200,300,400,500,600,700,800,900],
+  boundedChroma: true,
+  fullRangeSlider: true,
+  gamutWarn: true,
+  hatchAngle: 135,
+  hatchStripe: 2,
+  hatchGap: 4,
+  hatchDim: 75,
+  diagramLGamma: 1.0,
+  diagramL: 0.5,
+  notchedThumbs: false,
+};
+// Per-gamut "safe" ranges + the single absolute (unbounded) range.
+// L bounds don't really vary across gamuts (L is L), but chroma maxima do —
+// wider gamuts can sustain more saturation at the same L.
+const PARAM_BOUNDS_BY_GAMUT = {
+  srgb: {
+    lMax:  { min: 0.90, max: 0.99 },
+    lMin:  { min: 0.08, max: 0.30 },
+    cTop:  { min: 0,    max: 0.06 },
+    cPeak: { min: 0,    max: 0.22 },
+    cBot:  { min: 0,    max: 0.10 },
+  },
+  p3: {
+    lMax:  { min: 0.90, max: 0.99 },
+    lMin:  { min: 0.08, max: 0.30 },
+    cTop:  { min: 0,    max: 0.09 },
+    cPeak: { min: 0,    max: 0.28 },
+    cBot:  { min: 0,    max: 0.14 },
+  },
+  adobe: {
+    lMax:  { min: 0.90, max: 0.99 },
+    lMin:  { min: 0.08, max: 0.30 },
+    cTop:  { min: 0,    max: 0.08 },
+    cPeak: { min: 0,    max: 0.24 },
+    cBot:  { min: 0,    max: 0.12 },
+  },
+  rec2020: {
+    lMax:  { min: 0.90, max: 0.99 },
+    lMin:  { min: 0.08, max: 0.30 },
+    cTop:  { min: 0,    max: 0.13 },
+    cPeak: { min: 0,    max: 0.35 },
+    cBot:  { min: 0,    max: 0.22 },
+  },
+};
+const PARAM_BOUNDS_UNBOUNDED = {
+  lMax:  { min: 0.80, max: 1.00 },
+  lMin:  { min: 0.00, max: 0.40 },
+  cTop:  { min: 0,    max: 0.30 },
+  cPeak: { min: 0,    max: 0.40 },
+  cBot:  { min: 0,    max: 0.30 },
+};
+// Backwards-compat alias used by other call sites that pull cPeak max etc.
+const PARAM_BOUNDS = {
+  unbounded: PARAM_BOUNDS_UNBOUNDED,
+  bounded: PARAM_BOUNDS_BY_GAMUT.srgb,
+};
+const BOUNDED_IDS = Object.keys(PARAM_BOUNDS_UNBOUNDED);
+function activeBoundedRanges() {
+  if (params.gamut === 'off') return PARAM_BOUNDS_UNBOUNDED;
+  return PARAM_BOUNDS_BY_GAMUT[params.gamut] || PARAM_BOUNDS_BY_GAMUT.srgb;
+}
+function chromaCapFor(id) {
+  if (!params.boundedChroma) return null;
+  return activeBoundedRanges()[id] ?? null;
+}
+function applyChromaBounds() {
+  const drawFull = params.boundedChroma && params.fullRangeSlider;
+  const useBoundedRange = params.boundedChroma && !params.fullRangeSlider;
+  const boundedSet = activeBoundedRanges();
+  for (const id of BOUNDED_IDS) {
+    const inp = document.getElementById(id);
+    if (!inp) continue;
+    const range = useBoundedRange ? boundedSet[id] : PARAM_BOUNDS_UNBOUNDED[id];
+    inp.min = range.min;
+    inp.max = range.max;
+    const eff = chromaCapFor(id);
+    if (eff != null) {
+      const v = parseFloat(inp.value);
+      const clamped = Math.max(eff.min, Math.min(eff.max, v));
+      if (v !== clamped) {
+        inp.value = clamped;
+        params[id] = clamped;
+        const out = document.getElementById(id + 'Val');
+        if (out) out.textContent = clamped.toFixed(3);
+      }
+    }
+    if (drawFull) {
+      const u = PARAM_BOUNDS_UNBOUNDED[id];
+      const b = boundedSet[id];
+      const denom = u.max - u.min;
+      inp.dataset.boundLowPct  = String(((b.min - u.min) / denom) * 100);
+      inp.dataset.boundHighPct = String(((b.max - u.min) / denom) * 100);
+    } else {
+      inp.dataset.boundLowPct = '';
+      inp.dataset.boundHighPct = '';
+    }
+  }
+}
+// `saturation` is a per-family multiplier on the shared chroma curve.
+// 1 = use the curve as-is; 0 = perfectly grayscale; values >1 are allowed
+// for vivid accents but will OOG quickly.
+const families = [
+  { name: 'Neon Blue',  hue: 264 },
+  { name: 'Ice Blue',   hue: 195 },
+  { name: 'Error',      hue:  27 },
+  { name: 'Warning',    hue:  68 },
+  { name: 'Success',    hue: 150 },
+  { name: 'Gray',       hue: 270, saturation: 0.05 },
+];
+// Categorical / chart colors — separate from families. Just an array of hue values.
+const cats = [170, 5, 215, 135, 35, 285, 25, 320, 50, 190];
+
+//// ---------- undo / redo ----------
+const history = [];
+const redoStack = [];
+let lastSnap = null;       // initialized after first redraw
+function snapshot() {
+  return {
+    params: { ...params, indices: params.indices.slice() },
+    families: families.map(f => ({ ...f })),
+    cats: cats.slice(),
+  };
+}
+function snapshotEqual(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+function applySnapshot(s) {
+  Object.assign(params, s.params);
+  params.indices = s.params.indices.slice();
+  families.length = 0;
+  s.families.forEach(f => families.push({ ...f }));
+  cats.length = 0;
+  s.cats.forEach(h => cats.push(h));
+  syncControls();
+  rebuildCats();
+  rebuildGradationMarkers();
+  syncIndicesText();
+  redraw();
+  drawGamutDiagram();
+}
+function pushHistory() {
+  if (!lastSnap) { lastSnap = snapshot(); return; }
+  const cur = snapshot();
+  if (snapshotEqual(lastSnap, cur)) return;  // nothing changed
+  history.push(lastSnap);
+  redoStack.length = 0;
+  if (history.length > 200) history.shift();
+  lastSnap = cur;
+  updateUndoButtons();
+}
+function undo() {
+  if (!history.length) return;
+  redoStack.push(snapshot());
+  const s = history.pop();
+  lastSnap = s;
+  applySnapshot(s);
+  updateUndoButtons();
+}
+function redo() {
+  if (!redoStack.length) return;
+  history.push(snapshot());
+  const s = redoStack.pop();
+  lastSnap = s;
+  applySnapshot(s);
+  updateUndoButtons();
+}
+function updateUndoButtons() {
+  const u = document.getElementById('undoBtn');
+  const r = document.getElementById('redoBtn');
+  if (u) u.disabled = history.length === 0;
+  if (r) r.disabled = redoStack.length === 0;
+}
+// Reflects current params back onto the static slider/select/text controls.
+// Family hue sliders get rebuilt from scratch by renderRows() so we don't
+// need to touch them here.
+function syncControls() {
+  for (const b of (sliderBindings || [])) {
+    if (b.input && params[b.key] !== undefined) {
+      b.input.value = params[b.key];
+      b.out.textContent = b.fmt(params[b.key]);
+    }
+  }
+  const m = document.getElementById('model');     if (m) m.value = params.model;
+  const g = document.getElementById('gamut');     if (g) g.value = params.gamut;
+  const bc = document.getElementById('boundedChroma');
+  if (bc) bc.checked = !!params.boundedChroma;
+  const fr = document.getElementById('fullRangeSlider');
+  if (fr) {
+    fr.checked = !!params.fullRangeSlider;
+    fr.disabled = !params.boundedChroma;
+  }
+  applyChromaBounds();
+  applyNotchedThumbs();
+}
+
+//// ---------- scale generation ----------
+function lightnessFor(idx) {
+  const t = Math.pow(idx / 1000, params.lGamma);
+  return params.lMax - (params.lMax - params.lMin) * t;
+}
+function lNorm(L) { return (L - params.lMin) / (params.lMax - params.lMin); }
+function chromaFor(L) {
+  const t = lNorm(L);
+  const peak = params.cPeakPos;
+  if (t >= peak) {
+    const u = peak === 1 ? 0 : (t - peak) / (1 - peak);
+    return params.cPeak + (params.cTop - params.cPeak) * u;
+  } else {
+    const u = peak === 0 ? 0 : t / peak;
+    return params.cBot + (params.cPeak - params.cBot) * u;
+  }
+}
+function hueFor(baseHue, L) {
+  const t = lNorm(L);
+  return baseHue + params.hueShift * (t - 0.5) * 2;
+}
+// Mid-scale L, C used for the hue band gradient.
+function midL() { return (params.lMax + params.lMin) / 2; }
+function midC() { return params.cPeak; }
+
+//// ---------- DOM refs ----------
+const familiesEl = document.getElementById('families');
+const indicesInput = document.getElementById('indices');
+const band = document.getElementById('hue-band');
+const swatchesRow = document.getElementById('swatches-row');
+
+//// ---------- gradient track painters ----------
+function paintHueBand() {
+  const stops = [];
+  const L = midL(), C = midC();
+  for (let i = 0; i <= 36; i++) {
+    const lin = oklchToLinearRgb(L, C, i * 10);
+    stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(i/36*100).toFixed(2)}%`);
+  }
+  band.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+}
+function paintGradSlider(input, sample) {
+  const stops = [];
+  const N = 16;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const v = +input.min + t * (+input.max - +input.min);
+    const { L, C, H } = sample(v);
+    const lin = oklchToLinearRgb(L, C, H);
+    stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(1)}%`);
+  }
+  const baseGrad = `linear-gradient(to right, ${stops.join(', ')})`;
+  const lowPct  = parseFloat(input.dataset.boundLowPct);
+  const highPct = parseFloat(input.dataset.boundHighPct);
+  const hasLow  = Number.isFinite(lowPct)  && lowPct  > 0;
+  const hasHigh = Number.isFinite(highPct) && highPct < 100;
+  if (hasLow || hasHigh) {
+    // CSS multi-background: first listed = topmost. Build top → bottom:
+    //   (1) borders per region   (visible above everything)
+    //   (2) panel-bg dim overlays over locked regions
+    //   (3) panel-bg hatch stripes over locked regions
+    //   (4) base gradient        (bottom)
+    const layers = [];
+    // Match the standard `--cs-border-strong` color used by the unbounded
+    // slider's outer border so all sliders read with the same line weight.
+    const borderColor = getComputedStyle(input).getPropertyValue('--cs-border-strong').trim()
+      || (document.documentElement.dataset.theme === 'dark' ? '#3A3D47' : '#C2C5CD');
+    const lo = Math.max(0, Number.isFinite(lowPct)  ? lowPct  : 0).toFixed(3) + '%';
+    const hi = Math.min(100, Number.isFinite(highPct) ? highPct : 100).toFixed(3) + '%';
+    const vert = `linear-gradient(to bottom, ${borderColor}, ${borderColor})`;
+    const BW = 1;
+    // (1) Border around the bounded selectable middle ONLY — drawn as an
+    // inline SVG <rect rx>, so the corners are rounded the same way the
+    // unbounded slider's CSS border-radius rounds them.
+    const r = input.getBoundingClientRect();
+    const w = r.width || 200;
+    const h = r.height || 18;
+    const xL = (parseFloat(lo) / 100) * w + BW / 2;
+    const xR = (parseFloat(hi) / 100) * w - BW / 2;
+    const rectW = Math.max(0, xR - xL);
+    const rectH = Math.max(0, h - BW);
+    const svgBorder = encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}'>` +
+      `<rect x='${xL.toFixed(2)}' y='${(BW/2).toFixed(2)}' ` +
+      `width='${rectW.toFixed(2)}' height='${rectH.toFixed(2)}' ` +
+      `rx='3' ry='3' fill='none' stroke='${borderColor}' stroke-width='${BW}'/>` +
+      `</svg>`
+    );
+    layers.push(`url("data:image/svg+xml;utf8,${svgBorder}") 0 0 / 100% 100% no-repeat`);
+    // (2) Panel-bg dim overlay over locked regions.
+    const halfDim = `color-mix(in srgb, var(--cs-panel-bg, #FAFBFC) ${params.hatchDim}%, transparent)`;
+    const halfOverlay = `linear-gradient(${halfDim}, ${halfDim})`;
+    if (hasLow) {
+      const wL = lowPct.toFixed(2) + '%';
+      layers.push(`${halfOverlay} left 0 / ${wL} 100% no-repeat`);
+    }
+    if (hasHigh) {
+      const wR = (100 - highPct).toFixed(2) + '%';
+      layers.push(`${halfOverlay} right 0 / ${wR} 100% no-repeat`);
+    }
+    // (3) Panel-bg hatch over locked regions.
+    //   "Stripe" slider = the visible (gradient-showing) stripe width.
+    //   "Gap" slider    = the panel-bg "carve" width between stripes.
+    const showW  = params.hatchStripe;
+    const carveW = params.hatchGap;
+    const stripe = `repeating-linear-gradient(${params.hatchAngle}deg,
+       transparent 0 ${showW}px,
+       var(--cs-panel-bg, #FAFBFC) ${showW}px ${showW + carveW}px)`;
+    if (hasLow) {
+      const wL = lowPct.toFixed(2) + '%';
+      layers.push(`${stripe} left 0 / ${wL} 100% no-repeat`);
+    }
+    if (hasHigh) {
+      const wR = (100 - highPct).toFixed(2) + '%';
+      layers.push(`${stripe} right 0 / ${wR} 100% no-repeat`);
+    }
+    // (4) Base gradient.
+    layers.push(baseGrad);
+    input.style.background = layers.join(', ');
+    input.style.backgroundBlendMode = 'normal';
+    input.style.border = 'none';
+    // No CSS mask on the input — that clips the thumb. Instead, we draw
+    // four small panel-bg "corner cuts" via SVG that sit on top of the
+    // base gradient at the four right-angle corners of the bounded middle's
+    // bounding box, visually carving rounded corners out of the gradient.
+    const panelBg = getComputedStyle(input).getPropertyValue('--cs-panel-bg').trim() || '#FAFBFC';
+    const xRr = (xL + rectW).toFixed(2);
+    const xLr = xL.toFixed(2);
+    const cR = 3;
+    const cornerSvg = encodeURIComponent(
+      `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' preserveAspectRatio='none'>` +
+      `<path fill='${panelBg}' d='` +
+      `M${xLr} 0 L${(xL+cR).toFixed(2)} 0 A${cR} ${cR} 0 0 0 ${xLr} ${cR} Z ` +
+      `M${xRr} 0 L${(xL+rectW-cR).toFixed(2)} 0 A${cR} ${cR} 0 0 1 ${xRr} ${cR} Z ` +
+      `M${xLr} ${h} L${(xL+cR).toFixed(2)} ${h} A${cR} ${cR} 0 0 1 ${xLr} ${(h-cR).toFixed(2)} Z ` +
+      `M${xRr} ${h} L${(xL+rectW-cR).toFixed(2)} ${h} A${cR} ${cR} 0 0 0 ${xRr} ${(h-cR).toFixed(2)} Z` +
+      `'/></svg>`
+    );
+    // Layers are top→bottom in CSS multi-bg. Insert corner cuts just
+    // beneath the border layer (which is layers[0]).
+    layers.splice(1, 0, `url("data:image/svg+xml;utf8,${cornerSvg}") 0 0 / 100% 100% no-repeat`);
+    input.style.background = layers.join(', ');
+  } else {
+    input.style.background = baseGrad;
+    input.style.backgroundBlendMode = 'normal';
+    input.style.border = '';
+    input.style.maskImage = '';
+    input.style.webkitMaskImage = '';
+  }
+}
+// Paints a slider's track to show the *resulting scale* sampled at uniform positions
+// across the index range, using current params and a representative hue. Useful for
+// sliders whose value affects the curve as a whole (gamma, peak position, hue shift).
+function paintScalePreview(input, sampler) {
+  const stops = [];
+  const N = 24;
+  const refHue = families[0]?.hue ?? 200;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const { L, C, H } = sampler(t, refHue);
+    const lin = oklchToLinearRgb(L, C, H);
+    stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(1)}%`);
+  }
+  input.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+}
+function paintAllGradSliders() {
+  const refHue = families[0]?.hue ?? 200;
+  const L = midL(), C = midC();
+  // L sliders sweep L at ref C and ref H
+  paintGradSlider(document.getElementById('lMax'), v => ({ L: v, C, H: refHue }));
+  paintGradSlider(document.getElementById('lMin'), v => ({ L: v, C, H: refHue }));
+  // C sliders sweep C at ref L and ref H
+  paintGradSlider(document.getElementById('cTop'),  v => ({ L: params.lMax, C: v, H: refHue }));
+  paintGradSlider(document.getElementById('cPeak'), v => ({ L,             C: v, H: refHue }));
+  paintGradSlider(document.getElementById('cBot'),  v => ({ L: params.lMin, C: v, H: refHue }));
+
+  // Track position = position in the resulting scale (idx fraction). The track repaints
+  // as the user drags so they see what curve their setting produces.
+  const sampleScale = (t, h) => {
+    const idx = t * 1000;
+    const Lh = lightnessFor(idx);
+    return { L: Lh, C: chromaFor(Lh), H: hueFor(h, Lh) };
+  };
+  paint2DGammaSlider(document.getElementById('lGamma'));
+  paintScalePreview(document.getElementById('cPeakPos'), sampleScale);
+  paintScalePreview(document.getElementById('hueShift'), sampleScale);
+  // Diagram L-curve gamma slider — paint a black→white gradient warped by
+  // the current gamma so the slider previews what the L bar will look like.
+  const dlg = document.getElementById('diagramLGamma');
+  if (dlg) {
+    paintScalePreview(dlg, (t) => {
+      const L = Math.pow(t, params.diagramLGamma);
+      return { L, C: 0, H: 0 };
+    });
+  }
+}
+// 2-D gradient for the L-curve gamma slider.
+// X axis = gamma value (slider's value range).
+// Y axis = the resulting scale's L range, top (lightest) → bottom (darkest).
+// At each (x, y), paint the actual color the scale would produce at that
+// gamma value and that index fraction. Renders to an offscreen canvas, then
+// applied as a background-image so CSS gradient stops aren't a constraint.
+const _gammaCanvas = document.createElement('canvas');
+function paint2DGammaSlider(input) {
+  const w = 120, h = 24;          // small canvas, stretched 100%×100%
+  _gammaCanvas.width = w; _gammaCanvas.height = h;
+  const ctx = _gammaCanvas.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  const refHue = families[0]?.hue ?? 200;
+  const minG = parseFloat(input.min), maxG = parseFloat(input.max);
+  // Compress the L range toward middle gray and boost chroma slightly so the
+  // gamma curve reads as a soft tinted map rather than a stark high-contrast
+  // ramp.
+  const VIBRANCY = 0.55;
+  const CONTRAST = 0.55;
+  const CENTER   = 0.40;  // pull L toward 0.40 instead of 0.50 so the bar
+                          // reads slightly darker overall.
+  for (let py = 0; py < h; py++) {
+    const t = py / (h - 1);                 // 0 = top (lightest), 1 = bottom
+    for (let px = 0; px < w; px++) {
+      const gamma = minG + (px / (w - 1)) * (maxG - minG);
+      const Lraw = params.lMax - (params.lMax - params.lMin) * Math.pow(t, gamma);
+      const L = CENTER + (Lraw - 0.5) * CONTRAST;
+      const C = chromaFor(Lraw) * VIBRANCY;
+      const H = hueFor(refHue, Lraw);
+      const lin = oklchToLinearRgb(L, C, H);
+      const i = (py * w + px) * 4;
+      data[i]   = gammaEncode(Math.max(0, Math.min(1, lin.r))) * 255;
+      data[i+1] = gammaEncode(Math.max(0, Math.min(1, lin.g))) * 255;
+      data[i+2] = gammaEncode(Math.max(0, Math.min(1, lin.b))) * 255;
+      data[i+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  input.style.background = `url(${_gammaCanvas.toDataURL()})`;
+  input.style.backgroundSize = '100% 100%';
+}
+// Per-family Hue / Sat / L± slider tracks — each painted as a live preview
+// of the colour range that thumb's value sweeps through.
+function paintFamilyHueSliders() {
+  const L = midL(), C = midC();
+  document.querySelectorAll('.family').forEach(famEl => {
+    const idx = [...familiesEl.children].indexOf(famEl);
+    const fam = families[idx];
+    if (!fam) return;
+    const sat = fam.saturation ?? 1;
+    const lOff = fam.lOffset ?? 0;
+    const hueInput  = famEl.querySelector('[data-hue]');
+    const satInput  = famEl.querySelector('[data-sat]');
+    const loffInput = famEl.querySelector('[data-loff]');
+    if (hueInput) {
+      // Track sweeps hue 0..360 at family's current sat & L offset.
+      paintGradSlider(hueInput, h => ({ L: Math.max(0.05, Math.min(0.95, L + lOff)), C: C * sat, H: h }));
+    }
+    if (satInput) {
+      // Track sweeps chroma 0 (gray) → 1.5×C (super saturated) at family's hue/L.
+      paintGradSlider(satInput, v => ({ L: Math.max(0.05, Math.min(0.95, L + lOff)), C: C * v, H: fam.hue }));
+    }
+    if (loffInput) {
+      // Track sweeps L-0.15 (darker) → L+0.15 (lighter) at family's hue/sat.
+      paintGradSlider(loffInput, v => ({ L: Math.max(0.05, Math.min(0.95, L + v)), C: C * sat, H: fam.hue }));
+    }
+  });
+}
+
+// Update the model diagram caption, axis labels, and disc colors for the
+// active model and current chroma cap.
+function updateModelDiagram() {
+  const cap = document.getElementById('modelCaption');
+  const axL = document.getElementById('axisL');
+  const axC = document.getElementById('axisC');
+  const axH = document.getElementById('axisH');
+  const labelC = document.querySelector('.dgm-label-c');
+  const isHsl = params.model === 'hsl';
+  if (axL) axL.textContent = 'Lightness';
+  if (axC) axC.textContent = isHsl ? 'Saturation (radius)' : 'Chroma (radius)';
+  if (axH) axH.textContent = 'Hue (angle)';
+  if (labelC) labelC.textContent = isHsl ? 'S' : 'C';
+
+  const cMax = (params.boundedChroma ? PARAM_BOUNDS.bounded.cPeak : PARAM_BOUNDS.unbounded.cPeak).max;
+  if (cap) {
+    cap.textContent = `${params.model.toUpperCase()} · C≤${cMax.toFixed(2)}`;
+  }
+
+  // L bar: black→white using OKLCH-sampled stops, warped by diagramLGamma.
+  // gamma > 1 pushes stops toward dark; < 1 pushes toward light; 1 = perceptual.
+  const lBar = document.querySelector('.dgm-l-bar');
+  if (lBar) {
+    const stops = [];
+    const N = 12;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const L = Math.pow(t, params.diagramLGamma);
+      const lin = oklchToLinearRgb(L, 0, 0);
+      stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(2)}%`);
+    }
+    lBar.style.background = `linear-gradient(to top, ${stops.join(', ')})`;
+  }
+
+  // Position the L-bar thumb at the current diagramL. The bar is gamma-warped
+  // (lower L at the bottom), so we map L back to a t in [0, 1] via the
+  // inverse of the gamma curve.
+  const lBarEl = document.querySelector('.dgm-l-bar');
+  const lThumb = document.querySelector('.dgm-l-thumb');
+  if (lBarEl && lThumb) {
+    const tFromL = Math.pow(params.diagramL, 1 / params.diagramLGamma);
+    const top = parseFloat(getComputedStyle(lBarEl).top) || 8;
+    const height = lBarEl.offsetHeight || 184;
+    lThumb.style.top = (top + (1 - tFromL) * height) + 'px';
+  }
+
+  // Disc: 2-D color picker on canvas. The chosen model determines how
+  // (L, C, H) maps to RGB — OKLCH (default), CIE LCH, or HSL.
+  const canvas = document.querySelector('.dgm-disc-canvas');
+  if (canvas && canvas.getContext) {
+    const w = canvas.width, h = canvas.height;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const data = img.data;
+    const cx = (w - 1) / 2, cy = (h - 1) / 2;
+    const rMax = Math.min(cx, cy);
+    const L = params.diagramL;
+    const toLinearRgb = models[params.model].linearRgb;
+    for (let py = 0; py < h; py++) {
+      for (let px = 0; px < w; px++) {
+        const i = (py * w + px) * 4;
+        const dx = px - cx, dy = py - cy;
+        const r = Math.sqrt(dx * dx + dy * dy);
+        if (r > rMax) { data[i + 3] = 0; continue; }
+        const theta = Math.atan2(-dy, dx) * 180 / Math.PI;
+        const H = (theta + 360) % 360;
+        const C = (r / rMax) * cMax;
+        const lin = toLinearRgb(L, C, H);
+        const edgeFade = Math.min(1, (rMax - r));
+        data[i]     = gammaEncode(Math.max(0, Math.min(1, lin.r))) * 255;
+        data[i + 1] = gammaEncode(Math.max(0, Math.min(1, lin.g))) * 255;
+        data[i + 2] = gammaEncode(Math.max(0, Math.min(1, lin.b))) * 255;
+        data[i + 3] = Math.round(255 * edgeFade);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+}
+
+//// ---------- categorical: markers + swatches ----------
+const markers = [];
+const swatches = [];
+// Notch geometry — apex y is fixed to 31% of marker height; the base width
+// is computed so the on-screen triangle is equilateral. The outer corners
+// of the marker are rounded with a 3px radius to match the slider styling.
+function notchGeometry(w, h) {
+  const apexY = 0.31 * h;
+  // Top edge spans the marker minus 4px slack on each side.
+  const margin = 5;
+  const xL = margin;
+  const xR = w - margin;
+  const topWidth = xR - xL;
+  const innerHalf = topWidth * 0.43;  // bottom ≈ 86% of top → steeper sides
+  const xLi = w / 2 - innerHalf;
+  const xRi = w / 2 + innerHalf;
+  const r = 2;  // outer corner radius — matches non-notched marker-fill's border-radius
+  const f = (n) => n.toFixed(2);
+  // Marker's `top: -3px` means the underlying band's top edge sits at y=3
+  // in marker-local coords. Above that (the marker's overhang above the
+  // band) the notch sides are vertical; below it they are diagonal —
+  // forming a smaller trapezoid that visibly "starts" at the bar's edge.
+  const bandTop = 3;
+  const pathD = [
+    `M ${r},0`,
+    `L ${f(xL)},0`,
+    `L ${f(xL)},${bandTop}`,
+    `L ${f(xLi)},${f(apexY)}`,
+    `L ${f(xRi)},${f(apexY)}`,
+    `L ${f(xR)},${bandTop}`,
+    `L ${f(xR)},0`,
+    `L ${w - r},0`,
+    `A ${r} ${r} 0 0 1 ${w},${r}`,
+    `L ${w},${h - r}`,
+    `A ${r} ${r} 0 0 1 ${w - r},${h}`,
+    `L ${r},${h}`,
+    `A ${r} ${r} 0 0 1 0,${h - r}`,
+    `L 0,${r}`,
+    `A ${r} ${r} 0 0 1 ${r},0`,
+    `Z`,
+  ].join(' ');
+  return {
+    pathD,
+    clipPath: `path('${pathD}')`,
+    apexY,
+  };
+}
+function notchSvg(w, h) {
+  return `<svg class="marker-stroke" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><path d="${notchGeometry(w, h).pathD}"/></svg>`;
+}
+function makeMarker(i) {
+  const m = document.createElement('div');
+  m.className = 'hue-marker';
+  m.dataset.idx = i;
+  m.title = 'Drag to set hue • Shift-drag to translate all • drag off vertically (≥20px) to remove • right-click to remove';
+  {
+    const w = 22, h = 30;
+    const geo = notchGeometry(w, h);
+    m.innerHTML = `<div class="marker-fill" style="clip-path: ${geo.clipPath}"></div>${notchSvg(w, h)}<span class="marker-label">${i+1}</span>`;
+  }
+  m.style.left = (cats[i] / 360 * 100) + '%';
+  m.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const idx = +m.dataset.idx;
+    cats.splice(idx, 1);
+    rebuildCats();
+    pushHistory();
+  });
+  m.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const idx = +m.dataset.idx;
+    const startX = e.clientX;
+    const startHues = cats.slice();
+    let removing = false;
+    const move = ev => {
+      const r = band.getBoundingClientRect();
+      const farOff = ev.clientY < r.top - 20 || ev.clientY > r.bottom + 20;
+      if (farOff) { removing = true; m.style.opacity = '0.3'; }
+      else { removing = false; m.style.opacity = ''; }
+      if (ev.shiftKey) {
+        const deltaDeg = ((ev.clientX - startX) / r.width) * 360;
+        cats.forEach((_, k) => {
+          cats[k] = ((startHues[k] + deltaDeg) % 360 + 360) % 360;
+          markers[k].style.left = (cats[k] / 360 * 100) + '%';
+        });
+      } else if (!removing) {
+        const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        cats[idx] = f * 360;
+        m.style.left = (f * 100) + '%';
+      }
+      updateSwatches();
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      m.style.opacity = '';
+      if (removing) {
+        cats.splice(idx, 1);
+        rebuildCats();
+      }
+      pushHistory();
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+  return m;
+}
+function makeSwatch(i) {
+  const s = document.createElement('div');
+  s.className = 'swatch';
+  s.draggable = true;
+  s.dataset.idx = i;
+  s.title = 'Click to copy hex • drag to reorder';
+  s.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', s.dataset.idx); e.dataTransfer.effectAllowed = 'move'; });
+  s.addEventListener('dragover',  e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+  s.addEventListener('drop', e => {
+    e.preventDefault();
+    const from = +e.dataTransfer.getData('text/plain');
+    const to = +s.dataset.idx;
+    if (from === to) return;
+    const [moved] = cats.splice(from, 1);
+    cats.splice(to, 0, moved);
+    rebuildCats();
+    pushHistory();
+  });
+  s.addEventListener('click', () => {
+    const lin = oklchToLinearRgb(midL(), midC(), cats[+s.dataset.idx]);
+    const hex = linearToHex(lin.r, lin.g, lin.b);
+    navigator.clipboard?.writeText(hex);
+    const orig = s.style.outline;
+    s.style.outline = '2px solid #027A48';
+    setTimeout(() => { s.style.outline = orig; }, 500);
+  });
+  return s;
+}
+function rebuildCats() {
+  while (markers.length > cats.length) markers.pop().remove();
+  while (markers.length < cats.length) {
+    const m = makeMarker(markers.length);
+    band.appendChild(m);
+    markers.push(m);
+  }
+  markers.forEach((m, i) => {
+    m.dataset.idx = i;
+    m.querySelector('.marker-label').textContent = i + 1;
+    m.style.left = (cats[i] / 360 * 100) + '%';
+  });
+  while (swatches.length > cats.length) swatches.pop().remove();
+  while (swatches.length < cats.length) {
+    const s = makeSwatch(swatches.length);
+    swatchesRow.appendChild(s);
+    swatches.push(s);
+  }
+  swatches.forEach((s, i) => { s.dataset.idx = i; });
+  updateSwatches();
+}
+function updateSwatches() {
+  cats.forEach((hue, i) => {
+    const lin = oklchToLinearRgb(midL(), midC(), hue);
+    swatches[i].style.background = linearToHex(lin.r, lin.g, lin.b);
+  });
+}
+
+//// ---------- family rows ----------
+function renderRows() {
+  if (familiesEl.children.length !== families.length) {
+    familiesEl.innerHTML = '';
+    families.forEach((fam, i) => familiesEl.appendChild(makeFamilyEl(fam, i)));
+  }
+  [...familiesEl.children].forEach((el, i) => {
+    renderRow(el.querySelector('[data-row]'), families[i]);
+  });
+  paintFamilyHueSliders();
+}
+function makeFamilyEl(fam, i) {
+  const el = document.createElement('div');
+  el.className = 'family';
+  // Hue slider section is bounded to the chip-row width so the hue control
+  // ends right where the chip list ends. Sat + L± share the remaining space.
+  const chipW = 64, chipGap = 6;
+  const chipRowWidth = params.indices.length * chipW + (params.indices.length - 1) * chipGap;
+  const lblStyle = `font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: #676E83;`;
+  const valStyle = `font: 500 0.7rem/1 'Oswald', 'IBM Plex Mono', monospace; color: #161921; text-align: right; font-variant-numeric: tabular-nums;`;
+  el.innerHTML = `
+    <div class="family-head">
+      <div style="display: flex; gap: 6px; align-items: center; flex: 0 0 ${chipRowWidth}px;">
+        <input type="text" data-name value="${fam.name}" style="width: 200px; flex: 0 0 200px;">
+        <label style="${lblStyle}">Hue</label>
+        <input type="range" class="grad" min="0" max="360" step="1" value="${fam.hue}" data-hue style="flex: 1; min-width: 0;">
+        <span class="val" data-hue-val style="${valStyle} min-width: 40px; display: none;">${fam.hue.toFixed(0)}°</span>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center; flex: 1; margin-left: 8px;">
+        <label style="${lblStyle}">C×</label>
+        <input type="range" class="grad" min="0" max="1.5" step="0.01" value="${fam.saturation ?? 1}" data-sat style="flex: 1; min-width: 0;">
+        <span class="val" data-sat-val style="${valStyle} min-width: 36px; display: none;">${(fam.saturation ?? 1).toFixed(2)}</span>
+        <label style="${lblStyle} margin-left: 8px;">L±</label>
+        <input type="range" class="grad" min="-0.15" max="0.15" step="0.005" value="${fam.lOffset ?? 0}" data-loff style="flex: 1; min-width: 0;">
+        <span class="val" data-loff-val style="${valStyle} min-width: 44px; display: none;">${(fam.lOffset ?? 0).toFixed(3)}</span>
+      </div>
+      <button class="remove" data-remove style="margin-left: 8px;">Remove</button>
+    </div>
+    <div class="row-wrap">
+      <div class="row" data-row></div>
+      <div class="oog-list" data-oog></div>
+    </div>
+  `;
+  el.querySelector('[data-name]').addEventListener('input', e => { fam.name = e.target.value; });
+  el.querySelector('[data-name]').addEventListener('change', pushHistory);
+  const hueInput = el.querySelector('[data-hue]');
+  const hueVal = el.querySelector('[data-hue-val]');
+  hueInput.addEventListener('input', () => {
+    fam.hue = parseFloat(hueInput.value);
+    hueVal.textContent = fam.hue.toFixed(0) + '°';
+    renderRow(el.querySelector('[data-row]'), fam);
+  });
+  hueInput.addEventListener('change', pushHistory);
+  attachEyedropper(hueInput);
+  const satInput = el.querySelector('[data-sat]');
+  const satVal = el.querySelector('[data-sat-val]');
+  satInput.addEventListener('input', () => {
+    fam.saturation = parseFloat(satInput.value);
+    satVal.textContent = fam.saturation.toFixed(2);
+    renderRow(el.querySelector('[data-row]'), fam);
+  });
+  satInput.addEventListener('change', pushHistory);
+  attachEyedropper(satInput);
+  const loffInput = el.querySelector('[data-loff]');
+  const loffVal = el.querySelector('[data-loff-val]');
+  loffInput.addEventListener('input', () => {
+    fam.lOffset = parseFloat(loffInput.value);
+    loffVal.textContent = fam.lOffset.toFixed(3);
+    renderRow(el.querySelector('[data-row]'), fam);
+  });
+  loffInput.addEventListener('change', pushHistory);
+  attachEyedropper(loffInput);
+  el.querySelector('[data-remove]').addEventListener('click', () => {
+    const idx = families.indexOf(fam);
+    if (idx >= 0) families.splice(idx, 1);
+    renderRows();
+    pushHistory();
+  });
+  return el;
+}
+function renderRow(row, fam) {
+  const model = models[params.model];
+  const oogList = row.parentElement.querySelector('[data-oog]');
+  const oogItems = [];
+  const sat = fam.saturation ?? 1;
+  const lOff = fam.lOffset ?? 0;
+  row.innerHTML = params.indices.map(idx => {
+    const L = Math.max(0, Math.min(1, lightnessFor(idx) + lOff));
+    const C = chromaFor(L) * sat;
+    const H = hueFor(fam.hue, L);
+    const lin = model.linearRgb(L, C, H);
+    const breakdown = gamutBreakdown(lin, params.gamut);
+    const oog = breakdown.length > 0;
+    if (oog) oogItems.push({ idx, breakdown });
+    const css = model.cssColor(L, C, H);
+    const hex = linearToHex(lin.r, lin.g, lin.b);
+    return `<div class="chip${oog ? ' oog' : ''}" data-hex="${hex}">
+      <div class="chip-fill" style="background:${css}"></div>
+      <div class="chip-meta">
+        <div class="chip-num">${idx}</div>
+        <div class="chip-hex">${hex}</div>
+      </div>
+    </div>`;
+  }).join('');
+  if (oogList) {
+    oogList.innerHTML = oogItems.map(({ idx, breakdown }) =>
+      `<div class="oog-item"><span class="idx">${idx}</span>${formatOog(breakdown)}</div>`
+    ).join('');
+  }
+  row.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', e => {
+      e.stopPropagation();
+      const hex = chip.dataset.hex;
+      navigator.clipboard?.writeText(hex);
+      chip.classList.add('copied');
+      const el = chip.querySelector('.chip-hex');
+      const orig = el.textContent;
+      el.textContent = 'copied!';
+      setTimeout(() => { chip.classList.remove('copied'); el.textContent = orig; }, 700);
+    });
+  });
+}
+
+//// ---------- band background click adds a categorical color ----------
+band.addEventListener('click', e => {
+  if (e.target !== band) return;
+  const r = band.getBoundingClientRect();
+  const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  cats.push(f * 360);
+  rebuildCats();
+  pushHistory();
+});
+
+//// ---------- gradation band (indices) ----------
+const gradBand = document.getElementById('gradation-band');
+const gradMarkers = [];
+function paintGradationBand() {
+  const stops = [];
+  const refHue = families[0]?.hue ?? 200;
+  const N = 24;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const idx = t * 1000;
+    const L = lightnessFor(idx);
+    const C = chromaFor(L);
+    const H = hueFor(refHue, L);
+    const lin = oklchToLinearRgb(L, C, H);
+    stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(2)}%`);
+  }
+  gradBand.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+}
+function makeGradMarker(i) {
+  const m = document.createElement('div');
+  m.className = 'hue-marker';
+  m.dataset.idx = i;
+  m.title = 'Drag to set index • Shift-drag to translate all • drag off vertically or right-click to remove';
+  // Width sized to the label (longer numbers need more room). Hue-marker
+  // height (28px) is the same regardless.
+  const labelLen = String(params.indices[i]).length;
+  const w = Math.max(22, 12 + labelLen * 6);
+  const h = 28;
+  m.style.width = w + 'px';
+  m.style.marginLeft = (-w / 2) + 'px';
+  m.style.left = (params.indices[i] / 1000 * 100) + '%';
+  {
+    const geo = notchGeometry(w, h);
+    m.innerHTML = `<div class="marker-fill" style="clip-path: ${geo.clipPath}"></div>${notchSvg(w, h)}<span class="marker-label">${params.indices[i]}</span>`;
+  }
+  m.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const idx = +m.dataset.idx;
+    params.indices.splice(idx, 1);
+    syncIndicesText();
+    rebuildGradationMarkers();
+    renderRows();
+    pushHistory();
+  });
+  m.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const idx = +m.dataset.idx;
+    const startX = e.clientX;
+    const startVals = params.indices.slice();
+    let removing = false;
+    const move = ev => {
+      const r = gradBand.getBoundingClientRect();
+      const farOff = ev.clientY < r.top - 20 || ev.clientY > r.bottom + 20;
+      if (farOff) { removing = true; m.style.opacity = '0.3'; }
+      else { removing = false; m.style.opacity = ''; }
+      if (ev.shiftKey) {
+        const deltaT = (ev.clientX - startX) / r.width;
+        params.indices.forEach((_, k) => {
+          const v = Math.round(startVals[k] + deltaT * 1000);
+          params.indices[k] = Math.max(0, Math.min(1000, v));
+          gradMarkers[k].style.left = (params.indices[k] / 1000 * 100) + '%';
+          gradMarkers[k].querySelector('.marker-label').textContent = params.indices[k];
+        });
+      } else if (!removing) {
+        const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        params.indices[idx] = Math.round(f * 1000);
+        m.style.left = (f * 100) + '%';
+        m.querySelector('.marker-label').textContent = params.indices[idx];
+      }
+      syncIndicesText();
+      renderRows();
+    };
+    const up = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      m.style.opacity = '';
+      if (removing) {
+        params.indices.splice(idx, 1);
+      }
+      params.indices.sort((a, b) => a - b);
+      syncIndicesText();
+      rebuildGradationMarkers();
+      renderRows();
+      pushHistory();
+    };
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
+  });
+  return m;
+}
+function rebuildGradationMarkers() {
+  while (gradMarkers.length > params.indices.length) gradMarkers.pop().remove();
+  while (gradMarkers.length < params.indices.length) {
+    const m = makeGradMarker(gradMarkers.length);
+    gradBand.appendChild(m);
+    gradMarkers.push(m);
+  }
+  gradMarkers.forEach((m, i) => {
+    m.dataset.idx = i;
+    m.style.left = (params.indices[i] / 1000 * 100) + '%';
+    m.querySelector('.marker-label').textContent = params.indices[i];
+  });
+}
+function syncIndicesText() {
+  const ind = document.getElementById('indices');
+  if (ind && document.activeElement !== ind) {
+    ind.value = params.indices.join(',');
+  }
+}
+gradBand.addEventListener('click', e => {
+  if (e.target !== gradBand) return;
+  const r = gradBand.getBoundingClientRect();
+  const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  const v = Math.round(f * 1000);
+  params.indices.push(v);
+  params.indices.sort((a, b) => a - b);
+  syncIndicesText();
+  rebuildGradationMarkers();
+  renderRows();
+  pushHistory();
+});
+
+//// ---------- sliders ----------
+const sliderBindings = [];
+function bindSlider(id, key, decimals = 3, suffix = '') {
+  const input = document.getElementById(id);
+  const out = document.getElementById(id + 'Val');
+  const fmt = v => (decimals === 0 ? v.toFixed(0) : v.toFixed(decimals)) + suffix;
+  const update = () => {
+    let v = parseFloat(input.value);
+    // Chroma sliders may be displayed at the unbounded max but capped to a
+    // tighter "safe" value when bounded mode + full-range mode are both on.
+    if (key === 'cTop' || key === 'cPeak' || key === 'cBot') {
+      const cap = chromaCapFor(key);
+      if (cap != null && v > cap) {
+        v = cap;
+        input.value = v;
+      }
+    }
+    params[key] = v;
+    out.textContent = fmt(params[key]);
+    redraw();
+  };
+  input.addEventListener('input', update);
+  // 'change' fires on slider release — collapses a drag into a single undo entry.
+  input.addEventListener('change', pushHistory);
+  out.textContent = fmt(params[key]);
+  sliderBindings.push({ input, key, out, fmt });
+}
+bindSlider('lMax',     'lMax',     3);
+bindSlider('lMin',     'lMin',     3);
+bindSlider('lGamma',   'lGamma',   3);
+bindSlider('cTop',     'cTop',     3);
+bindSlider('cPeak',    'cPeak',    3);
+bindSlider('cBot',     'cBot',     3);
+bindSlider('cPeakPos', 'cPeakPos', 3);
+bindSlider('hueShift', 'hueShift', 0, '°');
+document.getElementById('model').addEventListener('change', e => { params.model = e.target.value; redraw(); pushHistory(); });
+document.getElementById('gamut').addEventListener('change', e => {
+  params.gamut = e.target.value;
+  applyChromaBounds();   // bounded ranges shift to match the new gamut
+  redraw();
+  drawGamutDiagram();
+  pushHistory();
+});
+document.getElementById('condensedSliders').addEventListener('change', e => {
+  applyChromaBounds();
+  redraw();
+  pushHistory();
+});
+
+document.getElementById('gamutWarn').addEventListener('change', e => {
+  params.gamutWarn = e.target.checked;
+  document.getElementById('gamut').disabled = !e.target.checked;
+  redraw();
+  drawGamutDiagram();
+  pushHistory();
+});
+document.getElementById('gamut').disabled = !params.gamutWarn;
+indicesInput.addEventListener('input', () => {
+  const parsed = indicesInput.value.split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n >= 0 && n <= 1000);
+  if (parsed.length) { params.indices = parsed; rebuildGradationMarkers(); renderRows(); }
+});
+indicesInput.addEventListener('change', pushHistory);
+// On blur, normalize the field: keep only integers in [0, 1000], dedupe, sort.
+indicesInput.addEventListener('blur', () => {
+  const cleaned = Array.from(new Set(
+    indicesInput.value.split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isInteger(n) && n >= 0 && n <= 1000)
+  )).sort((a, b) => a - b);
+  if (cleaned.length === 0) return;  // leave invalid input visible for editing
+  indicesInput.value = cleaned.join(',');
+  params.indices = cleaned;
+  rebuildGradationMarkers();
+  renderRows();
+});
+
+//// ---------- toolbar ----------
+document.getElementById('addFamily').addEventListener('click', () => {
+  families.push({ name: `Family ${families.length + 1}`, hue: Math.floor(Math.random() * 360) });
+  renderRows();
+  pushHistory();
+});
+document.getElementById('addCat').addEventListener('click', () => {
+  cats.push(Math.floor(Math.random() * 360));
+  rebuildCats();
+  pushHistory();
+});
+document.getElementById('removeCat').addEventListener('click', () => {
+  if (!cats.length) return;
+  cats.pop();
+  rebuildCats();
+  pushHistory();
+});
+document.getElementById('distribute').addEventListener('click', () => {
+  const N = cats.length;
+  if (N === 0) return;
+  const gcd = (a, b) => b ? gcd(b, a % b) : a;
+  let k = 1;
+  if (N > 2) {
+    const target = Math.floor(N / 2);
+    outer: for (let off = 0; off < N; off++) {
+      for (const sign of [1, -1]) {
+        const cand = target + sign * off;
+        if (cand >= 1 && cand < N && gcd(cand, N) === 1) { k = cand; break outer; }
+      }
+    }
+  }
+  for (let i = 0; i < N; i++) cats[i] = ((i * k) % N) * 360 / N;
+  rebuildCats();
+  pushHistory();
+});
+
+//// ---------- bounded chroma toggle ----------
+document.getElementById('boundedChroma').addEventListener('change', e => {
+  params.boundedChroma = e.target.checked;
+  document.getElementById('fullRangeSlider').disabled = !e.target.checked;
+  applyChromaBounds();
+  redraw();
+  pushHistory();
+});
+// Initial disabled state for fullRangeSlider — only meaningful when bounded.
+document.getElementById('fullRangeSlider').disabled = !params.boundedChroma;
+
+//// ---------- multi-thumb chroma slider ----------
+const multiChromaRefresh = (function setupMultiChroma() {
+  const sliderEl = document.getElementById('chromaMulti');
+  if (!sliderEl) return () => {};
+  const KEYS = ['cTop', 'cPeak', 'cBot'];
+  const LABELS = { cTop: 'T', cPeak: 'P', cBot: 'B' };
+  sliderEl.classList.add('notched');
+  const thumbs = KEYS.map(key => {
+    const t = document.createElement('div');
+    t.className = 'hue-marker';
+    t.dataset.key = key;
+    const w = 22, h = 28;
+    const geo = notchGeometry(w, h);
+    t.innerHTML = `<div class="marker-fill" style="clip-path: ${geo.clipPath}"></div>${notchSvg(w, h)}<span class="marker-label">${LABELS[key]}</span>`;
+    sliderEl.appendChild(t);
+    return t;
+  });
+  const readouts = KEYS.map(key => {
+    const r = document.createElement('div');
+    r.className = 'mt-readout';
+    r.dataset.key = key;
+    sliderEl.appendChild(r);
+    return r;
+  });
+  function maxRange() {
+    const r = params.boundedChroma
+      ? activeBoundedRanges()
+      : PARAM_BOUNDS_UNBOUNDED;
+    return Math.max(r.cTop.max, r.cPeak.max, r.cBot.max);
+  }
+  function paintTrack() {
+    const m = maxRange();
+    const stops = [];
+    const N = 16;
+    const refHue = families[0]?.hue ?? 200;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const lin = oklchToLinearRgb(midL(), t * m, refHue);
+      stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(1)}%`);
+    }
+    const baseGrad = `linear-gradient(to right, ${stops.join(', ')})`;
+    // Hatch the area outside the three-thumb range so it reads as "outside
+    // the configured chroma envelope".
+    const vals = thumbs.map(t => params[t.dataset.key]).slice().sort((a, b) => a - b);
+    // Pull the shading edge back to the OUTER edge of the bounding thumbs so
+    // the notched thumb itself is fully out of the hatched region.
+    const sliderW = sliderEl.getBoundingClientRect().width || 200;
+    const thumbHalfPct = (11 / sliderW) * 100;
+    const lowPct  = Math.max(0, vals[0] / m * 100 - thumbHalfPct).toFixed(2);
+    const highPct = Math.min(100, vals[vals.length - 1] / m * 100 + thumbHalfPct).toFixed(2);
+    const sw = params.hatchStripe;
+    const sg = params.hatchGap;
+    const stripe = `repeating-linear-gradient(${params.hatchAngle}deg,
+       transparent 0 ${sw}px,
+       var(--cs-panel-bg, #FAFBFC) ${sw}px ${sw + sg}px)`;
+    const halfDim = `color-mix(in srgb, var(--cs-panel-bg, #FAFBFC) ${params.hatchDim}%, transparent)`;
+    const halfOverlay = `linear-gradient(${halfDim}, ${halfDim})`;
+    const layers = [];
+    if (parseFloat(lowPct) > 0) {
+      layers.push(`${halfOverlay} left 0 / ${lowPct}% 100% no-repeat`);
+      layers.push(`${stripe} left 0 / ${lowPct}% 100% no-repeat`);
+    }
+    if (parseFloat(highPct) < 100) {
+      const wR = (100 - parseFloat(highPct)).toFixed(2);
+      layers.push(`${halfOverlay} right 0 / ${wR}% 100% no-repeat`);
+      layers.push(`${stripe} right 0 / ${wR}% 100% no-repeat`);
+    }
+    layers.push(baseGrad);
+    sliderEl.style.background = layers.join(', ');
+  }
+  function refresh() {
+    paintTrack();
+    const m = maxRange();
+    for (const t of thumbs) {
+      const v = params[t.dataset.key];
+      t.style.left = (v / m * 100) + '%';
+    }
+    for (const r of readouts) {
+      const v = params[r.dataset.key];
+      r.style.left = (v / m * 100) + '%';
+      r.textContent = v.toFixed(3);
+    }
+    document.getElementById('cTopVal').textContent  = params.cTop.toFixed(3);
+    document.getElementById('cPeakVal').textContent = params.cPeak.toFixed(3);
+    document.getElementById('cBotVal').textContent  = params.cBot.toFixed(3);
+  }
+  for (const t of thumbs) {
+    t.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const move = ev => {
+        const r = sliderEl.getBoundingClientRect();
+        const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        const m = maxRange();
+        let v = f * m;
+        // Only the per-key bounded cap is a real model constraint —
+        // thumbs can pass each other freely (cTop > cPeak is allowed; the
+        // chroma curve will just have an unusual shape, not invalid).
+        const cap = chromaCapFor(t.dataset.key);
+        if (cap) v = Math.max(cap.min, Math.min(cap.max, v));
+        params[t.dataset.key] = v;
+        t.style.left = (v / m * 100) + '%';
+        scheduleRedraw();
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        pushHistory();
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+  return refresh;
+})();
+
+// 2-thumb L-range slider — neighbour clamp so lMin < lMax always holds.
+const multiLRefresh = (function setupMultiL() {
+  const sliderEl = document.getElementById('lMulti');
+  if (!sliderEl) return () => {};
+  const KEYS = ['lMin', 'lMax'];
+  const LABELS = { lMin: '↓', lMax: '↑' };
+  const thumbs = KEYS.map(key => {
+    const t = document.createElement('div');
+    t.className = 'hue-marker';
+    t.dataset.key = key;
+    const w = 22, h = 28;
+    const geo = notchGeometry(w, h);
+    t.innerHTML = `<div class="marker-fill" style="clip-path: ${geo.clipPath}"></div>${notchSvg(w, h)}<span class="marker-label">${LABELS[key]}</span>`;
+    sliderEl.appendChild(t);
+    return t;
+  });
+  const readouts = KEYS.map(key => {
+    const r = document.createElement('div');
+    r.className = 'mt-readout';
+    r.dataset.key = key;
+    sliderEl.appendChild(r);
+    return r;
+  });
+  // L is the full 0..1 range on this slider (gamut bounds tightening it
+  // visually via hatching outside the bounded-safe sub-range).
+  function paintTrack() {
+    const stops = [];
+    const N = 12;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const lin = oklchToLinearRgb(t, 0, 0);
+      stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(2)}%`);
+    }
+    const baseGrad = `linear-gradient(to right, ${stops.join(', ')})`;
+    const sliderW = sliderEl.getBoundingClientRect().width || 200;
+    const thumbHalfPct = (11 / sliderW) * 100;
+    const lowPct  = Math.max(0, params.lMin * 100 - thumbHalfPct).toFixed(2);
+    const highPct = Math.min(100, params.lMax * 100 + thumbHalfPct).toFixed(2);
+    const sw = params.hatchStripe;
+    const sg = params.hatchGap;
+    const stripe = `repeating-linear-gradient(${params.hatchAngle}deg,
+       transparent 0 ${sw}px,
+       var(--cs-panel-bg, #FAFBFC) ${sw}px ${sw + sg}px)`;
+    const halfDim = `color-mix(in srgb, var(--cs-panel-bg, #FAFBFC) ${params.hatchDim}%, transparent)`;
+    const halfOverlay = `linear-gradient(${halfDim}, ${halfDim})`;
+    const layers = [];
+    if (parseFloat(lowPct) > 0) {
+      layers.push(`${halfOverlay} left 0 / ${lowPct}% 100% no-repeat`);
+      layers.push(`${stripe} left 0 / ${lowPct}% 100% no-repeat`);
+    }
+    if (parseFloat(highPct) < 100) {
+      const wR = (100 - parseFloat(highPct)).toFixed(2);
+      layers.push(`${halfOverlay} right 0 / ${wR}% 100% no-repeat`);
+      layers.push(`${stripe} right 0 / ${wR}% 100% no-repeat`);
+    }
+    layers.push(baseGrad);
+    sliderEl.style.background = layers.join(', ');
+  }
+  function refresh() {
+    sliderEl.classList.add('notched');
+    paintTrack();
+    for (const t of thumbs) {
+      const v = params[t.dataset.key];
+      t.style.left = (v * 100) + '%';
+    }
+    for (const r of readouts) {
+      const v = params[r.dataset.key];
+      r.style.left = (v * 100) + '%';
+      r.textContent = v.toFixed(3);
+    }
+    document.getElementById('lMinVal').textContent = params.lMin.toFixed(3);
+    document.getElementById('lMaxVal').textContent = params.lMax.toFixed(3);
+  }
+  for (const t of thumbs) {
+    t.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const move = ev => {
+        const r = sliderEl.getBoundingClientRect();
+        const f = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+        let v = f;
+        // Hard model constraint: lMin < lMax.
+        if (t.dataset.key === 'lMin') v = Math.min(v, params.lMax - 0.005);
+        else                          v = Math.max(v, params.lMin + 0.005);
+        const cap = chromaCapFor(t.dataset.key);
+        if (cap) v = Math.max(cap.min, Math.min(cap.max, v));
+        params[t.dataset.key] = v;
+        t.style.left = (v * 100) + '%';
+        scheduleRedraw();
+      };
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        pushHistory();
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+  return refresh;
+})();
+
+// Hatch controls.
+{
+  const ang = document.getElementById('hatchAngle');
+  const angVal = document.getElementById('hatchAngleVal');
+  const sw = document.getElementById('hatchStripe');
+  const swVal = document.getElementById('hatchStripeVal');
+  ang.addEventListener('input', () => {
+    params.hatchAngle = parseInt(ang.value, 10);
+    angVal.textContent = params.hatchAngle + '°';
+    redraw();
+  });
+  ang.addEventListener('change', pushHistory);
+  sw.addEventListener('input', () => {
+    params.hatchStripe = parseInt(sw.value, 10);
+    swVal.textContent = params.hatchStripe + 'px';
+    redraw();
+  });
+  sw.addEventListener('change', pushHistory);
+  const gp = document.getElementById('hatchGap');
+  const gpVal = document.getElementById('hatchGapVal');
+  gp.addEventListener('input', () => {
+    params.hatchGap = parseInt(gp.value, 10);
+    gpVal.textContent = params.hatchGap + 'px';
+    redraw();
+  });
+  gp.addEventListener('change', pushHistory);
+  const dim = document.getElementById('hatchDim');
+  const dimVal = document.getElementById('hatchDimVal');
+  dim.addEventListener('input', () => {
+    params.hatchDim = parseInt(dim.value, 10);
+    dimVal.textContent = params.hatchDim + '%';
+    redraw();
+  });
+  dim.addEventListener('change', pushHistory);
+  const dlg = document.getElementById('diagramLGamma');
+  const dlgVal = document.getElementById('diagramLGammaVal');
+  dlg.addEventListener('input', () => {
+    params.diagramLGamma = parseFloat(dlg.value);
+    dlgVal.textContent = params.diagramLGamma.toFixed(2);
+    updateModelDiagram();
+  });
+  dlg.addEventListener('change', pushHistory);
+  // Drag on the L bar to set diagramL (which the donut samples at).
+  const lBar = document.querySelector('.dgm-l-bar');
+  if (lBar) {
+    const setLFromY = (clientY) => {
+      const r = lBar.getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, 1 - (clientY - r.top) / r.height));
+      params.diagramL = Math.pow(t, params.diagramLGamma);
+      updateModelDiagram();
+    };
+    lBar.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      setLFromY(e.clientY);
+      const move = (ev) => setLFromY(ev.clientY);
+      const up = () => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+        pushHistory();
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+}
+document.getElementById('fullRangeSlider').addEventListener('change', e => {
+  params.fullRangeSlider = e.target.checked;
+  applyChromaBounds();
+  redraw();
+  pushHistory();
+});
+
+document.getElementById('copyIndices').addEventListener('click', e => {
+  navigator.clipboard?.writeText(params.indices.join(',')).then(() => {
+    e.target.textContent = 'Copied!';
+    setTimeout(() => { e.target.textContent = 'Copy'; }, 900);
+  });
+});
+
+//// ---------- eyedropper ----------
+const eyedropper = document.createElement('div');
+eyedropper.className = 'cs-eyedropper';
+document.body.appendChild(eyedropper);
+function refHueForEyedropper() { return families[0]?.hue ?? 200; }
+// Returns {L, C, H} for the slider's current state. Sliders that affect the
+// scale's shape (gamma, peakPos, hueShift) show the index-500 color of the
+// resulting scale; direct sliders (L, C) show their own value mapped to the
+// other midpoints.
+// Returns either { gradient: <css> } for sliders where the eyedropper makes
+// more sense as a band of colors (lGamma), or { L, C, H } for solid-color
+// previews.
+function eyedropperColorFor(input) {
+  const id = input.id;
+  const v = parseFloat(input.value);
+  const L = midL(), C = midC();
+  const H = refHueForEyedropper();
+  // L gamma: show the full resulting L scale at the current gamma value as a
+  // vertical gradient (top = lightest, bottom = darkest). More informative
+  // than a single mid-step color since the curve shape is the whole point.
+  if (id === 'lGamma') {
+    const stops = [];
+    const N = 12;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const Lh = params.lMax - (params.lMax - params.lMin) * Math.pow(t, v);
+      const Ch = chromaFor(Lh);
+      const Hh = hueFor(H, Lh);
+      const lin = oklchToLinearRgb(Lh, Ch, Hh);
+      stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(1)}%`);
+    }
+    return { gradient: `linear-gradient(to bottom, ${stops.join(', ')})` };
+  }
+  if (id === 'lMax' || id === 'lMin')           return { L: v, C, H };
+  if (id === 'cTop')                             return { L: params.lMax, C: v, H };
+  if (id === 'cPeak')                            return { L,             C: v, H };
+  if (id === 'cBot')                             return { L: params.lMin, C: v, H };
+  if (id === 'hueShift')                         return { L, C, H: H + v };
+  // Curve sliders: show the resulting scale's mid step.
+  if (id === 'cPeakPos') {
+    const L500 = lightnessFor(500);
+    return { L: L500, C: chromaFor(L500), H: hueFor(H, L500) };
+  }
+  if (input.matches('[data-hue]')) {
+    const L500 = lightnessFor(500);
+    return { L: L500, C: chromaFor(L500), H: hueFor(v, L500) };
+  }
+  return { L, C, H };
+}
+function showEyedropper(input) {
+  updateEyedropper(input);
+  eyedropper.classList.add('visible');
+}
+function hideEyedropper() {
+  eyedropper.classList.remove('visible');
+}
+function updateEyedropper(input) {
+  const r = input.getBoundingClientRect();
+  const t = (parseFloat(input.value) - +input.min) / (+input.max - +input.min);
+  const thumbW = 14;
+  const usable = r.width - thumbW;
+  const x = r.left + thumbW / 2 + t * usable;
+  const y = r.top;
+  eyedropper.style.left = x + 'px';
+  eyedropper.style.top = y + 'px';
+  const result = eyedropperColorFor(input);
+  if (result.gradient) {
+    eyedropper.style.background = result.gradient;
+  } else {
+    const lin = oklchToLinearRgb(result.L, result.C, result.H);
+    eyedropper.style.background = linearToHex(lin.r, lin.g, lin.b);
+  }
+}
+function attachEyedropper(input) {
+  input.addEventListener('pointerdown', () => showEyedropper(input));
+  input.addEventListener('input', () => {
+    if (eyedropper.classList.contains('visible')) updateEyedropper(input);
+  });
+  // Hide on release. Pointerup may fire outside the element if drag wandered;
+  // listen on document so we always catch it.
+  const releaseHandler = () => hideEyedropper();
+  input.addEventListener('pointerup', releaseHandler);
+  document.addEventListener('pointerup', releaseHandler);
+  input.addEventListener('keydown', () => showEyedropper(input));
+  input.addEventListener('blur', hideEyedropper);
+}
+// Attach to all global gradient sliders.
+document.querySelectorAll('input[type=range].grad').forEach(attachEyedropper);
+// Family hue sliders are dynamic — attached in makeFamilyEl.
+function applyNotchedThumbs() {
+  // Notches stay on for the multi-thumb bands (hue + gradation) and OFF for
+  // single-thumb range sliders.
+  document.getElementById('hue-band').classList.add('notched');
+  document.getElementById('gradation-band').classList.add('notched');
+}
+applyChromaBounds();
+applyNotchedThumbs();
+
+//// ---------- undo/redo wiring ----------
+document.getElementById('undoBtn').addEventListener('click', undo);
+document.getElementById('redoBtn').addEventListener('click', redo);
+document.addEventListener('keydown', e => {
+  const cmd = e.metaKey || e.ctrlKey;
+  if (cmd && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+  } else if (cmd && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    redo();
+  }
+});
+document.getElementById('copyCat').addEventListener('click', e => {
+  const lines = cats.map(hue => {
+    const lin = oklchToLinearRgb(midL(), midC(), hue);
+    return linearToHex(lin.r, lin.g, lin.b);
+  });
+  navigator.clipboard?.writeText(lines.join('\n')).then(() => {
+    e.target.textContent = 'Copied!';
+    setTimeout(() => { e.target.textContent = 'Copy hex list'; }, 1200);
+  });
+});
+document.getElementById('copyParams').addEventListener('click', e => {
+  const lines = [];
+  lines.push(`/* Color Studio params (model: ${params.model}, gamut: ${params.gamut}) */`);
+  lines.push(`:root {`);
+  lines.push(`  --cs-l-max: ${params.lMax};`);
+  lines.push(`  --cs-l-min: ${params.lMin};`);
+  lines.push(`  --cs-l-gamma: ${params.lGamma};`);
+  lines.push(`  --cs-c-top: ${params.cTop};`);
+  lines.push(`  --cs-c-peak: ${params.cPeak};`);
+  lines.push(`  --cs-c-bot: ${params.cBot};`);
+  lines.push(`  --cs-c-peak-pos: ${params.cPeakPos};`);
+  lines.push(`  --cs-hue-shift: ${params.hueShift};`);
+  lines.push(`}`);
+  for (const fam of families) {
+    lines.push(`/* ${fam.name} (hue ${fam.hue.toFixed(1)}°) */`);
+    for (const idx of params.indices) {
+      const L = lightnessFor(idx);
+      const C = chromaFor(L);
+      const H = hueFor(fam.hue, L);
+      const lin = oklchToLinearRgb(L, C, H);
+      lines.push(`--${fam.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${idx}: ${linearToHex(lin.r, lin.g, lin.b)};`);
+    }
+  }
+  const text = lines.join('\n');
+  navigator.clipboard?.writeText(text).then(() => {
+    e.target.textContent = 'Copied!';
+    setTimeout(() => { e.target.textContent = 'Copy params (CSS)'; }, 1200);
+  }).catch(() => prompt('Copy:', text));
+});
+
+//// ---------- main redraw ----------
+// CIE 1931 xy chromaticities for the primary corners of each gamut.
+const GAMUT_PRIMARIES = {
+  srgb:    { R: [0.640, 0.330], G: [0.300, 0.600], B: [0.150, 0.060] },
+  p3:      { R: [0.680, 0.320], G: [0.265, 0.690], B: [0.150, 0.060] },
+  adobe:   { R: [0.640, 0.330], G: [0.210, 0.710], B: [0.150, 0.060] },
+  rec2020: { R: [0.708, 0.292], G: [0.170, 0.797], B: [0.131, 0.046] },
+};
+function drawGamutDiagram() {
+  const cnv = document.getElementById('gamutDiagram');
+  if (!cnv || !cnv.getContext) return;
+  const w = cnv.width, h = cnv.height;
+  const ctx = cnv.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+  // CIE xy ∈ [0, 0.85] mapped to canvas pixels (y axis flipped).
+  const sel = params.gamut === 'off' ? 'srgb' : params.gamut;
+  const prim = GAMUT_PRIMARIES[sel];
+  // Triangle test for "is this xy inside the selected gamut?"
+  function inTriangle(px, py, A, B, C) {
+    const d1 = (px - B[0]) * (A[1] - B[1]) - (A[0] - B[0]) * (py - B[1]);
+    const d2 = (px - C[0]) * (B[1] - C[1]) - (B[0] - C[0]) * (py - C[1]);
+    const d3 = (px - A[0]) * (C[1] - A[1]) - (C[0] - A[0]) * (py - A[1]);
+    const neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    const pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+    return !(neg && pos);
+  }
+  const Yfix = 0.5;
+  // Out-of-gamut + chromaticity-impossible pixels filled solid #3a4a5e.
+  const floodR = 0x3a, floodG = 0x4a, floodB = 0x5e;
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const xc = (px / (w - 1)) * 0.85;
+      const yc = (1 - py / (h - 1)) * 0.85;
+      const i = (py * w + px) * 4;
+      const z = 1 - xc - yc;
+      if (xc <= 0 || yc <= 0 || z <= 0) {
+        data[i] = floodR; data[i+1] = floodG; data[i+2] = floodB; data[i+3] = 255;
+        continue;
+      }
+      // (xc, yc, Yfix) → XYZ → linear sRGB (D65)
+      const X = xc * Yfix / yc;
+      const Z = z * Yfix / yc;
+      let r =  3.2404542 * X - 1.5371385 * Yfix - 0.4985314 * Z;
+      let g = -0.9692660 * X + 1.8760108 * Yfix + 0.0415560 * Z;
+      let b =  0.0556434 * X - 0.2040259 * Yfix + 1.0572252 * Z;
+      const maxV = Math.max(r, g, b, 1);
+      r = Math.max(0, r / maxV);
+      g = Math.max(0, g / maxV);
+      b = Math.max(0, b / maxV);
+      const actR = gammaEncode(r) * 255;
+      const actG = gammaEncode(g) * 255;
+      const actB = gammaEncode(b) * 255;
+      const inSel = inTriangle(xc, yc, prim.R, prim.G, prim.B);
+      if (inSel) {
+        data[i]   = actR;
+        data[i+1] = actG;
+        data[i+2] = actB;
+      } else {
+        data[i]   = floodR;
+        data[i+1] = floodG;
+        data[i+2] = floodB;
+      }
+      data[i+3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  // Outline triangles on top.
+  const px = (x) => (x / 0.85) * (w - 1);
+  const py = (y) => (1 - y / 0.85) * (h - 1);
+  function outline(p, color, lineWidth) {
+    ctx.beginPath();
+    ctx.moveTo(px(p.R[0]), py(p.R[1]));
+    ctx.lineTo(px(p.G[0]), py(p.G[1]));
+    ctx.lineTo(px(p.B[0]), py(p.B[1]));
+    ctx.closePath();
+    ctx.lineWidth = lineWidth;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+  }
+  // Thick antialiased white border around the selected gamut.
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  outline(prim, '#FFFFFF', 2);
+  // Dashed sRGB reference, only if we're not already showing sRGB as the
+  // selected gamut (in which case the solid white outline is the sRGB one).
+  if (sel !== 'srgb') {
+    ctx.setLineDash([3, 3]);
+    outline(GAMUT_PRIMARIES.srgb, 'rgba(255,255,255,0.7)', 1);
+    ctx.setLineDash([]);
+  }
+}
+
+// Coalesce redraw calls fired in rapid succession (e.g. high-frequency
+// pointermove from a multi-thumb drag) into one per animation frame.
+let _redrawScheduled = false;
+function scheduleRedraw() {
+  if (_redrawScheduled) return;
+  _redrawScheduled = true;
+  requestAnimationFrame(() => {
+    _redrawScheduled = false;
+    redraw();
+  });
+}
+function redraw() {
+  paintHueBand();
+  paintGradationBand();
+  paintAllGradSliders();
+  if (typeof multiChromaRefresh === 'function') multiChromaRefresh();
+  if (typeof multiLRefresh === 'function') multiLRefresh();
+  updateModelDiagram();
+  // drawGamutDiagram() runs ~10k pixel ops; keep it OUT of the hot path that
+  // fires on every slider input event. Call it explicitly when the gamut
+  // selection or theme changes.
+  updateSwatches();
+  renderRows();
+}
+
+//// ---------- light/dark theme ----------
+(function initTheme() {
+  const btn = document.getElementById('themeToggle');
+  const sysIsDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const apply = (theme) => {
+    document.documentElement.dataset.theme = theme;
+    btn.textContent = theme === 'dark' ? '☀' : '☾';
+    btn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+  };
+  const stored = localStorage.getItem('cs-theme');
+  apply(stored || (sysIsDark() ? 'dark' : 'light'));
+  btn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    apply(next);
+    localStorage.setItem('cs-theme', next);
+    // Re-run paint passes that may depend on theme. Gamut diagram's flood
+    // fill is the only currently theme-dependent paint.
+    if (typeof redraw === 'function') redraw();
+    if (typeof drawGamutDiagram === 'function') drawGamutDiagram();
+  });
+})();
+
+// Read the indices text field as the initial source of truth, build gradation
+// markers + paint the band, then everything else.
+(function initIndices() {
+  const parsed = indicesInput.value.split(',')
+    .map(s => parseInt(s.trim(), 10))
+    .filter(n => Number.isFinite(n) && n >= 0 && n <= 1000);
+  if (parsed.length) params.indices = parsed.sort((a, b) => a - b);
+})();
+rebuildCats();
+rebuildGradationMarkers();
+paintGradationBand();
+redraw();
+drawGamutDiagram();
+lastSnap = snapshot();
+updateUndoButtons();
+</script>
+</body></html>
