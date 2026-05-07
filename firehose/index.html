@@ -421,11 +421,18 @@ let FIELDS = DATASETS[0].fields;
 // === STATE ===
 const state = {
   datasetId: 'legal',
-  interactionMode: 'scroll-flag',
-  density: 'comfortable',
+  visibility: 'all',        // 'all' | 'windowed' | 'one'
+  navigation: 'free',       // 'free' | 'cursor' | 'auto'
+  approval: 'click-cycle',  // 'click-cycle' | 'keyboard' | 'swipe' | 'bulk'
+  grouping: 'flat',         // 'flat' | 'by-category'
+  context: 'none',          // 'none' | 'neighbors' | 'source'
+  presentation: 'row',      // 'row' | 'card'
   defaultState: 'approved',
   errorVisibility: 'confidence',
   controlLayout: 'sidebar',
+  // Legacy keys (for rendering code compatibility, removed in task 6)
+  interactionMode: 'scroll-flag',
+  density: 'comfortable',
   fieldStates: {},
   cursor: 0,
   collapsedGroups: new Set(),
@@ -563,28 +570,47 @@ function buildAxisGroup(key, label, options) {
 function buildControlsHTML() {
   return [
     buildAxisGroup('datasetId', 'Dataset', DATASETS.map(d => ({v: d.id, l: d.name}))),
-    buildAxisGroup('interactionMode', 'Interaction', [
-      {v:'scroll-flag', l:'Scroll + Flag'},
-      {v:'keyboard-triage', l:'Keyboard Triage'},
-      {v:'grouped', l:'Grouped'},
+    buildAxisGroup('visibility', 'Visibility', [
+      {v:'all',      l:'All'},
+      {v:'windowed', l:'Windowed'},
+      {v:'one',      l:'One'},
     ]),
-    buildAxisGroup('density', 'Density', [
-      {v:'compact', l:'Compact'},
-      {v:'comfortable', l:'Comfortable'},
-      {v:'focused', l:'Focused'},
+    buildAxisGroup('navigation', 'Navigation', [
+      {v:'free',   l:'Free'},
+      {v:'cursor', l:'Cursor'},
+      {v:'auto',   l:'Auto'},
+    ]),
+    buildAxisGroup('approval', 'Approval', [
+      {v:'click-cycle', l:'Click-cycle'},
+      {v:'keyboard',    l:'Keyboard'},
+      {v:'swipe',       l:'Swipe'},
+      {v:'bulk',        l:'Bulk'},
+    ]),
+    buildAxisGroup('grouping', 'Grouping', [
+      {v:'flat',        l:'Flat'},
+      {v:'by-category', l:'By Category'},
+    ]),
+    buildAxisGroup('context', 'Context', [
+      {v:'none',      l:'None'},
+      {v:'neighbors', l:'Neighbors'},
+      {v:'source',    l:'Source'},
+    ]),
+    buildAxisGroup('presentation', 'Presentation', [
+      {v:'row',  l:'Row'},
+      {v:'card', l:'Card'},
     ]),
     buildAxisGroup('defaultState', 'Default State', [
       {v:'approved', l:'All Approved'},
-      {v:'pending', l:'All Pending'},
+      {v:'pending',  l:'All Pending'},
     ]),
     buildAxisGroup('errorVisibility', 'Error Visibility', [
-      {v:'none', l:'None'},
+      {v:'none',       l:'None'},
       {v:'confidence', l:'Confidence'},
-      {v:'heat', l:'Color Heat'},
+      {v:'heat',       l:'Color Heat'},
     ]),
     buildAxisGroup('controlLayout', 'Panel Layout', [
-      {v:'sidebar', l:'Sidebar'},
-      {v:'topbar', l:'Top Bar'},
+      {v:'sidebar',  l:'Sidebar'},
+      {v:'topbar',   l:'Top Bar'},
       {v:'floating', l:'Floating'},
     ]),
     `<button class="reset-btn" onclick="resetFieldStates()">Reset field states</button>`,
@@ -640,7 +666,7 @@ function onAxisChange(key, value) {
     initFieldStates();
   } else {
     state[key] = value;
-    if (key === 'interactionMode') state.cursor = 0;
+    if (key === 'navigation' || key === 'visibility') state.cursor = 0;
   }
   render();
 }
