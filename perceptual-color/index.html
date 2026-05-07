@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8">
+<html><head><meta charset="utf-8"><title>Perceptual Color System</title>
 <link rel="stylesheet" href="colors_and_type.css">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500&display=swap" rel="stylesheet">
 <style>
@@ -752,8 +752,11 @@
   </div>
 </div>
 
-<div style="display:flex; align-items:center; gap:12px; margin-top: 4px;">
+<div style="display:flex; align-items:baseline; gap:12px; margin-top: 4px;">
   <h1 style="margin: 0;">Families (graded scales)</h1>
+  <label style="display:flex; align-items:baseline; gap:5px; font: 500 0.75rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-muted); cursor:pointer; margin-left: 4px;">
+    <input type="checkbox" id="linkLSliders" checked style="cursor:pointer;"> Link L± <span style="font-size:0.65rem; opacity:0.7;">(recommended)</span>
+  </label>
   <div style="flex:1"></div>
   <button id="addFamily">+ Add family</button>
   <button id="copyParams">Copy params (CSS)</button>
@@ -1123,6 +1126,7 @@ function midC() { return params.cPeak; }
 
 //// ---------- DOM refs ----------
 const familiesEl = document.getElementById('families');
+const linkLCheckbox = document.getElementById('linkLSliders');
 const indicesInput = document.getElementById('indices');
 const band = document.getElementById('hue-band');
 const swatchesRow = document.getElementById('swatches-row');
@@ -1677,6 +1681,19 @@ function makeFamilyEl(fam, i) {
   loffInput.addEventListener('input', () => {
     fam.lOffset = parseFloat(loffInput.value);
     loffVal.textContent = fam.lOffset.toFixed(3);
+    if (linkLCheckbox.checked) {
+      [...familiesEl.children].forEach(famEl2 => {
+        const inp = famEl2.querySelector('[data-loff]');
+        const val = famEl2.querySelector('[data-loff-val]');
+        const idx = [...familiesEl.children].indexOf(famEl2);
+        if (inp && inp !== loffInput) {
+          inp.value = fam.lOffset;
+          if (val) val.textContent = fam.lOffset.toFixed(3);
+          families[idx].lOffset = fam.lOffset;
+          renderRow(famEl2.querySelector('[data-row]'), families[idx]);
+        }
+      });
+    }
     renderRow(el.querySelector('[data-row]'), fam);
     repaintFamilySliders();
   });
@@ -1885,13 +1902,13 @@ function bindSlider(id, key, decimals = 3, suffix = '') {
   const fmt = v => (decimals === 0 ? v.toFixed(0) : v.toFixed(decimals)) + suffix;
   const update = () => {
     let v = parseFloat(input.value);
-    // Chroma sliders may be displayed at the unbounded max but capped to a
-    // tighter "safe" value when bounded mode + full-range mode are both on.
-    if (key === 'cTop' || key === 'cPeak' || key === 'cBot') {
-      const cap = chromaCapFor(key);
-      if (cap != null && v > cap) {
-        v = cap;
-        input.value = v;
+    // In full-range + bounded mode the slider shows the unbounded range but
+    // the thumb must stay within the bounded region (the hatched zones are off-limits).
+    if (params.boundedChroma && params.fullRangeSlider) {
+      const bounds = activeBoundedRanges()[key];
+      if (bounds) {
+        const clamped = Math.max(bounds.min, Math.min(bounds.max, v));
+        if (clamped !== v) { v = clamped; input.value = v; }
       }
     }
     params[key] = v;
