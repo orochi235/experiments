@@ -8,6 +8,7 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
 
 :root {
   --bg: #FFFFFF;
@@ -39,13 +40,13 @@ body {
   font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg-alt);
   color: var(--text);
-  height: 100vh;
+  height: 100%;
   overflow: hidden;
 }
 
 #app {
   display: flex;
-  height: 100vh;
+  height: 100%;
 }
 
 /* Layout variants applied by applyLayout() */
@@ -590,9 +591,10 @@ const state = {
   approval: 'click-cycle',  // 'click-cycle' | 'keyboard' | 'swipe' | 'bulk'
   grouping: 'flat',         // 'flat' | 'by-category'
   context: 'none',          // 'none' | 'neighbors' | 'source'
-  presentation: 'row',      // 'row' | 'card'
+  presentation: 'row',      // 'row' | 'card' | 'columns'
   defaultState: 'approved',
   errorVisibility: 'confidence',
+  confidenceRole: 'neutral', // 'helpful' | 'neutral' | 'harmful'
   controlLayout: 'sidebar',
   fieldStates: {},
   cursor: 0,
@@ -601,7 +603,21 @@ const state = {
 };
 
 function initFieldStates() {
-  FIELDS.forEach(f => { state.fieldStates[f.id] = state.defaultState; });
+  FIELDS.forEach(f => {
+    if (state.confidenceRole === 'helpful') {
+      state.fieldStates[f.id] = f.confidence >= 0.85 ? 'approved' : 'pending';
+    } else {
+      state.fieldStates[f.id] = state.defaultState;
+    }
+  });
+}
+
+// Returns the confidence value to display — harmful mode shows inflated scores
+function displayedConfidence(field) {
+  if (state.confidenceRole === 'harmful') {
+    return 0.90 + (field.id % 10) * 0.01; // 90–99%, always looks high
+  }
+  return field.confidence;
 }
 
 // === HELPERS ===
@@ -636,10 +652,11 @@ function getRendererProps(field, isCursor) {
 
 function renderRow(props) {
   const { field, fieldState, isCursor, neighbors, source } = props;
+  const conf = displayedConfidence(field);
   const heatStyle = state.errorVisibility === 'heat'
-    ? `background-color:${heatColor(field.confidence)};` : '';
-  const pct = Math.round(field.confidence * 100);
-  const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
+    ? `background-color:${heatColor(conf)};` : '';
+  const pct = Math.round(conf * 100);
+  const badgeClass = conf < 0.7 ? 'confidence-badge low' : 'confidence-badge';
   const badge = state.errorVisibility === 'confidence'
     ? `<span class="${badgeClass}">${pct}%</span>` : '';
   const flag = fieldState === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
@@ -659,10 +676,11 @@ function renderRow(props) {
 
 function renderCard(props) {
   const { field, fieldState, isCursor, neighbors, source } = props;
+  const conf = displayedConfidence(field);
   const heatStyle = state.errorVisibility === 'heat'
-    ? `background-color:${heatColor(field.confidence)};` : '';
-  const pct = Math.round(field.confidence * 100);
-  const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
+    ? `background-color:${heatColor(conf)};` : '';
+  const pct = Math.round(conf * 100);
+  const badgeClass = conf < 0.7 ? 'confidence-badge low' : 'confidence-badge';
   const badge = state.errorVisibility === 'confidence'
     ? `<span class="${badgeClass}">${pct}%</span>` : '';
   const flag = fieldState === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
@@ -683,10 +701,11 @@ function renderCard(props) {
 
 function renderCol(props) {
   const { field, fieldState, isCursor } = props;
+  const conf = displayedConfidence(field);
   const heatStyle = state.errorVisibility === 'heat'
-    ? `background-color:${heatColor(field.confidence)};` : '';
-  const pct = Math.round(field.confidence * 100);
-  const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
+    ? `background-color:${heatColor(conf)};` : '';
+  const pct = Math.round(conf * 100);
+  const badgeClass = conf < 0.7 ? 'confidence-badge low' : 'confidence-badge';
   const badge = state.errorVisibility === 'confidence'
     ? `<span class="${badgeClass}">${pct}%</span>` : '';
   const flag = fieldState === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
@@ -854,6 +873,11 @@ function buildControlsHTML(prefix = '') {
       {v:'confidence', l:'Confidence'},
       {v:'heat',       l:'Color Heat'},
     ], prefix),
+    buildAxisGroup('confidenceRole', 'Confidence Role', [
+      {v:'helpful', l:'Helpful'},
+      {v:'neutral', l:'Neutral'},
+      {v:'harmful', l:'Harmful'},
+    ], prefix),
     buildAxisGroup('controlLayout', 'Panel Layout', [
       {v:'sidebar',  l:'Sidebar'},
       {v:'topbar',   l:'Top Bar'},
@@ -923,7 +947,7 @@ function onAxisChange(key, value) {
     state.cursor = 0;
     state.collapsedGroups = new Set();
     initFieldStates();
-  } else if (key === 'defaultState') {
+  } else if (key === 'defaultState' || key === 'confidenceRole') {
     state[key] = value;
     initFieldStates();
   } else {
