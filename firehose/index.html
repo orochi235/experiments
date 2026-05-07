@@ -563,7 +563,12 @@ function renderStatusBar() {
   if (flagged)  parts.push(`<span style="color:var(--flagged)">${flagged} flagged</span>`);
   if (approved) parts.push(`<span style="color:var(--approved)">${approved} approved</span>`);
   if (pending)  parts.push(`${pending} pending`);
-  document.getElementById('status-bar').innerHTML = parts.join(' · ');
+
+  const bulkBtn = (state.approval === 'bulk')
+    ? `<button onclick="approveAll()" style="margin-left:12px;padding:2px 10px;background:rgba(72,187,120,0.12);border:1px solid rgba(72,187,120,0.3);border-radius:3px;color:var(--approved);font-size:11px;cursor:pointer;">Approve All</button>`
+    : '';
+
+  document.getElementById('status-bar').innerHTML = parts.join(' · ') + bulkBtn;
 }
 
 // === PROGRESS BAR ===
@@ -615,7 +620,7 @@ function buildGroupedView(fields) {
         ${flaggedBadge}
         <button class="group-approve-btn" data-category="${cat}" onclick="event.stopPropagation(); approveGroup(this.dataset.category)">Approve All</button>
       </div>
-      <div class="group-fields density-${state.density}">
+      <div class="group-fields">
         ${catFields.map(f => renderField(f, false)).join('')}
       </div>
     </div>`;
