@@ -281,6 +281,33 @@ body {
 .group-approve-btn:hover { background: rgba(72,187,120,0.25); }
 .group-fields { padding-left: 4px; }
 .group-section.collapsed .group-fields { display: none; }
+
+/* Card renderer */
+.field-card {
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.1s, border-color 0.1s;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+}
+.field-card:hover { border-color: var(--border); }
+.field-card.state-approved { background: rgba(72,187,120,0.08); border-color: rgba(72,187,120,0.25); }
+.field-card.state-flagged  { background: rgba(252,129,74,0.12); border-color: rgba(252,129,74,0.5); }
+.field-card.state-pending  { background: rgba(255,255,255,0.03); }
+.field-card.cursor { border-color: var(--accent) !important; background: rgba(126,200,227,0.1) !important; }
+.field-card-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+.field-card-value { font-size: 15px; color: var(--text); }
+.field-card.state-flagged .field-card-value { color: var(--flagged); }
+
+/* Context annotations */
+.field-context {
+  font-size: 10px;
+  color: #555;
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
 </style>
 </head>
 <body>
@@ -449,23 +476,80 @@ function heatColor(confidence) {
   return `rgba(252, 129, 74, ${(t * 0.28).toFixed(2)})`;
 }
 
-function buildFieldRow(field, isCursor) {
-  const s = state.fieldStates[field.id];
+function getRendererProps(field, isCursor) {
+  const props = {
+    field,
+    fieldState: state.fieldStates[field.id],
+    isCursor,
+    onDecide(newState) {
+      state.fieldStates[field.id] = newState;
+      renderFieldList();
+      renderStatusBar();
+    },
+  };
+  if (state.context === 'neighbors') {
+    const idx = FIELDS.indexOf(field);
+    props.neighbors = {
+      prev: idx > 0 ? FIELDS[idx - 1] : null,
+      next: idx < FIELDS.length - 1 ? FIELDS[idx + 1] : null,
+    };
+  }
+  if (state.context === 'source') {
+    props.source = field.category;
+  }
+  return props;
+}
+
+function renderRow(props) {
+  const { field, fieldState, isCursor, neighbors, source } = props;
   const heatStyle = state.errorVisibility === 'heat'
-    ? `background-color:${heatColor(field.confidence)};`
-    : '';
+    ? `background-color:${heatColor(field.confidence)};` : '';
   const pct = Math.round(field.confidence * 100);
   const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
   const badge = state.errorVisibility === 'confidence'
-    ? `<span class="${badgeClass}">${pct}%</span>`
-    : '';
-  const flag = s === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
+    ? `<span class="${badgeClass}">${pct}%</span>` : '';
+  const flag = fieldState === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
   const cursorClass = isCursor ? ' cursor' : '';
-  return `<div class="field-row state-${s}${cursorClass}" data-id="${field.id}" style="${heatStyle}" onclick="onFieldClick(${field.id})">
-    <span class="field-label">${field.label}</span>
-    <span class="field-value">${field.value}</span>
-    ${badge}${flag}
+  let ctx = '';
+  if (neighbors) {
+    const p = neighbors.prev ? neighbors.prev.label : '—';
+    const n = neighbors.next ? neighbors.next.label : '—';
+    ctx = `<div class="field-context">↑ ${p} &nbsp;·&nbsp; ↓ ${n}</div>`;
+  } else if (source) {
+    ctx = `<div class="field-context">§ ${source}</div>`;
+  }
+  return `<div class="field-row state-${fieldState}${cursorClass}" data-id="${field.id}" style="${heatStyle}" onclick="onFieldClick(${field.id})">
+    ${ctx}<span class="field-label">${field.label}</span><span class="field-value">${field.value}</span>${badge}${flag}
   </div>`;
+}
+
+function renderCard(props) {
+  const { field, fieldState, isCursor, neighbors, source } = props;
+  const heatStyle = state.errorVisibility === 'heat'
+    ? `background-color:${heatColor(field.confidence)};` : '';
+  const pct = Math.round(field.confidence * 100);
+  const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
+  const badge = state.errorVisibility === 'confidence'
+    ? `<span class="${badgeClass}">${pct}%</span>` : '';
+  const flag = fieldState === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
+  const cursorClass = isCursor ? ' cursor' : '';
+  let ctx = '';
+  if (neighbors) {
+    const p = neighbors.prev ? neighbors.prev.label : '—';
+    const n = neighbors.next ? neighbors.next.label : '—';
+    ctx = `<div class="field-context">↑ ${p} &nbsp;·&nbsp; ↓ ${n}</div>`;
+  } else if (source) {
+    ctx = `<div class="field-context">§ ${source}</div>`;
+  }
+  return `<div class="field-card state-${fieldState}${cursorClass}" data-id="${field.id}" style="${heatStyle}" onclick="onFieldClick(${field.id})">
+    ${ctx}<div class="field-card-label">${field.label}${badge}${flag}</div>
+    <div class="field-card-value">${field.value}</div>
+  </div>`;
+}
+
+function renderField(field, isCursor) {
+  const props = getRendererProps(field, isCursor);
+  return state.presentation === 'card' ? renderCard(props) : renderRow(props);
 }
 
 // === STATUS BAR ===
@@ -500,7 +584,7 @@ function renderFieldList() {
     list.innerHTML = buildTriageView();
     scrollCursorIntoView();
   } else {
-    list.innerHTML = FIELDS.map(f => buildFieldRow(f, false)).join('');
+    list.innerHTML = FIELDS.map(f => renderField(f, false)).join('');
   }
 }
 
@@ -525,7 +609,7 @@ function buildGroupedView() {
         <button class="group-approve-btn" data-category="${cat}" onclick="event.stopPropagation(); approveGroup(this.dataset.category)">Approve All</button>
       </div>
       <div class="group-fields density-${state.density}">
-        ${fields.map(f => buildFieldRow(f, false)).join('')}
+        ${fields.map(f => renderField(f, false)).join('')}
       </div>
     </div>`;
   }).join('');
@@ -539,7 +623,7 @@ function buildTriageView() {
 
   const rows = visible.map((f, i) => {
     const isCursor = (start + i) === state.cursor;
-    return buildFieldRow(f, isCursor);
+    return renderField(f, isCursor);
   });
 
   const remaining = FIELDS.length - state.cursor - 1;
