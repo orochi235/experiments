@@ -623,7 +623,7 @@ function buildGroupedView(fields) {
 }
 function scrollCursorIntoView() {
   setTimeout(() => {
-    const el = document.querySelector('.field-row.cursor');
+    const el = document.querySelector('.cursor');
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, 0);
 }
