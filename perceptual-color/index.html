@@ -13,7 +13,7 @@
   body {
     padding: 16px 20px 16px 20px; background: var(--cs-bg, #fff);
     font-family: 'IBM Plex Sans', sans-serif; color: var(--cs-fg, #161921);
-    overflow-x: clip;
+    overflow-x: clip; min-width: 900px;
   }
 
   /* Theme variables */
@@ -45,7 +45,8 @@
   /* Frosted-glass button — same vibe as the hue picker markers. */
   .cs-btn,
   .picker-actions button,
-  .family-head .remove,
+  .family .remove,
+  .family .reset-fam,
   #themeToggle, #undoBtn, #redoBtn, #addFamily, #copyParams {
     background: rgba(255, 255, 255, 0.40);
     backdrop-filter: blur(6px);
@@ -61,7 +62,7 @@
   }
   .cs-btn:hover,
   .picker-actions button:hover,
-  .family-head .remove:hover,
+  .family .remove:hover,
   #themeToggle:hover, #undoBtn:not(:disabled):hover, #redoBtn:not(:disabled):hover,
   #addFamily:hover, #copyParams:hover {
     background: rgba(255, 255, 255, 0.65);
@@ -71,12 +72,16 @@
   .cs-btn:disabled, #undoBtn:disabled, #redoBtn:disabled {
     opacity: 0.4; cursor: not-allowed;
   }
-  .family-head .remove { color: #B42318; }
-  .family-head .remove:hover { color: #D92D20; border-color: #FDA29B; background: rgba(254, 243, 242, 0.7); }
+.family .reset-fam { color: #3E424F; display: inline-flex; align-items: center; justify-content: center; height: calc(0.7rem + 14px); overflow: hidden; }
+  .family .reset-fam:hover { color: #161921; border-color: #98A3B3; background: rgba(0,0,0,0.04); }
+  .family .remove { display: inline-flex; align-items: center; justify-content: center; }
+  .family .remove { color: #B42318; }
+  .family .remove:hover { color: #D92D20; border-color: #FDA29B; background: rgba(254, 243, 242, 0.7); }
 
   [data-theme="dark"] .cs-btn,
   [data-theme="dark"] .picker-actions button,
-  [data-theme="dark"] .family-head .remove,
+  [data-theme="dark"] .family .remove,
+  [data-theme="dark"] .family .reset-fam,
   [data-theme="dark"] #themeToggle,
   [data-theme="dark"] #undoBtn,
   [data-theme="dark"] #redoBtn,
@@ -89,7 +94,7 @@
   }
   [data-theme="dark"] .cs-btn:hover,
   [data-theme="dark"] .picker-actions button:hover,
-  [data-theme="dark"] .family-head .remove:hover,
+  [data-theme="dark"] .family .remove:hover,
   [data-theme="dark"] #themeToggle:hover,
   [data-theme="dark"] #undoBtn:not(:disabled):hover,
   [data-theme="dark"] #redoBtn:not(:disabled):hover,
@@ -99,7 +104,7 @@
     border-color: #5C85FF;
     color: #ADC2FF;
   }
-  [data-theme="dark"] .family-head .remove { color: #FDA29B; }
+  [data-theme="dark"] .family .remove { color: #FDA29B; }
 
   /* Floating eyedropper swatch that follows the dragged slider thumb. */
   .cs-eyedropper {
@@ -166,12 +171,13 @@
   [data-theme="dark"] #undoBtn, [data-theme="dark"] #redoBtn {
     background: #232730; color: #B0B4BD; border-color: #3A3D47;
   }
-  [data-theme="dark"] .family { background: #242832; border-color: #2A2D35; }
+  [data-theme="dark"] .family { background: color-mix(in srgb, var(--cs-fg, #ECEEF2) 6%, transparent); }
   [data-theme="dark"] .family.selected { border-color: #3366FF; }
   [data-theme="dark"] .family-head input[type=text] { background: #232730; color: #ECEEF2; border-color: #3A3D47; }
   [data-theme="dark"] .family-head .index { color: #5E6371; }
   [data-theme="dark"] .family-head .hue-display { color: #B0B4BD; }
-  [data-theme="dark"] .family-head .remove { background: #232730; color: #FDA29B; border-color: #3A3D47; }
+  [data-theme="dark"] .family .reset-fam { background: #232730; color: #B0B4BD; border-color: #3A3D47; }
+  [data-theme="dark"] .family .remove { background: #232730; color: #FDA29B; border-color: #3A3D47; }
   [data-theme="dark"] .chip-meta { background: #242832; border-color: rgba(255,255,255,0.06); }
   [data-theme="dark"] .chip-num { color: #ECEEF2; }
   [data-theme="dark"] .chip-hex { color: #8B909C; }
@@ -353,6 +359,7 @@
     border-radius: 3px;
     cursor: pointer;
     user-select: none;
+    margin-bottom: 0.5rem;
   }
   .mt-thumb {
     position: absolute;
@@ -424,6 +431,7 @@
   .hue-marker .marker-label {
     position: relative; z-index: 2;
   }
+  .notched .hue-marker .marker-label { top: -1px; }
   /* Notched variant: cuts a wide triangular notch out of the TOP edge so the
      exact underlying gradient color shows through.
      Borders along clip-path cutouts: a regular CSS border is drawn around the
@@ -489,7 +497,7 @@
 
   /* Families list */
   #families { display: flex; flex-direction: column; gap: 10px; }
-  .family { border: 1px solid #E1E2E6; border-radius: 8px; padding: 10px 12px; background: #fff; transition: border-color 100ms ease; }
+  .family { border: none; border-radius: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent); transition: background 100ms ease; }
   .family.selected { border-color: #3366FF; box-shadow: 0 0 0 2px rgba(51,102,255,0.15); }
   .family-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   .family-head .index {
@@ -505,11 +513,11 @@
     flex: 1;
     font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #676E83;
   }
-  .family-head .remove {
+  .family .remove {
     background: none; border: 1px solid #C2C5CD; border-radius: 6px; color: #B42318;
     padding: 4px 10px; cursor: pointer; font: 500 0.7rem/1 'IBM Plex Mono', monospace;
   }
-  .family-head .remove:hover { background: #FEF3F2; border-color: #FDA29B; }
+  .family .remove:hover { background: #FEF3F2; border-color: #FDA29B; }
 
   .row-wrap { display: flex; gap: 12px; align-items: flex-start; }
   .row { display: flex; gap: 6px; align-items: flex-end; }
@@ -707,19 +715,6 @@
     </div>
   </div>
 
-  <div style="margin-top: 14px;">
-    <div class="caption" style="font: 600 0.7rem/1 'IBM Plex Mono', monospace; color: #98A3B3; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Indices (drag markers — Shift to translate, drag off vertically or right-click to remove, click band to add)</div>
-    <div id="gradation-band-wrap" style="position: relative;">
-      <div id="gradation-band" style="position: relative; height: 24px; border: 1px solid var(--cs-border-strong); border-radius: 3px; user-select: none; cursor: crosshair; background: linear-gradient(to right, #fff, #000);"></div>
-    </div>
-  </div>
-
-  <div class="row-inline" style="margin-top: 10px;">
-    <label style="min-width: 90px;">Indices (text)</label>
-    <input type="text" id="indices" style="flex: 1; font: 500 0.7rem/1 'IBM Plex Mono', monospace; padding: 6px 8px; border: 1px solid #C2C5CD; border-radius: 6px;"
-      value="25,50,100,200,300,400,500,600,700,800,900">
-    <button id="copyIndices" class="cs-btn" title="Copy the comma-separated index list">Copy</button>
-  </div>
 </div>
 
 <div class="panel" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
@@ -740,6 +735,20 @@
     <button id="removeCat">− Remove last</button>
     <button id="distribute">Distribute evenly</button>
     <button id="copyCat">Copy hex list</button>
+  </div>
+</div>
+
+<div class="panel" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+  <h2>Indices</h2>
+  <div class="help">Drag markers — Shift to translate, drag off vertically or right-click to remove, click band to add.</div>
+  <div id="gradation-band-wrap" style="position: relative;">
+    <div id="gradation-band" style="position: relative; height: 24px; border: 1px solid var(--cs-border-strong); border-radius: 3px; user-select: none; cursor: crosshair; background: linear-gradient(to right, #fff, #000);"></div>
+  </div>
+  <div class="row-inline" style="margin-top: 10px;">
+    <label style="min-width: 90px;">Indices (text)</label>
+    <input type="text" id="indices" style="flex: 1; font: 500 0.7rem/1 'IBM Plex Mono', monospace; padding: 6px 8px; border: 1px solid #C2C5CD; border-radius: 6px;"
+      value="25,50,100,200,300,400,500,600,700,800,900">
+    <button id="copyIndices" class="cs-btn" title="Copy the comma-separated index list">Copy</button>
   </div>
 </div>
 
@@ -1128,13 +1137,14 @@ function paintHueBand() {
   }
   band.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
 }
-function paintGradSlider(input, sample) {
+function paintGradSlider(input, sample, colorTransform) {
   const stops = [];
   const N = 16;
   for (let i = 0; i <= N; i++) {
     const t = i / N;
     const v = +input.min + t * (+input.max - +input.min);
-    const { L, C, H } = sample(v);
+    let { L, C, H } = sample(v);
+    if (colorTransform) ({ L, C, H } = colorTransform(L, C, H));
     const lin = oklchToLinearRgb(L, C, H);
     stops.push(`${linearToHex(lin.r, lin.g, lin.b)} ${(t*100).toFixed(1)}%`);
   }
@@ -1338,17 +1348,18 @@ function paintFamilyHueSliders() {
     const hueInput  = famEl.querySelector('[data-hue]');
     const satInput  = famEl.querySelector('[data-sat]');
     const loffInput = famEl.querySelector('[data-loff]');
+    const famTransform = (l, c, h) => ({ L: Math.min(1, l * 1.5), C: c * 0.15, H: h });
     if (hueInput) {
       // Track sweeps hue 0..360 at family's current sat & L offset.
-      paintGradSlider(hueInput, h => ({ L: Math.max(0.05, Math.min(0.95, L + lOff)), C: C * sat, H: h }));
+      paintGradSlider(hueInput, h => ({ L: Math.max(0.05, Math.min(0.95, L + lOff)), C: C * sat, H: h }), famTransform);
     }
     if (satInput) {
       // Track sweeps chroma 0 (gray) → 1.5×C (super saturated) at family's hue/L.
-      paintGradSlider(satInput, v => ({ L: Math.max(0.05, Math.min(0.95, L + lOff)), C: C * v, H: fam.hue }));
+      paintGradSlider(satInput, v => ({ L: Math.max(0.05, Math.min(0.95, L + lOff)), C: C * v, H: fam.hue }), famTransform);
     }
     if (loffInput) {
       // Track sweeps L-0.15 (darker) → L+0.15 (lighter) at family's hue/sat.
-      paintGradSlider(loffInput, v => ({ L: Math.max(0.05, Math.min(0.95, L + v)), C: C * sat, H: fam.hue }));
+      paintGradSlider(loffInput, v => ({ L: Math.max(0.05, Math.min(0.95, L + v)), C: C * sat, H: fam.hue }), famTransform);
     }
   });
 }
@@ -1439,7 +1450,7 @@ const swatches = [];
 // is computed so the on-screen triangle is equilateral. The outer corners
 // of the marker are rounded with a 3px radius to match the slider styling.
 function notchGeometry(w, h) {
-  const apexY = 0.31 * h;
+  const apexY = 0.31 * h - 2;
   // Top edge spans the marker minus 4px slack on each side.
   const margin = 5;
   const xL = margin;
@@ -1615,24 +1626,23 @@ function makeFamilyEl(fam, i) {
   const chipW = 64, chipGap = 6;
   const chipRowWidth = params.indices.length * chipW + (params.indices.length - 1) * chipGap;
   const lblStyle = `font: 500 0.6rem/1 'Oswald', monospace; color: #676E83;`;
-  const valStyle = `font: 500 0.7rem/1 'Oswald', 'IBM Plex Mono', monospace; color: #161921; text-align: right; font-variant-numeric: tabular-nums;`;
+  const valStyle = `font: 500 0.7rem/1 'Oswald', 'IBM Plex Mono', monospace; color: #161921; text-align: left; font-variant-numeric: tabular-nums;`;
   el.innerHTML = `
     <div class="family-head">
       <div style="display: flex; gap: 6px; align-items: center; flex: 0 0 ${chipRowWidth}px;">
         <input type="text" data-name value="${fam.name}" style="width: 200px; flex: 0 0 200px;">
-        <label style="${lblStyle}">Hue</label>
+        <label style="${lblStyle}">H</label>
         <input type="range" class="grad" min="0" max="360" step="1" value="${fam.hue}" data-hue style="flex: 1; min-width: 0;">
         <span class="val" data-hue-val style="${valStyle} min-width: 40px; display: none;">${fam.hue.toFixed(0)}°</span>
-      </div>
-      <div style="display: flex; gap: 6px; align-items: center; flex: 1; margin-left: 8px;">
         <label style="${lblStyle}">C×</label>
         <input type="range" class="grad" min="0" max="1.5" step="0.01" value="${fam.saturation ?? 1}" data-sat style="flex: 1; min-width: 0;">
         <span class="val" data-sat-val style="${valStyle} min-width: 36px; display: none;">${(fam.saturation ?? 1).toFixed(2)}</span>
-        <label style="${lblStyle} margin-left: 8px;">L±</label>
+        <label style="${lblStyle}">L±</label>
         <input type="range" class="grad" min="-0.15" max="0.15" step="0.005" value="${fam.lOffset ?? 0}" data-loff style="flex: 1; min-width: 0;">
         <span class="val" data-loff-val style="${valStyle} min-width: 44px; display: none;">${(fam.lOffset ?? 0).toFixed(3)}</span>
       </div>
-      <button class="remove" data-remove style="margin-left: 8px;">Remove</button>
+      <button class="reset-fam" data-reset style="margin-left: 8px;" title="Reset C× and L± to defaults">↺</button>
+      <button class="remove" data-remove style="margin-left: 4px;">Remove</button>
     </div>
     <div class="row-wrap">
       <div class="row" data-row></div>
@@ -1643,10 +1653,12 @@ function makeFamilyEl(fam, i) {
   el.querySelector('[data-name]').addEventListener('change', pushHistory);
   const hueInput = el.querySelector('[data-hue]');
   const hueVal = el.querySelector('[data-hue-val]');
+  const repaintFamilySliders = () => paintFamilyHueSliders();
   hueInput.addEventListener('input', () => {
     fam.hue = parseFloat(hueInput.value);
     hueVal.textContent = fam.hue.toFixed(0) + '°';
     renderRow(el.querySelector('[data-row]'), fam);
+    repaintFamilySliders();
   });
   hueInput.addEventListener('change', pushHistory);
   attachEyedropper(hueInput);
@@ -1656,6 +1668,7 @@ function makeFamilyEl(fam, i) {
     fam.saturation = parseFloat(satInput.value);
     satVal.textContent = fam.saturation.toFixed(2);
     renderRow(el.querySelector('[data-row]'), fam);
+    repaintFamilySliders();
   });
   satInput.addEventListener('change', pushHistory);
   attachEyedropper(satInput);
@@ -1665,9 +1678,21 @@ function makeFamilyEl(fam, i) {
     fam.lOffset = parseFloat(loffInput.value);
     loffVal.textContent = fam.lOffset.toFixed(3);
     renderRow(el.querySelector('[data-row]'), fam);
+    repaintFamilySliders();
   });
   loffInput.addEventListener('change', pushHistory);
   attachEyedropper(loffInput);
+  el.querySelector('[data-reset]').addEventListener('click', () => {
+    fam.saturation = 1;
+    fam.lOffset = 0;
+    satInput.value = 1;
+    loffInput.value = 0;
+    satVal.textContent = '1.00';
+    loffVal.textContent = '0.000';
+    renderRow(el.querySelector('[data-row]'), fam);
+    paintFamilyHueSliders();
+    pushHistory();
+  });
   el.querySelector('[data-remove]').addEventListener('click', () => {
     const idx = families.indexOf(fam);
     if (idx >= 0) families.splice(idx, 1);
@@ -2310,13 +2335,32 @@ function eyedropperColorFor(input) {
     return { L: L500, C: chromaFor(L500), H: hueFor(H, L500) };
   }
   if (input.matches('[data-hue]')) {
-    const L500 = lightnessFor(500);
-    return { L: L500, C: chromaFor(L500), H: hueFor(v, L500) };
+    const famEl = input.closest('.family');
+    const sat = parseFloat(famEl?.querySelector('[data-sat]')?.value ?? 1);
+    const lOff = parseFloat(famEl?.querySelector('[data-loff]')?.value ?? 0);
+    return { L: Math.max(0, Math.min(1, midL() + lOff)), C: midC() * sat, H: v };
+  }
+  if (input.matches('[data-sat]')) {
+    const famEl = input.closest('.family');
+    const hue = parseFloat(famEl?.querySelector('[data-hue]')?.value ?? 200);
+    const lOff = parseFloat(famEl?.querySelector('[data-loff]')?.value ?? 0);
+    return { L: Math.max(0, Math.min(1, midL() + lOff)), C: midC() * v, H: hue };
+  }
+  if (input.matches('[data-loff]')) {
+    const famEl = input.closest('.family');
+    const hue = parseFloat(famEl?.querySelector('[data-hue]')?.value ?? 200);
+    const sat = parseFloat(famEl?.querySelector('[data-sat]')?.value ?? 1);
+    return { L: Math.max(0, Math.min(1, midL() + v)), C: midC() * sat, H: hue };
   }
   return { L, C, H };
 }
 let eyedropperActiveInput = null;
+let eyedropperMoved = false;
+let eyedropperHideTimer = null;
+let eyedropperPointerActive = false; // true from pointerdown until next tick, suppresses blur hide
 function showEyedropper(input, clientX) {
+  clearTimeout(eyedropperHideTimer);
+  eyedropperHideTimer = null;
   updateEyedropper(input, clientX);
   eyedropper.classList.add('visible');
 }
@@ -2346,7 +2390,10 @@ function updateEyedropper(input, clientX) {
 }
 function attachEyedropper(input) {
   input.addEventListener('pointerdown', (e) => {
+    eyedropperPointerActive = true;
+    setTimeout(() => { eyedropperPointerActive = false; }, 0);
     eyedropperActiveInput = input;
+    eyedropperMoved = false;
     showEyedropper(input, e.clientX);
   });
   // During drag, pointermove handles position; just keep color current on value changes.
@@ -2354,18 +2401,32 @@ function attachEyedropper(input) {
     if (eyedropper.classList.contains('visible')) updateEyedropperColor(input);
   });
   input.addEventListener('keydown', () => showEyedropper(input));
-  input.addEventListener('blur', () => { eyedropperActiveInput = null; hideEyedropper(); });
+  input.addEventListener('blur', () => {
+    // Ignore blur if it's caused by focus moving to another slider (pointerdown just fired).
+    if (eyedropperPointerActive) return;
+    eyedropperActiveInput = null;
+    clearTimeout(eyedropperHideTimer);
+    hideEyedropper();
+  });
 }
 // Single shared document handlers replace per-slider document pointerup accumulation.
 document.addEventListener('pointermove', (e) => {
   if (!eyedropperActiveInput || !eyedropper.classList.contains('visible')) return;
+  eyedropperMoved = true;
   const r = eyedropperActiveInput.getBoundingClientRect();
   eyedropper.style.left = e.clientX + 'px';
   eyedropper.style.top = r.top + 'px';
 });
 document.addEventListener('pointerup', () => {
   eyedropperActiveInput = null;
-  hideEyedropper();
+  if (eyedropperMoved) {
+    // Real drag — hide immediately on release.
+    hideEyedropper();
+  } else {
+    // Quick click — delay hide so the transition can complete and the user sees it.
+    eyedropperHideTimer = setTimeout(hideEyedropper, 600);
+  }
+  eyedropperMoved = false;
 });
 // Attach to all global gradient sliders.
 document.querySelectorAll('input[type=range].grad').forEach(attachEyedropper);
