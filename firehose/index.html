@@ -409,7 +409,25 @@ function renderFieldList() {
 
 // Placeholders — implemented in later tasks
 function buildGroupedView() { return '<p style="color:var(--muted);padding:16px">Grouped mode — coming soon</p>'; }
-function buildTriageView()  { return FIELDS.map((f, i) => buildFieldRow(f, i === state.cursor)).join(''); }
+function buildTriageView() {
+  const windows = { compact: 7, comfortable: 3, focused: 1 };
+  const half = Math.floor((windows[state.density] || 3) / 2);
+  const start = Math.max(0, state.cursor - half);
+  const end   = Math.min(FIELDS.length, start + (windows[state.density] || 3));
+  const visible = FIELDS.slice(start, end);
+
+  const rows = visible.map((f, i) => {
+    const isCursor = (start + i) === state.cursor;
+    return buildFieldRow(f, isCursor);
+  });
+
+  const remaining = FIELDS.length - state.cursor - 1;
+  const progressText = `<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px">
+    ${state.cursor + 1} / ${FIELDS.length} &nbsp;·&nbsp; ${remaining} remaining
+  </div>`;
+
+  return rows.join('') + progressText;
+}
 function scrollCursorIntoView() {
   setTimeout(() => {
     const el = document.querySelector('.field-row.cursor');
