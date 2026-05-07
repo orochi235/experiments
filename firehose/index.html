@@ -208,6 +208,9 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  margin-bottom: 4px;
   border-radius: 4px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -216,19 +219,12 @@ body {
 }
 .field-row:hover { border-color: var(--border); }
 
-/* Density variants */
-.density-compact .field-row  { padding: 4px 8px; font-size: 12px; margin-bottom: 2px; }
-.density-comfortable .field-row { padding: 8px 12px; font-size: 13px; margin-bottom: 4px; }
-.density-focused .field-row  { padding: 14px 16px; font-size: 15px; margin-bottom: 8px; }
-
 /* State colors */
 .field-row.state-approved { background: rgba(72,187,120,0.08); border-color: rgba(72,187,120,0.25); }
 .field-row.state-flagged  { background: rgba(252,129,74,0.12); border-color: rgba(252,129,74,0.5); }
 .field-row.state-pending  { background: rgba(255,255,255,0.03); }
 
 .field-label { color: var(--muted); flex-shrink: 0; min-width: 180px; }
-.density-compact    .field-label { min-width: 140px; }
-.density-focused    .field-label { min-width: 220px; }
 
 .field-value { flex: 1; }
 .field-row.state-flagged .field-value { color: var(--flagged); }
@@ -459,9 +455,6 @@ const state = {
   defaultState: 'approved',
   errorVisibility: 'confidence',
   controlLayout: 'sidebar',
-  // Legacy keys (for rendering code compatibility, removed in task 6)
-  interactionMode: 'scroll-flag',
-  density: 'comfortable',
   fieldStates: {},
   cursor: 0,
   collapsedGroups: new Set(),
@@ -600,7 +593,6 @@ function renderFieldList() {
   if (hasCursor) scrollCursorIntoView();
 }
 
-// Placeholders — implemented in later tasks
 function buildGroupedView(fields) {
   const categories = [...new Set(fields.map(f => f.category))];
 
@@ -859,8 +851,10 @@ document.getElementById('field-list').addEventListener('scroll', function() {
   const scrolled = this.scrollTop > 20;
   controls.classList.toggle('collapsed-bar', scrolled);
   if (scrolled) {
-    const summary = [state.interactionMode, state.density, state.defaultState,
-      state.errorVisibility].join(' · ');
+    const summary = [
+      state.visibility, state.navigation, state.approval, state.grouping,
+      state.presentation, state.defaultState, state.errorVisibility
+    ].join(' · ');
     controls.setAttribute('data-summary', summary);
   } else {
     controls.removeAttribute('data-summary');
