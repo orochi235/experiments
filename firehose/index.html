@@ -388,7 +388,7 @@ function renderProgressBar() {
   const bar = document.getElementById('progress-bar');
   if (state.interactionMode !== 'keyboard-triage') { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
-  const pct = Math.round((state.cursor / FIELDS.length) * 100);
+  const pct = Math.round(((state.cursor + 1) / FIELDS.length) * 100);
   bar.querySelector('.fill').style.width = pct + '%';
 }
 
