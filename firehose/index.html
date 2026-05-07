@@ -670,6 +670,8 @@ document.getElementById('field-list').addEventListener('scroll', function() {
     const summary = [state.interactionMode, state.density, state.defaultState,
       state.errorVisibility].join(' · ');
     controls.setAttribute('data-summary', summary);
+  } else {
+    controls.removeAttribute('data-summary');
   }
 });
 
