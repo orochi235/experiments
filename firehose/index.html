@@ -569,7 +569,7 @@ function renderStatusBar() {
 // === PROGRESS BAR ===
 function renderProgressBar() {
   const bar = document.getElementById('progress-bar');
-  if (state.interactionMode !== 'keyboard-triage') { bar.style.display = 'none'; return; }
+  if (state.navigation === 'free') { bar.style.display = 'none'; return; }
   bar.style.display = 'block';
   const pct = Math.round(((state.cursor + 1) / FIELDS.length) * 100);
   bar.querySelector('.fill').style.width = pct + '%';
@@ -578,25 +578,30 @@ function renderProgressBar() {
 // === FIELD LIST ===
 function renderFieldList() {
   const list = document.getElementById('field-list');
-  list.className = `density-${state.density}`;
+  list.className = '';
 
-  if (state.interactionMode === 'grouped') {
-    list.innerHTML = buildGroupedView();
-  } else if (state.interactionMode === 'keyboard-triage') {
-    list.innerHTML = buildTriageView();
-    scrollCursorIntoView();
+  const hasCursor = state.navigation !== 'free';
+  const fields = getVisibleFields();
+
+  if (state.grouping === 'by-category') {
+    list.innerHTML = buildGroupedView(FIELDS); // grouping always shows all
   } else {
-    list.innerHTML = FIELDS.map(f => renderField(f, false)).join('');
+    list.innerHTML = fields.map(f => {
+      const isCursor = hasCursor && FIELDS.indexOf(f) === state.cursor;
+      return renderField(f, isCursor);
+    }).join('');
   }
+
+  if (hasCursor) scrollCursorIntoView();
 }
 
 // Placeholders — implemented in later tasks
-function buildGroupedView() {
-  const categories = [...new Set(FIELDS.map(f => f.category))];
+function buildGroupedView(fields) {
+  const categories = [...new Set(fields.map(f => f.category))];
 
   return categories.map(cat => {
-    const fields = FIELDS.filter(f => f.category === cat);
-    const flaggedCount = fields.filter(f => state.fieldStates[f.id] === 'flagged').length;
+    const catFields = fields.filter(f => f.category === cat);
+    const flaggedCount = catFields.filter(f => state.fieldStates[f.id] === 'flagged').length;
     const isCollapsed = state.collapsedGroups.has(cat);
 
     const flaggedBadge = flaggedCount > 0
@@ -606,40 +611,40 @@ function buildGroupedView() {
     return `<div class="group-section${isCollapsed ? ' collapsed' : ''}">
       <div class="group-header" data-category="${cat}" onclick="toggleGroup(this.dataset.category)">
         <span class="group-title">${cat}</span>
-        <span class="group-count">${fields.length} fields</span>
+        <span class="group-count">${catFields.length} fields</span>
         ${flaggedBadge}
         <button class="group-approve-btn" data-category="${cat}" onclick="event.stopPropagation(); approveGroup(this.dataset.category)">Approve All</button>
       </div>
       <div class="group-fields density-${state.density}">
-        ${fields.map(f => renderField(f, false)).join('')}
+        ${catFields.map(f => renderField(f, false)).join('')}
       </div>
     </div>`;
   }).join('');
-}
-function buildTriageView() {
-  const windows = { compact: 7, comfortable: 3, focused: 1 };
-  const half = Math.floor((windows[state.density] || 3) / 2);
-  const start = Math.max(0, state.cursor - half);
-  const end   = Math.min(FIELDS.length, start + (windows[state.density] || 3));
-  const visible = FIELDS.slice(start, end);
-
-  const rows = visible.map((f, i) => {
-    const isCursor = (start + i) === state.cursor;
-    return renderField(f, isCursor);
-  });
-
-  const remaining = FIELDS.length - state.cursor - 1;
-  const progressText = `<div style="text-align:center;font-size:11px;color:var(--muted);padding:8px">
-    ${state.cursor + 1} / ${FIELDS.length} &nbsp;·&nbsp; ${remaining} remaining
-  </div>`;
-
-  return rows.join('') + progressText;
 }
 function scrollCursorIntoView() {
   setTimeout(() => {
     const el = document.querySelector('.field-row.cursor');
     if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, 0);
+}
+
+function getVisibleFields() {
+  if (state.visibility === 'one') {
+    return FIELDS[state.cursor] ? [FIELDS[state.cursor]] : [];
+  }
+  if (state.visibility === 'windowed') {
+    const half = 3;
+    const start = Math.max(0, state.cursor - half);
+    const end = Math.min(FIELDS.length, start + 7);
+    return FIELDS.slice(start, end);
+  }
+  return FIELDS; // 'all'
+}
+
+function moveCursor(delta) {
+  state.cursor = Math.max(0, Math.min(FIELDS.length - 1, state.cursor + delta));
+  renderProgressBar();
+  renderFieldList();
 }
 
 // === CONTROLS ===
