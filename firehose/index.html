@@ -408,7 +408,31 @@ function renderFieldList() {
 }
 
 // Placeholders — implemented in later tasks
-function buildGroupedView() { return '<p style="color:var(--muted);padding:16px">Grouped mode — coming soon</p>'; }
+function buildGroupedView() {
+  const categories = [...new Set(FIELDS.map(f => f.category))];
+
+  return categories.map(cat => {
+    const fields = FIELDS.filter(f => f.category === cat);
+    const flaggedCount = fields.filter(f => state.fieldStates[f.id] === 'flagged').length;
+    const isCollapsed = state.collapsedGroups.has(cat);
+
+    const flaggedBadge = flaggedCount > 0
+      ? `<span class="group-flagged">⚑ ${flaggedCount}</span>`
+      : '';
+
+    return `<div class="group-section${isCollapsed ? ' collapsed' : ''}">
+      <div class="group-header" onclick="toggleGroup('${cat}')">
+        <span class="group-title">${cat}</span>
+        <span class="group-count">${fields.length} fields</span>
+        ${flaggedBadge}
+        <button class="group-approve-btn" onclick="event.stopPropagation(); approveGroup('${cat}')">Approve All</button>
+      </div>
+      <div class="group-fields density-${state.density}">
+        ${fields.map(f => buildFieldRow(f, false)).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
 function buildTriageView() {
   const windows = { compact: 7, comfortable: 3, focused: 1 };
   const half = Math.floor((windows[state.density] || 3) / 2);
@@ -528,6 +552,23 @@ function resetFieldStates() {
   initFieldStates();
   state.cursor = 0;
   render();
+}
+
+function toggleGroup(category) {
+  if (state.collapsedGroups.has(category)) {
+    state.collapsedGroups.delete(category);
+  } else {
+    state.collapsedGroups.add(category);
+  }
+  renderFieldList();
+}
+
+function approveGroup(category) {
+  FIELDS.filter(f => f.category === category).forEach(f => {
+    if (state.fieldStates[f.id] === 'pending') state.fieldStates[f.id] = 'approved';
+  });
+  renderFieldList();
+  renderStatusBar();
 }
 
 function toggleFloating() {
