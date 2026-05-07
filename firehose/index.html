@@ -301,7 +301,11 @@ body {
 
 <script>
 // === DATA ===
-const FIELDS = [
+const DATASETS = [
+ {
+  id: 'legal',
+  name: 'Legal Case',
+  fields: [
   // Case Info
   { id: 1,  category: 'Case Info',   label: 'Case Number',               value: '2024-CV-08841',                       confidence: 0.99 },
   { id: 2,  category: 'Case Info',   label: 'Court',                     value: 'U.S. District Court, S.D.N.Y.',       confidence: 0.96 },
@@ -356,10 +360,67 @@ const FIELDS = [
   { id: 46, category: 'Documents',   label: 'Motion for Summary Judgment', value: 'DOC-2025-00112',                    confidence: 0.90 },
   { id: 47, category: 'Documents',   label: 'Opposition Brief',          value: 'DOC-2025-00158',                      confidence: 0.89 },
   { id: 48, category: 'Documents',   label: 'Reply Brief',               value: 'DOC-2025-00203',                      confidence: 0.91 },
-];
+ ]}, // end legal
+ {
+  id: 'listings',
+  name: 'Rental Listings',
+  fields: [
+  // Property
+  { id: 1,  category: 'Property',   label: 'Listing Title',             value: 'Sunny 2BR in Mission District',       confidence: 0.97 },
+  { id: 2,  category: 'Property',   label: 'Property Type',             value: 'Apartment',                           confidence: 0.95 },
+  { id: 3,  category: 'Property',   label: 'Bedrooms',                  value: '3',                                   confidence: 0.58 },
+  { id: 4,  category: 'Property',   label: 'Bathrooms',                 value: '1.5',                                 confidence: 0.93 },
+  { id: 5,  category: 'Property',   label: 'Square Footage',            value: '850 sq ft',                           confidence: 0.89 },
+  { id: 6,  category: 'Property',   label: 'Floor',                     value: '3rd',                                 confidence: 0.91 },
+  { id: 7,  category: 'Property',   label: 'Year Built',                value: '1962',                                confidence: 0.87 },
+  { id: 8,  category: 'Property',   label: 'Laundry',                   value: 'In-unit washer/dryer',                confidence: 0.94 },
+  // Location
+  { id: 9,  category: 'Location',   label: 'Neighborhood',              value: 'Mission District',                    confidence: 0.96 },
+  { id: 10, category: 'Location',   label: 'Street Address',            value: '2847 Valencia St',                    confidence: 0.91 },
+  { id: 11, category: 'Location',   label: 'City',                      value: 'San Francisco',                       confidence: 0.99 },
+  { id: 12, category: 'Location',   label: 'State',                     value: 'CA',                                  confidence: 0.99 },
+  { id: 13, category: 'Location',   label: 'ZIP Code',                  value: '94110',                               confidence: 0.97 },
+  { id: 14, category: 'Location',   label: 'Cross Street',              value: '24th & Valencia',                     confidence: 0.88 },
+  { id: 15, category: 'Location',   label: 'Walk Score',                value: '98',                                  confidence: 0.82 },
+  { id: 16, category: 'Location',   label: 'Transit Score',             value: '73',                                  confidence: 0.79 },
+  // Pricing
+  { id: 17, category: 'Pricing',    label: 'Monthly Rent',              value: '$3,200',                              confidence: 0.97 },
+  { id: 18, category: 'Pricing',    label: 'Security Deposit',          value: '$6,400',                              confidence: 0.91 },
+  { id: 19, category: 'Pricing',    label: 'Application Fee',           value: '$75',                                 confidence: 0.93 },
+  { id: 20, category: 'Pricing',    label: 'Utilities Included',        value: 'Water, Trash',                        confidence: 0.86 },
+  { id: 21, category: 'Pricing',    label: 'Parking',                   value: '$150/month (optional)',               confidence: 0.88 },
+  { id: 22, category: 'Pricing',    label: 'Available Date',            value: 'February 1, 2025',                   confidence: 0.64 },
+  // Amenities
+  { id: 23, category: 'Amenities',  label: 'Heating',                   value: 'Forced air gas',                      confidence: 0.90 },
+  { id: 24, category: 'Amenities',  label: 'Cooling',                   value: 'Window AC (1 unit)',                  confidence: 0.85 },
+  { id: 25, category: 'Amenities',  label: 'Flooring',                  value: 'Hardwood',                            confidence: 0.92 },
+  { id: 26, category: 'Amenities',  label: 'Kitchen',                   value: 'Stainless appliances, gas range',     confidence: 0.89 },
+  { id: 27, category: 'Amenities',  label: 'Storage',                   value: 'In-unit closets + basement cage',     confidence: 0.83 },
+  { id: 28, category: 'Amenities',  label: 'Outdoor Space',             value: 'Shared backyard',                     confidence: 0.87 },
+  { id: 29, category: 'Amenities',  label: 'Internet',                  value: 'Fiber pre-wired (not included)',       confidence: 0.81 },
+  { id: 30, category: 'Amenities',  label: 'Bike Storage',              value: 'Yes, secured room',                   confidence: 0.84 },
+  // Rules
+  { id: 31, category: 'Rules',      label: 'Lease Term',                value: '12 months',                           confidence: 0.96 },
+  { id: 32, category: 'Rules',      label: 'Pets',                      value: 'Cats OK, no dogs',                    confidence: 0.91 },
+  { id: 33, category: 'Rules',      label: 'Smoking',                   value: 'No smoking',                          confidence: 0.98 },
+  { id: 34, category: 'Rules',      label: 'Subletting',                value: 'Not permitted',                       confidence: 0.89 },
+  { id: 35, category: 'Rules',      label: 'Guests',                    value: 'Max 14 consecutive nights',           confidence: 0.78 },
+  { id: 36, category: 'Rules',      label: 'Renters Insurance',         value: 'Required',                            confidence: 0.93 },
+  // Contact
+  { id: 37, category: 'Contact',    label: 'Listed By',                 value: 'Urban Nest Properties',               confidence: 0.94 },
+  { id: 38, category: 'Contact',    label: 'Agent Name',                value: 'Priya Mehta',                         confidence: 0.92 },
+  { id: 39, category: 'Contact',    label: 'Agent Phone',               value: '(415) 555-0194',                      confidence: 0.88 },
+  { id: 40, category: 'Contact',    label: 'Agent Email',               value: 'pmehta@urbannest.com',                confidence: 0.56 },
+  { id: 41, category: 'Contact',    label: 'Showing Availability',      value: 'Weekdays 10am–6pm',                   confidence: 0.85 },
+  { id: 42, category: 'Contact',    label: 'Listing URL',               value: 'urbannest.com/listings/2847val',      confidence: 0.90 },
+ ]},
+]; // end DATASETS
+
+let FIELDS = DATASETS[0].fields;
 
 // === STATE ===
 const state = {
+  datasetId: 'legal',
   interactionMode: 'scroll-flag',
   density: 'comfortable',
   defaultState: 'approved',
@@ -501,6 +562,7 @@ function buildAxisGroup(key, label, options) {
 
 function buildControlsHTML() {
   return [
+    buildAxisGroup('datasetId', 'Dataset', DATASETS.map(d => ({v: d.id, l: d.name}))),
     buildAxisGroup('interactionMode', 'Interaction', [
       {v:'scroll-flag', l:'Scroll + Flag'},
       {v:'keyboard-triage', l:'Keyboard Triage'},
@@ -567,7 +629,13 @@ function cycleFieldState(id) {
 }
 
 function onAxisChange(key, value) {
-  if (key === 'defaultState') {
+  if (key === 'datasetId') {
+    state[key] = value;
+    FIELDS = DATASETS.find(d => d.id === value).fields;
+    state.cursor = 0;
+    state.collapsedGroups = new Set();
+    initFieldStates();
+  } else if (key === 'defaultState') {
     state[key] = value;
     initFieldStates();
   } else {
