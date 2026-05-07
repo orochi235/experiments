@@ -173,6 +173,35 @@ body {
 }
 .reset-btn:hover { background: rgba(255,255,255,0.1); }
 
+/* Topbar: hide reset button (no room) and make axis groups inline */
+#app.layout-topbar .reset-btn { display: none; }
+#app.layout-topbar .axis-group { flex-direction: row; align-items: center; flex-wrap: nowrap; }
+#app.layout-topbar .radio-label { font-size: 11px; }
+#app.layout-topbar .axis-label { font-size: 9px; white-space: nowrap; }
+
+/* Topbar sticky collapse: when field-list scrolls, topbar shrinks to summary */
+#app.layout-topbar #controls {
+  overflow: hidden;
+  transition: max-height 0.2s, padding 0.2s;
+  max-height: 80px;
+}
+#app.layout-topbar #controls.collapsed-bar {
+  max-height: 32px;
+  padding: 6px 16px;
+  overflow: hidden;
+}
+#app.layout-topbar #controls.collapsed-bar .axis-group { display: none; }
+#app.layout-topbar #controls.collapsed-bar::before {
+  content: attr(data-summary);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Floating drawer sizing */
+#floating-drawer {
+  max-width: min(700px, 95vw);
+}
+
 /* Field rows */
 .field-row {
   display: flex;
@@ -630,6 +659,20 @@ function triageBack() {
 
 // === BOOT ===
 initFieldStates();
+
+// Topbar collapse on scroll
+document.getElementById('field-list').addEventListener('scroll', function() {
+  const controls = document.getElementById('controls');
+  if (state.controlLayout !== 'topbar') return;
+  const scrolled = this.scrollTop > 20;
+  controls.classList.toggle('collapsed-bar', scrolled);
+  if (scrolled) {
+    const summary = [state.interactionMode, state.density, state.defaultState,
+      state.errorVisibility].join(' · ');
+    controls.setAttribute('data-summary', summary);
+  }
+});
+
 render();
 </script>
 </body>
