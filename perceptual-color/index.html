@@ -182,6 +182,7 @@
   [data-theme="dark"] .oog-list .oog-item .ch-b { color: #ADC2FF; }
   [data-theme="dark"] .legend { color: #5E6371; }
 
+  h1 { font: 700 1.6rem/1.1 'Oswald', monospace; color: var(--cs-fg); }
   h2 { font: 700 0.935rem/1.2 'Oswald', monospace; color: var(--cs-fg); margin-bottom: 6px; }
   .help { font-size: 0.7rem; color: var(--cs-fg-faint); line-height: 1.5; max-width: 760px; margin-bottom: 12px; }
 
@@ -332,7 +333,7 @@
   /* Per-thumb readouts shown below each multi-thumb. */
   .mt-readout {
     position: absolute;
-    bottom: -1.05rem;
+    bottom: calc(-1.05rem + 2px);
     transform: translateX(-50%);
     font: 500 0.55rem/1 'Oswald', 'IBM Plex Mono', monospace;
     color: var(--cs-fg-muted);
@@ -472,9 +473,9 @@
   }
   .hue-marker.selected { border-color: #3366FF; box-shadow: 0 0 0 2px rgba(51,102,255,0.35); }
 
-  #swatches-row { display: flex; gap: 4px; margin-top: 8px; }
+  #swatches-row { display: flex; gap: 4px; }
   .swatch {
-    flex: 1; height: 14px; border: 1px solid #888; border-radius: 3px;
+    flex: 1; height: 56px; border: 1px solid #888; border-radius: 3px;
     cursor: grab;
   }
   .swatch:active { cursor: grabbing; }
@@ -562,31 +563,30 @@
   <div class="help">
     All families share these. Lightness maps from index via a power curve. Chroma is a triangle that peaks at a configurable position along the L range and tapers to the two endpoints. Hue can shift linearly across the scale. Click any chip below to copy its hex.
   </div>
-  <div class="row-inline" style="margin-bottom: 12px; justify-content: space-between;">
-    <div class="row-inline" style="flex: 1;">
-      <label style="min-width: 90px;">Color model</label>
-      <select id="model">
+  <div class="row-inline" style="margin-bottom: 12px; align-items: center; gap: 8px;">
+    <button id="undoBtn" title="Undo (Cmd/Ctrl+Z)" disabled>↶ Undo</button>
+    <button id="redoBtn" title="Redo (Shift+Cmd/Ctrl+Z)" disabled>↷ Redo</button>
+    <div style="width: 1px; align-self: stretch; background: var(--cs-border); margin: 0 4px;"></div>
+    <label style="min-width: 90px;">Color model</label>
+    <select id="model">
       <option value="oklch" selected>OKLCH (perceptual, recommended)</option>
       <option value="lch">LCH (CIE Lab, perceptual-ish)</option>
       <option value="hsl">HSL (browser-native, NOT perceptual)</option>
     </select>
-    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-left: 12px;">
+    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; margin-left: 4px;">
       <input type="checkbox" id="gamutWarn" checked>
       <span>Out-of-gamut warning</span>
     </label>
-    <select id="gamut" style="flex: 0 0 160px;">
-      <option value="srgb" selected>sRGB</option>
-      <option value="p3">Display P3</option>
-      <option value="adobe">Adobe RGB (1998)</option>
-      <option value="rec2020">Rec. 2020 (HDR)</option>
-    </select>
-    </div>
-    <div class="row-inline" style="flex: 0 0 auto; gap: 6px;">
-      <button id="undoBtn" title="Undo (Cmd/Ctrl+Z)" disabled>↶ Undo</button>
-      <button id="redoBtn" title="Redo (Shift+Cmd/Ctrl+Z)" disabled>↷ Redo</button>
+    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-left: 4px;">
       <canvas id="gamutDiagram" width="200" height="200"
         style="width: 64px; height: 64px; border-radius: 4px; background: transparent;"
         title="CIE 1931 chromaticity — colors painted at each xy point, selected gamut outlined"></canvas>
+      <select id="gamut" style="width: 64px; font-size: 0.6rem;">
+        <option value="srgb" selected>sRGB</option>
+        <option value="p3">P3</option>
+        <option value="adobe">Adobe RGB</option>
+        <option value="rec2020">Rec. 2020</option>
+      </select>
     </div>
   </div>
 
@@ -724,13 +724,15 @@
   </div>
 </div>
 
-<div class="panel">
+<div class="panel" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
   <h2>Categorical / chart colors</h2>
   <div style="display: flex; gap: 16px; align-items: flex-start;">
     <div class="help" style="flex: 1; margin: 0;">
       A separate set of standalone hues — for charts, multi-series visualizations, or anywhere you need a small set of distinct colors that aren't part of a graded family. Each marker is one color. Drag horizontally to change its hue. Hold <b>Shift</b> while dragging to translate all hues together. Click empty space on the band to add a marker. Drag a swatch onto another to reorder. The mid-L / peak-C from the shared params is used to render the swatches.
     </div>
-    <div id="swatches-row" style="flex: 1; min-width: 240px; margin: 0;"></div>
+    <div style="flex: 1; min-width: 240px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);">
+      <div id="swatches-row"></div>
+    </div>
   </div>
   <div id="hue-band-wrap" style="margin-top: 12px;">
     <div id="hue-band"></div>
@@ -744,7 +746,8 @@
 </div>
 
 <div style="display:flex; align-items:center; gap:12px; margin-top: 4px;">
-  <h2 style="margin: 0;">Families (graded scales)</h2>
+  <h1 style="margin: 0;">Families (graded scales)</h1>
+  <div style="flex:1"></div>
   <button id="addFamily">+ Add family</button>
   <button id="copyParams">Copy params (CSS)</button>
 </div>
@@ -1613,7 +1616,7 @@ function makeFamilyEl(fam, i) {
   // ends right where the chip list ends. Sat + L± share the remaining space.
   const chipW = 64, chipGap = 6;
   const chipRowWidth = params.indices.length * chipW + (params.indices.length - 1) * chipGap;
-  const lblStyle = `font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: #676E83;`;
+  const lblStyle = `font: 500 0.6rem/1 'Oswald', monospace; color: #676E83;`;
   const valStyle = `font: 500 0.7rem/1 'Oswald', 'IBM Plex Mono', monospace; color: #161921; text-align: right; font-variant-numeric: tabular-nums;`;
   el.innerHTML = `
     <div class="family-head">
@@ -2322,43 +2325,58 @@ function eyedropperColorFor(input) {
   }
   return { L, C, H };
 }
-function showEyedropper(input) {
-  updateEyedropper(input);
+let eyedropperActiveInput = null;
+function showEyedropper(input, clientX) {
+  updateEyedropper(input, clientX);
   eyedropper.classList.add('visible');
 }
 function hideEyedropper() {
   eyedropper.classList.remove('visible');
 }
-function updateEyedropper(input) {
+function updateEyedropperColor(input) {
+  try {
+    const result = eyedropperColorFor(input);
+    if (result.gradient) {
+      eyedropper.style.background = result.gradient;
+    } else {
+      const lin = oklchToLinearRgb(result.L, result.C, result.H);
+      eyedropper.style.background = linearToHex(lin.r, lin.g, lin.b);
+    }
+  } catch (_) {}
+}
+function updateEyedropper(input, clientX) {
   const r = input.getBoundingClientRect();
-  const t = (parseFloat(input.value) - +input.min) / (+input.max - +input.min);
-  const thumbW = 14;
-  const usable = r.width - thumbW;
-  const x = r.left + thumbW / 2 + t * usable;
-  const y = r.top;
+  const x = clientX !== undefined ? clientX : (() => {
+    const t = (parseFloat(input.value) - +input.min) / (+input.max - +input.min);
+    return r.left + 7 + t * (r.width - 14);
+  })();
   eyedropper.style.left = x + 'px';
-  eyedropper.style.top = y + 'px';
-  const result = eyedropperColorFor(input);
-  if (result.gradient) {
-    eyedropper.style.background = result.gradient;
-  } else {
-    const lin = oklchToLinearRgb(result.L, result.C, result.H);
-    eyedropper.style.background = linearToHex(lin.r, lin.g, lin.b);
-  }
+  eyedropper.style.top = r.top + 'px';
+  updateEyedropperColor(input);
 }
 function attachEyedropper(input) {
-  input.addEventListener('pointerdown', () => showEyedropper(input));
-  input.addEventListener('input', () => {
-    if (eyedropper.classList.contains('visible')) updateEyedropper(input);
+  input.addEventListener('pointerdown', (e) => {
+    eyedropperActiveInput = input;
+    showEyedropper(input, e.clientX);
   });
-  // Hide on release. Pointerup may fire outside the element if drag wandered;
-  // listen on document so we always catch it.
-  const releaseHandler = () => hideEyedropper();
-  input.addEventListener('pointerup', releaseHandler);
-  document.addEventListener('pointerup', releaseHandler);
+  // During drag, pointermove handles position; just keep color current on value changes.
+  input.addEventListener('input', () => {
+    if (eyedropper.classList.contains('visible')) updateEyedropperColor(input);
+  });
   input.addEventListener('keydown', () => showEyedropper(input));
-  input.addEventListener('blur', hideEyedropper);
+  input.addEventListener('blur', () => { eyedropperActiveInput = null; hideEyedropper(); });
 }
+// Single shared document handlers replace per-slider document pointerup accumulation.
+document.addEventListener('pointermove', (e) => {
+  if (!eyedropperActiveInput || !eyedropper.classList.contains('visible')) return;
+  const r = eyedropperActiveInput.getBoundingClientRect();
+  eyedropper.style.left = e.clientX + 'px';
+  eyedropper.style.top = r.top + 'px';
+});
+document.addEventListener('pointerup', () => {
+  eyedropperActiveInput = null;
+  hideEyedropper();
+});
 // Attach to all global gradient sliders.
 document.querySelectorAll('input[type=range].grad').forEach(attachEyedropper);
 // Family hue sliders are dynamic — attached in makeFamilyEl.
