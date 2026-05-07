@@ -820,8 +820,8 @@ function handleKeyDown(e) {
 
   // Keyboard approval
   if (state.approval === 'keyboard') {
-    if (e.key === ' ')                    { applyApproval('approved'); e.preventDefault(); return; }
-    if (e.key === 'f' || e.key === 'F')  { applyApproval('flagged');  e.preventDefault(); return; }
+    if (e.key === ' ')                                { applyApproval('approved'); e.preventDefault(); return; }
+    if ((e.key === 'f' || e.key === 'F') && !e.shiftKey)  { applyApproval('flagged');  e.preventDefault(); return; }
   }
 
   // Global shortcuts (always active)
