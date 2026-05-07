@@ -734,8 +734,12 @@ function render() {
 
 // === EVENT HANDLERS ===
 function onFieldClick(id) {
-  if (state.interactionMode === 'keyboard-triage') return; // keyboard only in triage
-  cycleFieldState(id);
+  if (state.approval === 'keyboard') return;
+  // swipe placeholder: same behavior as click-cycle in the lab
+  if (state.approval === 'click-cycle' || state.approval === 'swipe') {
+    cycleFieldState(id);
+  }
+  // bulk: individual field clicks do nothing; only group/global buttons work
 }
 
 function cycleFieldState(id) {
@@ -743,6 +747,19 @@ function cycleFieldState(id) {
   state.fieldStates[id] = next[state.fieldStates[id]];
   renderFieldList();
   renderStatusBar();
+}
+
+function applyApproval(newState) {
+  const field = FIELDS[state.cursor];
+  if (!field) return;
+  state.fieldStates[field.id] = newState;
+  // auto-advance: keyboard approval or auto navigation always advance
+  if (state.approval === 'keyboard' || state.navigation === 'auto') {
+    moveCursor(1);
+  } else {
+    renderFieldList();
+    renderStatusBar();
+  }
 }
 
 function onAxisChange(key, value) {
@@ -793,19 +810,23 @@ function toggleFloating() {
 // === KEYBOARD ===
 document.addEventListener('keydown', handleKeyDown);
 function handleKeyDown(e) {
-  // Don't fire if focus is on an input
   if (e.target.tagName === 'INPUT') return;
 
-  if (state.interactionMode === 'scroll-flag') {
-    if (e.key === 'a' || e.key === 'A') { approveAll(); e.preventDefault(); }
-    if (e.key === 'F' && e.shiftKey) { jumpToNextFlagged(); e.preventDefault(); }
+  // Cursor movement (cursor + auto navigation)
+  if (state.navigation === 'cursor' || state.navigation === 'auto') {
+    if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') { moveCursor(1);  e.preventDefault(); return; }
+    if (e.key === 'ArrowUp'   || e.key === 'k' || e.key === 'K') { moveCursor(-1); e.preventDefault(); return; }
   }
-  if (state.interactionMode === 'keyboard-triage') {
-    if (e.key === ' ')           { triageAction('approved'); e.preventDefault(); }
-    if (e.key === 'f' || e.key === 'F') { triageAction('flagged');  e.preventDefault(); }
-    if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') { triageAdvance(); e.preventDefault(); }
-    if (e.key === 'ArrowUp'   || e.key === 'k' || e.key === 'K') { triageBack();    e.preventDefault(); }
+
+  // Keyboard approval
+  if (state.approval === 'keyboard') {
+    if (e.key === ' ')                    { applyApproval('approved'); e.preventDefault(); return; }
+    if (e.key === 'f' || e.key === 'F')  { applyApproval('flagged');  e.preventDefault(); return; }
   }
+
+  // Global shortcuts (always active)
+  if (e.key === 'a' || e.key === 'A') { approveAll();        e.preventDefault(); }
+  if (e.key === 'F' && e.shiftKey)    { jumpToNextFlagged(); e.preventDefault(); }
 }
 
 function approveAll() {
@@ -821,25 +842,6 @@ function jumpToNextFlagged() {
   if (idx === -1) return;
   const rows = document.querySelectorAll('.field-row');
   if (rows[idx]) rows[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
-}
-
-function triageAction(newState) {
-  const field = FIELDS[state.cursor];
-  if (!field) return;
-  state.fieldStates[field.id] = newState;
-  triageAdvance();
-}
-
-function triageAdvance() {
-  if (state.cursor < FIELDS.length - 1) state.cursor++;
-  renderProgressBar();
-  renderFieldList();
-}
-
-function triageBack() {
-  if (state.cursor > 0) state.cursor--;
-  renderProgressBar();
-  renderFieldList();
 }
 
 // === BOOT ===
