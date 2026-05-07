@@ -346,9 +346,232 @@ function initFieldStates() {
   FIELDS.forEach(f => { state.fieldStates[f.id] = state.defaultState; });
 }
 
+// === HELPERS ===
+function heatColor(confidence) {
+  const t = Math.max(0, (0.75 - confidence) / 0.35); // 0 at conf≥0.75, 1 at conf=0.4
+  return `rgba(252, 129, 74, ${(t * 0.28).toFixed(2)})`;
+}
+
+function buildFieldRow(field, isCursor) {
+  const s = state.fieldStates[field.id];
+  const heatStyle = state.errorVisibility === 'heat'
+    ? `background-color:${heatColor(field.confidence)};`
+    : '';
+  const pct = Math.round(field.confidence * 100);
+  const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
+  const badge = state.errorVisibility === 'confidence'
+    ? `<span class="${badgeClass}">${pct}%</span>`
+    : '';
+  const flag = s === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
+  const cursorClass = isCursor ? ' cursor' : '';
+  return `<div class="field-row state-${s}${cursorClass}" data-id="${field.id}" style="${heatStyle}" onclick="onFieldClick(${field.id})">
+    <span class="field-label">${field.label}</span>
+    <span class="field-value">${field.value}</span>
+    ${badge}${flag}
+  </div>`;
+}
+
+// === STATUS BAR ===
+function renderStatusBar() {
+  const approved = FIELDS.filter(f => state.fieldStates[f.id] === 'approved').length;
+  const flagged  = FIELDS.filter(f => state.fieldStates[f.id] === 'flagged').length;
+  const pending  = FIELDS.filter(f => state.fieldStates[f.id] === 'pending').length;
+  const parts = [`${FIELDS.length} fields`];
+  if (flagged)  parts.push(`<span style="color:var(--flagged)">${flagged} flagged</span>`);
+  if (approved) parts.push(`<span style="color:var(--approved)">${approved} approved</span>`);
+  if (pending)  parts.push(`${pending} pending`);
+  document.getElementById('status-bar').innerHTML = parts.join(' · ');
+}
+
+// === PROGRESS BAR ===
+function renderProgressBar() {
+  const bar = document.getElementById('progress-bar');
+  if (state.interactionMode !== 'keyboard-triage') { bar.style.display = 'none'; return; }
+  bar.style.display = 'block';
+  const pct = Math.round((state.cursor / FIELDS.length) * 100);
+  bar.querySelector('.fill').style.width = pct + '%';
+}
+
+// === FIELD LIST ===
+function renderFieldList() {
+  const list = document.getElementById('field-list');
+  list.className = `density-${state.density}`;
+
+  if (state.interactionMode === 'grouped') {
+    list.innerHTML = buildGroupedView();
+  } else if (state.interactionMode === 'keyboard-triage') {
+    list.innerHTML = buildTriageView();
+    scrollCursorIntoView();
+  } else {
+    list.innerHTML = FIELDS.map(f => buildFieldRow(f, false)).join('');
+  }
+}
+
+// Placeholders — implemented in later tasks
+function buildGroupedView() { return '<p style="color:var(--muted);padding:16px">Grouped mode — coming soon</p>'; }
+function buildTriageView()  { return FIELDS.map((f, i) => buildFieldRow(f, i === state.cursor)).join(''); }
+function scrollCursorIntoView() {
+  setTimeout(() => {
+    const el = document.querySelector('.field-row.cursor');
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 0);
+}
+
+// === CONTROLS ===
+function buildAxisGroup(key, label, options) {
+  return `<div class="axis-group">
+    <div class="axis-label">${label}</div>
+    ${options.map(o => `<label class="radio-label">
+      <input type="radio" name="${key}" value="${o.v}" ${state[key] === o.v ? 'checked' : ''}
+        onchange="onAxisChange('${key}','${o.v}')"> ${o.l}
+    </label>`).join('')}
+  </div>`;
+}
+
+function buildControlsHTML() {
+  return [
+    buildAxisGroup('interactionMode', 'Interaction', [
+      {v:'scroll-flag', l:'Scroll + Flag'},
+      {v:'keyboard-triage', l:'Keyboard Triage'},
+      {v:'grouped', l:'Grouped'},
+    ]),
+    buildAxisGroup('density', 'Density', [
+      {v:'compact', l:'Compact'},
+      {v:'comfortable', l:'Comfortable'},
+      {v:'focused', l:'Focused'},
+    ]),
+    buildAxisGroup('defaultState', 'Default State', [
+      {v:'approved', l:'All Approved'},
+      {v:'pending', l:'All Pending'},
+    ]),
+    buildAxisGroup('errorVisibility', 'Error Visibility', [
+      {v:'none', l:'None'},
+      {v:'confidence', l:'Confidence'},
+      {v:'heat', l:'Color Heat'},
+    ]),
+    buildAxisGroup('controlLayout', 'Panel Layout', [
+      {v:'sidebar', l:'Sidebar'},
+      {v:'topbar', l:'Top Bar'},
+      {v:'floating', l:'Floating'},
+    ]),
+    `<button class="reset-btn" onclick="resetFieldStates()">Reset field states</button>`,
+  ].join('');
+}
+
+function renderControls() {
+  document.getElementById('controls').innerHTML = buildControlsHTML();
+  // Floating drawer gets the same controls
+  const drawer = document.getElementById('floating-drawer');
+  if (drawer) drawer.innerHTML = buildControlsHTML();
+}
+
+// === LAYOUT ===
+function applyLayout() {
+  const app = document.getElementById('app');
+  app.className = `layout-${state.controlLayout}`;
+  const fp = document.getElementById('floating-panel');
+  fp.style.display = state.controlLayout === 'floating' ? 'block' : 'none';
+}
+
+// === RENDER ===
+function render() {
+  applyLayout();
+  renderControls();
+  renderStatusBar();
+  renderProgressBar();
+  renderFieldList();
+}
+
+// === EVENT HANDLERS ===
+function onFieldClick(id) {
+  if (state.interactionMode === 'keyboard-triage') return; // keyboard only in triage
+  cycleFieldState(id);
+}
+
+function cycleFieldState(id) {
+  const next = { pending: 'approved', approved: 'flagged', flagged: 'pending' };
+  state.fieldStates[id] = next[state.fieldStates[id]];
+  renderFieldList();
+  renderStatusBar();
+}
+
+function onAxisChange(key, value) {
+  if (key === 'defaultState') {
+    state[key] = value;
+    initFieldStates();
+  } else {
+    state[key] = value;
+    if (key === 'interactionMode') state.cursor = 0;
+  }
+  render();
+}
+
+function resetFieldStates() {
+  initFieldStates();
+  state.cursor = 0;
+  render();
+}
+
+function toggleFloating() {
+  state.floatingOpen = !state.floatingOpen;
+  document.getElementById('floating-drawer').classList.toggle('open', state.floatingOpen);
+}
+
+// === KEYBOARD ===
+document.addEventListener('keydown', handleKeyDown);
+function handleKeyDown(e) {
+  // Don't fire if focus is on an input
+  if (e.target.tagName === 'INPUT') return;
+
+  if (state.interactionMode === 'scroll-flag') {
+    if (e.key === 'a' || e.key === 'A') { approveAll(); e.preventDefault(); }
+    if (e.key === 'F' && e.shiftKey) { jumpToNextFlagged(); e.preventDefault(); }
+  }
+  if (state.interactionMode === 'keyboard-triage') {
+    if (e.key === ' ')           { triageAction('approved'); e.preventDefault(); }
+    if (e.key === 'f' || e.key === 'F') { triageAction('flagged');  e.preventDefault(); }
+    if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'J') { triageAdvance(); e.preventDefault(); }
+    if (e.key === 'ArrowUp'   || e.key === 'k' || e.key === 'K') { triageBack();    e.preventDefault(); }
+  }
+}
+
+function approveAll() {
+  FIELDS.forEach(f => {
+    if (state.fieldStates[f.id] === 'pending') state.fieldStates[f.id] = 'approved';
+  });
+  renderFieldList();
+  renderStatusBar();
+}
+
+function jumpToNextFlagged() {
+  const idx = FIELDS.findIndex(f => state.fieldStates[f.id] === 'flagged');
+  if (idx === -1) return;
+  const rows = document.querySelectorAll('.field-row');
+  if (rows[idx]) rows[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+function triageAction(newState) {
+  const field = FIELDS[state.cursor];
+  if (!field) return;
+  state.fieldStates[field.id] = newState;
+  triageAdvance();
+}
+
+function triageAdvance() {
+  if (state.cursor < FIELDS.length - 1) state.cursor++;
+  renderProgressBar();
+  renderFieldList();
+}
+
+function triageBack() {
+  if (state.cursor > 0) state.cursor--;
+  renderProgressBar();
+  renderFieldList();
+}
+
 // === BOOT ===
 initFieldStates();
-// render() will be added in Task 2
+render();
 </script>
 </body>
 </html>
