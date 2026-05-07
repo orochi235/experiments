@@ -594,7 +594,7 @@ const state = {
   presentation: 'row',      // 'row' | 'card' | 'columns'
   defaultState: 'approved',
   errorVisibility: 'confidence',
-  confidenceRole: 'neutral', // 'helpful' | 'neutral' | 'harmful'
+  confidenceRole: 'neutral', // 'helpful' | 'neutral' | 'inimical'
   controlLayout: 'sidebar',
   fieldStates: {},
   cursor: 0,
@@ -612,9 +612,9 @@ function initFieldStates() {
   });
 }
 
-// Returns the confidence value to display — harmful mode shows inflated scores
+// Returns the confidence value to display — inimical mode shows inflated scores
 function displayedConfidence(field) {
-  if (state.confidenceRole === 'harmful') {
+  if (state.confidenceRole === 'inimical') {
     return 0.90 + (field.id % 10) * 0.01; // 90–99%, always looks high
   }
   return field.confidence;
@@ -876,7 +876,7 @@ function buildControlsHTML(prefix = '') {
     buildAxisGroup('confidenceRole', 'Confidence Role', [
       {v:'helpful', l:'Helpful'},
       {v:'neutral', l:'Neutral'},
-      {v:'harmful', l:'Harmful'},
+      {v:'inimical', l:'Inimical'},
     ], prefix),
     buildAxisGroup('controlLayout', 'Panel Layout', [
       {v:'sidebar',  l:'Sidebar'},
