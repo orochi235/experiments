@@ -183,7 +183,30 @@ body {
   color: var(--text-secondary);
 }
 .radio-label:hover { color: var(--text); }
-.radio-label input { accent-color: var(--accent); }
+.radio-label input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--gray-200);
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: all 0.12s;
+  background: white;
+}
+.radio-label input[type="radio"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.radio-label:has(input:checked) {
+  color: var(--accent);
+  font-weight: 600;
+  background: var(--accent-bg);
+  border-radius: 4px;
+  padding: 2px 6px 2px 4px;
+  margin-left: -4px;
+}
 
 .reset-btn {
   margin-top: auto;
@@ -701,71 +724,70 @@ function moveCursor(delta) {
 }
 
 // === CONTROLS ===
-function buildAxisGroup(key, label, options) {
+function buildAxisGroup(key, label, options, prefix = '') {
   return `<div class="axis-group">
     <div class="axis-label">${label}</div>
     ${options.map(o => `<label class="radio-label">
-      <input type="radio" name="${key}" value="${o.v}" ${state[key] === o.v ? 'checked' : ''}
+      <input type="radio" name="${prefix}${key}" value="${o.v}" ${state[key] === o.v ? 'checked' : ''}
         onchange="onAxisChange('${key}','${o.v}')"> ${o.l}
     </label>`).join('')}
   </div>`;
 }
 
-function buildControlsHTML() {
+function buildControlsHTML(prefix = '') {
   return [
-    buildAxisGroup('datasetId', 'Dataset', DATASETS.map(d => ({v: d.id, l: d.name}))),
+    buildAxisGroup('datasetId', 'Dataset', DATASETS.map(d => ({v: d.id, l: d.name})), prefix),
     buildAxisGroup('visibility', 'Visibility', [
       {v:'all',      l:'All'},
       {v:'windowed', l:'Windowed'},
       {v:'one',      l:'One'},
-    ]),
+    ], prefix),
     buildAxisGroup('navigation', 'Navigation', [
       {v:'free',   l:'Free'},
       {v:'cursor', l:'Cursor'},
       {v:'auto',   l:'Auto'},
-    ]),
+    ], prefix),
     buildAxisGroup('approval', 'Approval', [
       {v:'click-cycle', l:'Click-cycle'},
       {v:'keyboard',    l:'Keyboard'},
       {v:'swipe',       l:'Swipe'},
       {v:'bulk',        l:'Bulk'},
-    ]),
+    ], prefix),
     buildAxisGroup('grouping', 'Grouping', [
       {v:'flat',        l:'Flat'},
       {v:'by-category', l:'By Category'},
-    ]),
+    ], prefix),
     buildAxisGroup('context', 'Context', [
       {v:'none',      l:'None'},
       {v:'neighbors', l:'Neighbors'},
       {v:'source',    l:'Source'},
-    ]),
+    ], prefix),
     buildAxisGroup('presentation', 'Presentation', [
       {v:'row',  l:'Row'},
       {v:'card', l:'Card'},
-    ]),
+    ], prefix),
     buildAxisGroup('defaultState', 'Default State', [
       {v:'approved', l:'All Approved'},
       {v:'pending',  l:'All Pending'},
-    ]),
+    ], prefix),
     buildAxisGroup('errorVisibility', 'Error Visibility', [
       {v:'none',       l:'None'},
       {v:'confidence', l:'Confidence'},
       {v:'heat',       l:'Color Heat'},
-    ]),
+    ], prefix),
     buildAxisGroup('controlLayout', 'Panel Layout', [
       {v:'sidebar',  l:'Sidebar'},
       {v:'topbar',   l:'Top Bar'},
       {v:'floating', l:'Floating'},
-    ]),
+    ], prefix),
     `<button class="reset-btn" onclick="resetFieldStates()">Reset field states</button>`,
   ].join('');
 }
 
 function renderControls() {
   document.getElementById('controls').innerHTML = buildControlsHTML();
-  // Floating drawer gets the same controls
   const drawer = document.getElementById('floating-drawer');
-  if (drawer) drawer.innerHTML = buildControlsHTML();
+  if (drawer) drawer.innerHTML = buildControlsHTML('float-');
 }
 
 // === LAYOUT ===
