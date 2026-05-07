@@ -835,10 +835,10 @@ function approveAll() {
 }
 
 function jumpToNextFlagged() {
-  const idx = FIELDS.findIndex(f => state.fieldStates[f.id] === 'flagged');
-  if (idx === -1) return;
-  const rows = document.querySelectorAll('.field-row');
-  if (rows[idx]) rows[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const field = FIELDS.find(f => state.fieldStates[f.id] === 'flagged');
+  if (!field) return;
+  const el = document.querySelector(`[data-id="${field.id}"]`);
+  if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 // === BOOT ===
