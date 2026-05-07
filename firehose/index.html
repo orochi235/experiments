@@ -376,6 +376,40 @@ body {
 .field-card-value { font-size: 15px; color: var(--text); font-weight: 500; }
 .field-card.state-flagged .field-card-value { color: var(--flagged); }
 
+/* Columns grid layout */
+#field-list.layout-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+.field-col {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.12s;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+.field-col:hover { border-color: var(--border-light); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+.field-col.state-approved { background: var(--approved-bg); border-color: rgba(18,183,106,0.3); }
+.field-col.state-flagged  { background: var(--flagged-bg);  border-color: rgba(217,45,32,0.3); }
+.field-col.state-pending  { background: var(--bg); }
+.field-col.cursor { border-color: var(--accent) !important; background: var(--accent-bg) !important; box-shadow: 0 0 0 2px rgba(51,102,255,0.12); }
+.field-col-label {
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.field-col-value { font-size: 13px; color: var(--text); font-weight: 500; }
+.field-col.state-flagged .field-col-value { color: var(--flagged); }
+
 /* Context annotations */
 .field-context {
   font-size: 10px;
@@ -647,9 +681,27 @@ function renderCard(props) {
   </div>`;
 }
 
+function renderCol(props) {
+  const { field, fieldState, isCursor } = props;
+  const heatStyle = state.errorVisibility === 'heat'
+    ? `background-color:${heatColor(field.confidence)};` : '';
+  const pct = Math.round(field.confidence * 100);
+  const badgeClass = field.confidence < 0.7 ? 'confidence-badge low' : 'confidence-badge';
+  const badge = state.errorVisibility === 'confidence'
+    ? `<span class="${badgeClass}">${pct}%</span>` : '';
+  const flag = fieldState === 'flagged' ? '<span class="flag-icon">⚑</span>' : '';
+  const cursorClass = isCursor ? ' cursor' : '';
+  return `<div class="field-col state-${fieldState}${cursorClass}" data-id="${field.id}" style="${heatStyle}" onclick="onFieldClick(${field.id})">
+    <div class="field-col-label">${field.label}${badge}${flag}</div>
+    <div class="field-col-value">${field.value}</div>
+  </div>`;
+}
+
 function renderField(field, isCursor) {
   const props = getRendererProps(field, isCursor);
-  return state.presentation === 'card' ? renderCard(props) : renderRow(props);
+  if (state.presentation === 'card') return renderCard(props);
+  if (state.presentation === 'columns') return renderCol(props);
+  return renderRow(props);
 }
 
 // === STATUS BAR ===
@@ -681,7 +733,7 @@ function renderProgressBar() {
 // === FIELD LIST ===
 function renderFieldList() {
   const list = document.getElementById('field-list');
-  list.className = '';
+  list.className = state.presentation === 'columns' ? 'layout-columns' : '';
 
   const hasCursor = state.navigation !== 'free';
   const fields = getVisibleFields();
@@ -789,8 +841,9 @@ function buildControlsHTML(prefix = '') {
       {v:'source',    l:'Source'},
     ], prefix),
     buildAxisGroup('presentation', 'Presentation', [
-      {v:'row',  l:'Row'},
-      {v:'card', l:'Card'},
+      {v:'row',     l:'Row'},
+      {v:'card',    l:'Card'},
+      {v:'columns', l:'Columns'},
     ], prefix),
     buildAxisGroup('defaultState', 'Default State', [
       {v:'approved', l:'All Approved'},
