@@ -421,11 +421,11 @@ function buildGroupedView() {
       : '';
 
     return `<div class="group-section${isCollapsed ? ' collapsed' : ''}">
-      <div class="group-header" onclick="toggleGroup('${cat}')">
+      <div class="group-header" data-category="${cat}" onclick="toggleGroup(this.dataset.category)">
         <span class="group-title">${cat}</span>
         <span class="group-count">${fields.length} fields</span>
         ${flaggedBadge}
-        <button class="group-approve-btn" onclick="event.stopPropagation(); approveGroup('${cat}')">Approve All</button>
+        <button class="group-approve-btn" data-category="${cat}" onclick="event.stopPropagation(); approveGroup(this.dataset.category)">Approve All</button>
       </div>
       <div class="group-fields density-${state.density}">
         ${fields.map(f => buildFieldRow(f, false)).join('')}
