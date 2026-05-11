@@ -7,10 +7,10 @@
 # experiment subdirs can still commit PNGs as legitimate assets).
 /*.png
 
-# Interstellar Tourism — Vite build artifacts
-interstellar-tourism/node_modules/
-interstellar-tourism/dist/
+# Interstellar Horizons — Vite build artifacts
+interstellar-horizons/node_modules/
+interstellar-horizons/dist/
 
 # Legacy standalone sky-color-gl dir (subtree-merged into
-# interstellar-tourism/), kept on disk pending user direction.
+# interstellar-horizons/), kept on disk pending user direction.
 /sky-color-gl/
