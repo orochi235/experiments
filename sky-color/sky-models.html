@@ -220,16 +220,19 @@
   .proj-btn.active { background: #2a4a6a; border-color: #7ec8e3; color: #fff; }
   .proj-btn:hover:not(.active) { background: #2a3a5a; color: #ddd; }
   canvas.dome { display: block; background: #0a0a14; border-radius: 6px; }
-  canvas.dome { max-width: 100%; height: auto; }
-  @media (max-width: 600px) {
-    canvas.dome { width: 100%; }
+  canvas.dome[data-projection="fisheye"] {
+    width: min(100%, 560px); aspect-ratio: 1 / 1;
+  }
+  canvas.dome[data-projection="equirect"],
+  canvas.dome[data-projection="sunfacing"] {
+    width: 100%; aspect-ratio: 2 / 1;
   }
   .dome-caption {
     font-size: 0.72rem; color: #888; margin-top: 6px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .dome-wrap {
-    display: flex; flex-direction: column; align-items: center;
+    display: flex; flex-direction: column; align-items: center; width: 100%;
   }
 </style>
 </head>
@@ -2432,12 +2435,18 @@ function renderDome(name) {
   };
   const preset = PRESETS[activePreset];
 
-  // Adjust canvas size for projection
-  if (state.projection === 'fisheye') {
-    canvas.width = 480; canvas.height = 480;
-  } else {
-    canvas.width = 480; canvas.height = 240;
-  }
+  // Size canvas internal buffer to match its displayed size × DPR.
+  // The CSS rules set the display dimensions and aspect ratio per projection.
+  canvas.dataset.projection = state.projection;
+  const cssRect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const aspect = state.projection === 'fisheye' ? 1 : 2; // width / height
+  // Cap internal pixels so render cost stays bounded on very wide screens.
+  const MAX_W = state.projection === 'fisheye' ? 720 : 1200;
+  const cssW = cssRect.width || (state.projection === 'fisheye' ? 480 : 480);
+  let targetW = Math.round(Math.min(cssW * dpr, MAX_W));
+  let targetH = Math.round(targetW / aspect);
+  canvas.width = targetW; canvas.height = targetH;
   const w = canvas.width, h = canvas.height;
   // Coarse render during cursor scrub — replicate every (step × step) block
   const step = scrubbing ? 4 : 1;
