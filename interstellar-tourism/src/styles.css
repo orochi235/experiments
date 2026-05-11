@@ -1,0 +1,1093 @@
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: #e0e0e0;
+    padding: 24px 32px;
+    min-height: 100vh;
+    background:
+      radial-gradient(ellipse 60% 80% at 18% 30%, rgba(150, 80, 200, 0.22), transparent 70%),
+      radial-gradient(ellipse 55% 90% at 78% 70%, rgba(220, 100, 140, 0.18), transparent 65%),
+      radial-gradient(ellipse 50% 70% at 50% 50%, rgba(60, 110, 200, 0.18), transparent 75%),
+      radial-gradient(ellipse at center, #0a0a18 0%, #02020a 100%);
+    background-attachment: fixed;
+  }
+  /* Starscape overlay across the entire page */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+      radial-gradient(1.2px 1.2px at 4% 18%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 9% 64%, #fff, transparent 60%),
+      radial-gradient(1.5px 1.5px at 14% 36%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 19% 82%, #cce, transparent 60%),
+      radial-gradient(0.8px 0.8px at 23% 28%, #fff, transparent 60%),
+      radial-gradient(1.4px 1.4px at 28% 55%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 33% 12%, #ffe, transparent 60%),
+      radial-gradient(1.2px 1.2px at 37% 70%, #fff, transparent 60%),
+      radial-gradient(0.7px 0.7px at 42% 40%, #fff, transparent 60%),
+      radial-gradient(1.5px 1.5px at 47% 88%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 52% 22%, #cef, transparent 60%),
+      radial-gradient(1.3px 1.3px at 57% 60%, #fff, transparent 60%),
+      radial-gradient(0.9px 0.9px at 62% 35%, #fff, transparent 60%),
+      radial-gradient(1.1px 1.1px at 66% 75%, #fff, transparent 60%),
+      radial-gradient(1.4px 1.4px at 71% 14%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 76% 50%, #fff, transparent 60%),
+      radial-gradient(0.8px 0.8px at 81% 80%, #ffe, transparent 60%),
+      radial-gradient(1.3px 1.3px at 85% 25%, #fff, transparent 60%),
+      radial-gradient(1px 1px at 89% 62%, #cce, transparent 60%),
+      radial-gradient(1.5px 1.5px at 93% 38%, #fff, transparent 60%),
+      radial-gradient(0.9px 0.9px at 97% 78%, #fff, transparent 60%);
+  }
+  body > * { position: relative; z-index: 1; }
+  /* Title banner — sits over the planet selector with a dark glass background. */
+  .page-title {
+    position: relative;
+    z-index: 5;
+    display: inline-block;
+    align-self: flex-start;
+    background: rgba(0, 0, 0, 0.20);
+    border-radius: 28px;
+    /* Padding-left = 20 so the title's text aligns with every other section's
+       text column (h1 margin-left was 20). The negative bottom margin makes
+       the banner float over the planet selector below. */
+    padding: 18px 32px 20px 20px;
+    margin: 0 0 -36px 0;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .page-title h1 {
+    font: 700 2.6rem/1 'Oswald', 'IBM Plex Mono', monospace;
+    margin: 0 0 4px;
+    color: #fff;
+  }
+  .page-title .subtitle {
+    font: 300 1.15rem/1.3 'Oswald', 'IBM Plex Mono', monospace;
+    color: #bbb;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  /* Subsection headings — match the wall-view title style:
+     Oswald light, 1.2rem, 1.2 line-height. */
+  h2,
+  .controls-label,
+  .param-table-wrap h2,
+  .param-table tr.group-header td {
+    font: 300 1.2rem/1.2 'Oswald', 'IBM Plex Mono', monospace;
+    color: #fff;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  /* Slider labels (e.g. "Turbidity", "Sun Distance") and their readouts. */
+  .control label,
+  .control .val {
+    font-family: 'Oswald', 'IBM Plex Mono', monospace;
+    font-weight: 300;
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  .control label {
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* Fixed line-box height so rows with auto-buttons line up with rows
+       without — keeping every slider underneath at the same y. */
+    height: 1.25em;
+    line-height: 1.25em;
+  }
+  /* Push the readout (and any trailing auto-buttons) to the right edge. */
+  .control label .val { margin-left: auto; }
+  .control .val { font-weight: 500; }
+  .subtitle { font-size: 0.85rem; color: #888; margin-bottom: 20px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 20px 32px;
+    background: rgba(22, 33, 62, 0.6); border-radius: 10px; padding: 16px 20px;
+    margin-bottom: 24px;
+  }
+  .control { display: flex; flex-direction: column; gap: 0; min-width: 180px; }
+  .control label { line-height: 1; }
+  .control label .dim-note {
+    font-size: 0.7rem; color: #888; font-weight: 300;
+    margin-left: 4px;
+  }
+  .controls input[type=range] { margin: 0; padding: 0; }
+  .control label { font-size: 0.78rem; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+  .control .val { font-size: 0.85rem; color: #7ec8e3; font-weight: 600; }
+  .control input[type=range] { width: 200px; accent-color: #7ec8e3; cursor: pointer; }
+
+  /* Unified range-slider chrome — applies to every range input across the
+     three control panels. Section-specific gradient tracks override the
+     background, but everything else (height, thumb size + border color)
+     stays consistent. */
+  .controls input[type=range],
+  .controls.style input[type=range],
+  .controls.planet input[type=range] {
+    height: 18px;
+    -webkit-appearance: none; appearance: none;
+    background: transparent;
+  }
+  .controls input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 3px;
+  }
+  /* Default solid track if a slider hasn't been given its own gradient. The
+     less-specific selector means the per-id gradient rules below still win. */
+  input[type=range]::-webkit-slider-runnable-track {
+    background: rgba(126, 200, 227, 0.18);
+  }
+
+  /* Dynamic track gradients for the top-row physical sliders.
+     Tones are muted (~70% saturation, ~85% brightness) to match the rest. */
+  #turbidity::-webkit-slider-runnable-track {
+    background: linear-gradient(to right,
+      #6090a8 0%,    /* 1 — clear */
+      #8aa0b0 30%,   /* 3 — typical */
+      #a8a098 60%,   /* 5 — hazy */
+      #b09080 80%,   /* 7 — dusty */
+      #806858 100%); /* 10 — opaque */
+  }
+  #latitude::-webkit-slider-runnable-track {
+    background: linear-gradient(to right,
+      #6080a0 0%,    /* -70° — Antarctic */
+      #889aa8 25%,   /* -35° */
+      #b09870 50%,   /*   0° — equator (warm) */
+      #889aa8 75%,   /*  35° */
+      #6080a0 100%); /*  70° — Arctic */
+  }
+  #viewElev::-webkit-slider-runnable-track {
+    background: linear-gradient(to right,
+      #a08070 0%,    /* 5° — horizon warm */
+      #909088 20%,   /* 20° */
+      #708898 50%,   /* 50° */
+      #506880 80%,   /* 75° */
+      #3a5070 100%); /* 90° — zenith deep */
+  }
+  #dayOfYear::-webkit-slider-runnable-track {
+    background: linear-gradient(to right,
+      #3a4858 0%,    /* winter solstice (slider 1) — dark blue */
+      #607080 12%,
+      #7a8a6a 30%,   /* spring — soft green */
+      #98a060 50%,   /* summer-ish */
+      #a89060 70%,   /* autumn — warm */
+      #80708a 85%,
+      #3a4858 100%); /* back to winter */
+  }
+  #albedo::-webkit-slider-runnable-track {
+    background: linear-gradient(to right,
+      #1a1a1a 0%,    /* 0 — pitch black */
+      #4a4a48 30%,
+      #888880 60%,
+      #c0c0b8 85%,
+      #e8e8e0 100%); /* 1 — bright */
+  }
+  #ozoneStrength::-webkit-slider-runnable-track {
+    background: linear-gradient(to right,
+      #708090 0%,    /* 0 — no ozone */
+      #707898 35%,
+      #807a98 65%,
+      #807090 100%); /* 3 — strong twilight purple */
+  }
+  .controls input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; border: 2px solid #7ec8e3;
+    margin-top: -4px; cursor: pointer;
+  }
+  .control .slider-row { display: flex; align-items: center; position: relative; }
+  .control .slider-reset {
+    position: absolute; right: 0; bottom: 100%;
+    background: #7ec8e3; border: 1px solid #7ec8e3; color: #1a1a2e; cursor: pointer;
+    font-size: 0.85rem; padding: 0 4px; line-height: 1.2; display: none;
+    border-radius: 4px; margin-bottom: 4px;
+  }
+  .control .slider-reset:hover { background: #aee0f0; border-color: #aee0f0; }
+  .control .slider-reset.show { display: block; }
+  .controls.style .slider-reset { background: #c8a2e3; border-color: #c8a2e3; }
+  .controls.style .slider-reset:hover { background: #dbb8f0; border-color: #dbb8f0; }
+  .controls.planet .slider-reset { background: #e3c87e; border-color: #e3c87e; }
+  .controls.planet .slider-reset:hover { background: #f0d88a; border-color: #f0d88a; }
+  .controls-label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px;
+    color: #555; margin-bottom: 6px; width: 100%;
+  }
+  .controls.style { background: rgba(26, 22, 48, 0.6); border: 1px solid #2a2445; }
+  .controls.style .control .val { color: #c8a2e3; }
+  .controls.style input[type=range] { accent-color: #c8a2e3; }
+  .geo-btn {
+    background: none; border: 1px solid #3a4a6a; color: #7ec8e3;
+    border-radius: 4px; cursor: pointer; font-size: 0.75rem;
+    padding: 0 4px;
+    /* Match the label's line-height exactly so the button doesn't add height
+       and push the slider below it down compared to button-less rows. */
+    line-height: 1;
+    height: 1em;
+    box-sizing: content-box;
+    vertical-align: baseline;
+  }
+  .geo-btn:hover { background: #2a3a5a; }
+  .reset-btn {
+    align-self: flex-end; background: #2a2445; border: 1px solid #3a3460;
+    color: #aaa; border-radius: 6px; padding: 4px 12px; cursor: pointer;
+    font-size: 0.75rem; margin-top: 14px;
+  }
+  .reset-btn:hover { background: #3a3460; color: #ddd; }
+  .strip-container {
+    margin-bottom: 20px;
+    background: rgba(22, 33, 62, 0.6);
+    border-radius: 10px;
+    padding: 16px 20px 12px;
+  }
+  .strip-header {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-bottom: 8px;
+  }
+  .strip-header .strip-desc { margin-left: auto; }
+  .strip-title { font-size: 1rem; font-weight: 600; }
+  .strip-desc { font-size: 0.75rem; color: #888; }
+  canvas.strip { width: 100%; height: 70px; border-radius: 6px; display: block; }
+  .strip-wrap { position: relative; }
+  .time-cursor {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(255,255,255,0.5); pointer-events: none;
+    transform: translateX(-0.5px);
+  }
+  .time-cursor::before {
+    content: ''; position: absolute; top: -2px; left: -4px;
+    width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 6px solid rgba(255,255,255,0.7);
+    pointer-events: auto; cursor: ew-resize;
+  }
+  canvas.strip { cursor: crosshair; }
+  .time-axis {
+    display: flex; justify-content: space-between;
+    font-size: 0.7rem; color: #666; margin-top: 4px; padding: 0 2px;
+  }
+  .iq-modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 1000; justify-content: center; align-items: center;
+  }
+  .iq-modal-overlay.show { display: flex; }
+  .iq-modal {
+    background: #1e1e2e; border: 2px solid #9146ff; border-radius: 12px;
+    padding: 60px 80px; text-align: center; max-width: 640px; min-width: 500px;
+    box-shadow: 0 0 40px rgba(145,70,255,0.3);
+  }
+  .iq-modal h2 { color: #9146ff; font-size: 1.8rem; margin-bottom: 20px; }
+  .iq-modal p { color: #aaa; font-size: 1.1rem; line-height: 1.6; margin-bottom: 20px; }
+  .iq-modal .spinner {
+    width: 40px; height: 40px; border: 4px solid #333; border-top-color: #9146ff;
+    border-radius: 50%; animation: iqspin 0.8s linear infinite; margin: 0 auto 12px;
+  }
+  .iq-modal .countdown { color: #666; font-size: 0.75rem; }
+  @keyframes iqspin { to { transform: rotate(360deg); } }
+  .legend {
+    font-size: 0.75rem; color: #666; margin-top: 16px; line-height: 1.6;
+  }
+  .param-table-wrap {
+    margin-top: 20px; background: #16213e; border-radius: 10px;
+    padding: 16px 20px; overflow-x: auto;
+  }
+  .param-table-wrap h2 { font-size: 1rem; margin-bottom: 10px; color: #fff; font-weight: 600; }
+  .param-table {
+    width: 100%; border-collapse: collapse; font-size: 0.78rem; white-space: nowrap;
+  }
+  .param-table th, .param-table td {
+    padding: 6px 10px; text-align: center; border-bottom: 1px solid #1a1a2e;
+  }
+  .param-table th { color: #7ec8e3; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; font-size: 0.7rem; }
+  .param-table th:first-child, .param-table td:first-child { text-align: left; color: #ccc; font-weight: 500; }
+  .param-table tr:hover td { background: rgba(126,200,227,0.04); }
+  .param-table .group-header td {
+    color: #666; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px;
+    padding-top: 12px; border-bottom: 1px solid #2a3a5a; font-weight: 600;
+  }
+  .param-table .y { color: #6ee6a0; }
+  .param-table .n { color: #444; }
+  .param-table .note { color: #aaa; font-size: 0.72rem; }
+  .param-table .sym { font-size: 1.15rem; color: #e0d0f0; }
+  .param-table a { color: #7ec8e3; text-decoration: none; border-bottom: 1px dotted #4a7a8a; }
+  .param-table a:hover { color: #aee0f0; border-bottom-style: solid; }
+  .math-block {
+    margin-top: 8px; padding: 10px 14px;
+    background: rgba(0,0,0,0.25); border-radius: 6px;
+    overflow-x: auto; font-size: 0.9rem; color: #ccc;
+    display: flex; flex-wrap: nowrap; gap: 12px 24px;
+  }
+  .math-cell { flex: 0 0 auto; }
+  .math-cell math { display: block; margin: 6px 0; }
+  .math-label {
+    font-size: 0.7rem; color: #666; text-transform: uppercase;
+    letter-spacing: 0.5px; margin-bottom: 4px;
+  }
+  /* Preset buttons */
+  .presets-wrap {
+    margin-bottom: 24px; background: #16213e; border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .presets-wrap h2 { font-size: 1rem; margin-bottom: 10px; color: #fff; font-weight: 600; }
+  .presets-wrap[open] > summary > .preset-summary { display: none; }
+  .preset-summary {
+    display: inline-flex; align-items: baseline; gap: 10px;
+    margin-left: 16px;
+    color: #ccc; font-size: 0.82rem;
+    background: #000; border: 1px solid #2a3a5a; border-radius: 6px;
+    padding: 4px 10px;
+  }
+  .preset-summary .ps-name { color: #fff; font-weight: 600; }
+  .preset-summary .ps-source { color: #aaa; font-size: 0.72rem; }
+  .preset-summary .ps-star { color: #887733; font-size: 0.72rem; }
+  .preset-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .preset-grid .earth-row { grid-column: 1 / -1; }
+  .preset-btn {
+    background: #1a1a2e; border: 1px solid #2a3a5a; color: #ccc;
+    border-radius: 6px; padding: 8px 10px; cursor: pointer;
+    font-size: 0.78rem; text-align: left; transition: all 0.15s;
+    line-height: 1.4;
+  }
+  .preset-btn:hover { background: #2a3a5a; border-color: #4a6a8a; color: #fff; }
+  .preset-btn.active { background: #2a4a6a; border-color: #7ec8e3; color: #fff; }
+  .preset-btn .preset-name { font-weight: 600; display: block; }
+  .preset-btn .preset-source { font-size: 0.68rem; color: #aaa; }
+  .preset-btn .preset-source a { color: #6a9aaa; text-decoration: none; }
+  .preset-btn .preset-source a:hover { color: #8abaca; }
+  .preset-btn .preset-star { font-size: 0.68rem; color: #887733; }
+  /* Planet-specific sliders */
+  .controls.planet { background: rgba(26, 36, 48, 0.6); border: 1px solid #2a3a4a; }
+  .controls.planet .control .val { color: #e3c87e; }
+  .controls.planet input[type=range] { accent-color: #e3c87e; }
+  .stellar-temp-slider {
+    -webkit-appearance: none; appearance: none;
+    height: 18px; background: transparent; outline: none;
+  }
+  .stellar-temp-slider::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(to right,
+      #b04020 0%, #b85a30 10%, #bc8050 20%, #c89c70 30%,
+      #d8c8b0 40%, #d8d8d0 50%, #a8b4d0 60%, #8898c0 70%,
+      #6878b0 80%, #5868a0 90%, #485090 100%);
+  }
+  .stellar-temp-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--thumb-color, #fff);
+    border: 2px solid #e3c87e;
+    margin-top: -4px; cursor: pointer;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  }
+  .stellar-temp-slider::-moz-range-track {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(to right,
+      #b04020 0%, #b85a30 10%, #bc8050 20%, #c89c70 30%,
+      #d8c8b0 40%, #d8d8d0 50%, #a8b4d0 60%, #8898c0 70%,
+      #6878b0 80%, #5868a0 90%, #485090 100%);
+  }
+  .stellar-temp-slider::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--thumb-color, #fff);
+    border: 2px solid #e3c87e; cursor: pointer;
+  }
+  .expand-caret {
+    background: none; border: none; color: #7ec8e3; cursor: pointer;
+    font-size: 0.95rem; padding: 0 4px; line-height: 1;
+    transition: transform 0.15s; flex-shrink: 0; opacity: 0.7;
+  }
+  .expand-caret:hover { opacity: 1; }
+  .expand-caret.open { transform: rotate(90deg); }
+  .expanded-pane {
+    display: none; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #2a3a5a;
+  }
+  .expanded-pane.open { display: block; }
+  .proj-selector {
+    position: absolute; top: 8px; left: 8px; z-index: 2;
+    display: flex; gap: 4px; margin: 0;
+  }
+  .proj-btn {
+    background: rgba(20, 20, 30, 0.65); border: 1px solid rgba(126, 200, 227, 0.25);
+    color: #cdd; border-radius: 4px; padding: 4px 10px; cursor: pointer;
+    font-size: 0.75rem; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+  .proj-btn.active { background: rgba(42, 74, 106, 0.85); border-color: #7ec8e3; color: #fff; }
+  .proj-btn:hover:not(.active) { background: rgba(42, 58, 90, 0.85); color: #fff; }
+  canvas.dome { display: block; background: #0a0a14; border-radius: 6px; }
+  canvas.dome[data-projection="fisheye"] {
+    width: 100%; aspect-ratio: 1 / 1;
+  }
+  canvas.dome[data-projection="equirect"],
+  canvas.dome[data-projection="sunfacing"] {
+    width: 100%; aspect-ratio: 2 / 1;
+  }
+  .dome-caption {
+    font-size: 0.72rem; color: #888; margin-top: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .dome-wrap {
+    display: flex; flex-direction: column; align-items: center; width: 100%;
+  }
+  .dome-frame { position: relative; width: 100%; }
+  .dome-frame[data-projection="fisheye"] { max-width: 560px; }
+
+/* Overlay canvas positioning */
+.panel-wrap { position: relative; }
+.panel-wrap > .overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+.panel-wrap > .gl,
+.panel-wrap > .overlay { display: block; }
+/* Source CSS sets `canvas.dome { background: #0a0a14 }` — that's fine for the
+   GL canvas, but the overlay sits ON TOP and its background was hiding the GL
+   render. Higher-specificity selector to clear the overlay's background. */
+canvas.dome.overlay, canvas.strip.overlay { background: transparent; }
+
+/* ============================================================
+   Layouts: default "detail" (rows with strip + math + dome)
+   and "wall" (a grid of just the dome previews, like a CCTV bank).
+   ============================================================ */
+.model-grid { display: block; }
+
+/* In wall mode, body becomes a flex column so we can `order:` the presets
+   section to the bottom of the page. */
+body[data-layout="standard"] {
+  display: flex;
+  flex-direction: column;
+}
+/* Presets live in a custom dropdown inside Planet Physics. The original
+   .presets-wrap markup is the source of truth for chip metadata; JS moves the
+   buttons into the popover at init. */
+.presets-wrap { display: none; }
+
+/* Wall-mode page order: title → planet list → wall preview → sliders → params */
+body[data-layout="standard"] > .page-title       { order: 0; }
+body[data-layout="standard"] > .planet-area          { order: 10; }
+body[data-layout="standard"] > .controls.display     { order: 15; }
+
+/* Display panel: lightweight inline row, no background or section heading. */
+.controls.display {
+  background: transparent;
+  border: none;
+  padding: 0 0 0 20px;       /* match interior padding of the .controls panels */
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 0;
+  margin: 2px 0 20px;
+}
+.controls.display .control {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 14px;                  /* a bit more space after the label */
+  min-width: 0;
+  padding: 0 22px;
+}
+/* Faint vertical separators between control groups */
+.controls.display .control + .control {
+  border-left: 1px solid rgba(126, 200, 227, 0.18);
+}
+.controls.display .control:first-child { padding-left: 0; }
+.controls.display .control:last-child  { padding-right: 0; }
+.controls.display .control label {
+  height: auto;
+  line-height: 1;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #ccc;
+}
+.controls.display .proj-btn.global,
+.controls.display .reset-btn.small {
+  font-family: 'Oswald', 'IBM Plex Mono', monospace;
+  font-weight: 300;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  padding: 2px 10px;
+  line-height: 1.4;
+}
+.controls.display .proj-selector.global {
+  margin: 0;
+  gap: 6px;
+}
+body[data-layout="standard"] > .model-grid           { order: 20; }
+body[data-layout="standard"] > .controls.atmosphere  { order: 30; }
+body[data-layout="standard"] > .controls.style       { order: 31; }
+body[data-layout="standard"] > #planetControls       { order: 32; }
+/* Top margin on the first slider panel in wall mode so it doesn't sit flush
+   against the wall preview grid above. */
+body[data-layout="standard"] > .controls.atmosphere { margin-top: 16px; }
+body[data-layout="standard"] > .param-table-wrap { order: 100; }
+
+/* Horizontal scrolling toolbar of planet icons. Black starscape background
+   with subtle nebula washes. Icons spread to fill the row when there's
+   room; if they overflow, the row scrolls. */
+.planet-toolbar {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 24px;
+  cursor: grab;
+  touch-action: pan-x;
+  user-select: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 16px 0;
+  margin: 0 0 16px;
+  /* Selected planet is centered; drag scrolls others through. The padding
+     ensures any planet can be aligned to the center of the visible row. */
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  scrollbar-color: #2a3a5a transparent;
+  justify-content: space-between;
+  /* Fade orbs to transparent at the left/right edges when content overflows.
+     Body classes get set by the scroll listener — only the side actually
+     clipped fades. */
+  --fade-left: 0;
+  --fade-right: 0;
+  -webkit-mask-image: linear-gradient(to right,
+    transparent 0,
+    black calc(var(--fade-left) * 60px),
+    black calc(100% - var(--fade-right) * 60px),
+    transparent 100%);
+  mask-image: linear-gradient(to right,
+    transparent 0,
+    black calc(var(--fade-left) * 60px),
+    black calc(100% - var(--fade-right) * 60px),
+    transparent 100%);
+}
+.planet-toolbar.clip-left  { --fade-left: 1; }
+.planet-toolbar.clip-right { --fade-right: 1; }
+
+/* Wrapper around the toolbar exists solely so the nebula can bleed outside
+   the toolbar's scroll-clip — `overflow-x: auto` on the toolbar forces
+   `overflow-y: auto` too, which would otherwise clip the nebula vertically. */
+.planet-area {
+  position: relative;
+  overflow: visible;
+}
+.planet-area::before {
+  content: '';
+  position: absolute;
+  inset: -40px -40px;       /* bleed above/below + a bit past the edges */
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 50% 100% at 22% 50%, rgba(170, 90, 220, 0.22), transparent 70%),
+    radial-gradient(ellipse 45% 110% at 78% 50%, rgba(230, 110, 150, 0.18), transparent 65%),
+    radial-gradient(ellipse 40% 90% at 50% 50%, rgba(90, 140, 220, 0.16), transparent 75%);
+  filter: blur(10px);
+}
+.planet-area > .planet-toolbar { position: relative; z-index: 1; }
+.planet-icon {
+  flex: 0 0 auto;
+  /* Grid: orb in the upper area (centered vertically), label pinned to the
+     bottom regardless of orb scale. */
+  display: grid;
+  grid-template-rows: 1fr auto;
+  justify-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  color: #ccc;
+  width: 115px;
+  scroll-snap-align: center;
+}
+.planet-icon .planet-orb { align-self: center; }
+.planet-icon .planet-label { align-self: end; }
+.planet-orb {
+  display: block;
+  width: calc(60px * var(--scale, 1));
+  height: calc(60px * var(--scale, 1));
+  border-radius: 50%;
+  box-shadow:
+    inset 0 -4px 8px rgba(0, 0, 0, 0.45),
+    inset 1px 1px 4px rgba(255, 255, 255, 0.18),
+    0 1px 4px rgba(0, 0, 0, 0.55);
+  transition: transform 0.12s ease;
+}
+.planet-icon:hover .planet-orb { transform: scale(1.08); }
+.planet-icon:hover { color: #fff; }
+.planet-icon.active .planet-orb {
+  box-shadow:
+    inset 0 -4px 8px rgba(0, 0, 0, 0.45),
+    inset 1px 1px 4px rgba(255, 255, 255, 0.18),
+    0 0 0 2px #7ec8e3,
+    0 0 14px rgba(126, 200, 227, 0.55);
+}
+/* Hide the browser keyboard focus rectangle on the button itself — the cyan
+   orb-ring on `.active` is the visible selection indicator. */
+.planet-icon:focus,
+.planet-icon:focus-visible { outline: none; }
+.planet-icon.active { color: #fff; }
+.planet-toolbar, .planet-toolbar * {
+  font-family: 'Oswald', system-ui, sans-serif;
+}
+.planet-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  text-align: center;
+  line-height: 1.25;
+}
+.planet-label-name {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #fff;
+}
+.planet-label-source { font-size: 0.82rem; color: #aaa; }
+.planet-label-source a { color: #6a9aaa; text-decoration: none; }
+.planet-label-source a:hover { color: #8abaca; }
+.planet-label-star { font-size: 0.82rem; color: #887733; }
+
+/* When moved into Planet Physics, the notes legend takes any leftover row
+   space, with a small left margin so it doesn't crash into the stellar-temp
+   slider. */
+.controls.planet > .legend {
+  flex: 1 1 240px;
+  min-width: 240px;
+  background: transparent;
+  font-size: 0.72rem;
+  color: #999;
+  line-height: 1.45;
+  padding: 0;
+  margin-left: 8px;
+}
+
+.preset-dropdown { position: relative; display: inline-block; min-width: 240px; }
+/* Trigger reuses the chip's appearance — same .preset-btn class, just with a
+   right-aligned caret tacked on. */
+.preset-trigger {
+  display: block;
+  width: 100%;
+  position: relative;
+  padding-right: 22px;
+}
+.preset-trigger .preset-caret {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.7;
+  font-size: 0.8rem;
+}
+
+.preset-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  display: none;
+  background: rgba(15, 17, 32, 0.97);
+  border: 1px solid rgba(126, 200, 227, 0.25);
+  border-radius: 8px;
+  padding: 10px;
+  width: max(720px, 60vw);
+  max-height: 70vh;
+  overflow: auto;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+.preset-popover.open { display: grid; }
+/* Inside the popover, .preset-grid already gives us the 4-column layout via
+   the source CSS (with .earth-row spanning full width). No overrides needed. */
+body[data-layout="standard"] .model-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+body[data-layout="standard"] .strip-container {
+  display: block;
+  margin: 0;
+}
+body[data-layout="standard"] .strip-container > .strip-header { display: block; margin-bottom: 4px; }
+body[data-layout="standard"] .strip-title {
+  font: 300 1.2rem/1.2 'Oswald', 'IBM Plex Mono', monospace;
+  color: #fff;
+}
+body[data-layout="standard"] .strip-container > .strip-header .strip-desc { display: none; }
+body[data-layout="standard"] .strip-container > .strip-wrap,
+body[data-layout="standard"] .strip-container > .time-axis,
+body[data-layout="standard"] .strip-container > .math-block { display: none; }
+body[data-layout="standard"] .strip-container > .expanded-pane {
+  display: block;
+  grid-column: auto;
+  grid-row: auto;
+}
+body[data-layout="standard"] .strip-container > .expanded-pane > .dome-wrap {
+  height: auto;
+}
+
+/* Inline "reset all" button next to a section title */
+.controls-label .inline-reset {
+  background: rgba(20, 20, 30, 0.5);
+  border: 1px solid rgba(126, 200, 227, 0.25);
+  color: #cdd;
+  border-radius: 4px;
+  padding: 1px 8px;
+  margin-left: 8px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  text-transform: none;
+  letter-spacing: normal;
+  vertical-align: 2px;
+}
+.controls-label .inline-reset:hover {
+  background: rgba(42, 58, 90, 0.85);
+  color: #fff;
+}
+.controls.style .controls-label .inline-reset { border-color: rgba(200, 162, 227, 0.35); }
+.controls.planet .controls-label .inline-reset { border-color: rgba(227, 200, 126, 0.35); }
+
+/* Ground color picker row in Style Adjustments */
+.ground-row { display: flex; gap: 6px; align-items: center; }
+.ground-row input[type=color] {
+  width: 36px; height: 24px; padding: 0; border: 1px solid #2a2445;
+  border-radius: 4px; background: transparent; cursor: pointer;
+}
+.reset-btn.small {
+  background: rgba(20, 20, 30, 0.65);
+  border: 1px solid rgba(126, 200, 227, 0.25);
+  color: #cdd;
+  border-radius: 4px;
+  padding: 1px 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.reset-btn.small:hover { background: rgba(42, 58, 90, 0.85); color: #fff; }
+
+/* ============================================================
+   Side-by-side layout: each strip-container is a two-column grid.
+   Left column holds the header/strip/time-axis/math, right column
+   holds the always-visible dome preview. The expand toggle is gone.
+   ============================================================ */
+.strip-container {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 480px);
+  grid-template-rows: auto auto auto 1fr;
+  column-gap: 8px;
+  align-items: start;
+}
+.strip-container > .strip-header { grid-column: 1 / -1; grid-row: 1; }
+.strip-container > .strip-wrap   { grid-column: 1; grid-row: 2; }
+.strip-container > .time-axis    { grid-column: 1; grid-row: 3; }
+.strip-container > .math-block {
+  grid-column: 1; grid-row: 4;
+  align-self: stretch;
+  /* keep horizontal flow from the source CSS, but center vertically */
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+}
+.strip-container > .expanded-pane {
+  grid-column: 2;
+  grid-row: 2 / -1;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  min-width: 0;
+}
+.strip-container > .expanded-pane > .dome-wrap {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.expand-caret { display: none; }
+
+/* View Elevation only affects the strip shaders. Strips are hidden in wall
+   mode, so the slider has no visible effect there — dim it as a hint. */
+body[data-layout="standard"] .control:has(#viewElev) {
+  opacity: 0.4;
+}
+
+/* Preview is bounded by both axes of its container — picks whichever is smaller
+   while keeping a 2:1 aspect. For fisheye, the inner canvas shrinks horizontally
+   to a 1:1 square inside the same fixed-height frame. */
+.dome-frame {
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 2 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dome-frame > .panel-wrap {
+  height: 100%;
+  aspect-ratio: 2 / 1;
+}
+.dome-frame[data-projection="fisheye"] > .panel-wrap {
+  aspect-ratio: 1 / 1;
+}
+.dome-frame canvas.dome.gl,
+.dome-frame canvas.dome.overlay {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Per-dome projection toggles are gone — one global toggle in Style Adjustments */
+.proj-selector:not(.global) { display: none; }
+
+/* The HTML's per-strip .time-cursor div was JS-positioned in the original;
+   our Canvas2D overlay already draws the cursor — hide the legacy element. */
+.strip-wrap > .time-cursor { display: none; }
+
+/* While a physical-param slider is being dragged, model titles for shaders
+   unaffected by that param are struck through. */
+.strip-title.dim-during-drag {
+  text-decoration: line-through;
+  opacity: 0.45;
+  transition: opacity 0.1s ease;
+}
+/* …and in wall mode, the entire preview tile turns gray to make it clearer
+   which previews aren't going to respond to the current drag. */
+body[data-layout="standard"] .strip-container.dim-during-drag .panel-wrap {
+  filter: grayscale(0.9) brightness(0.7);
+  transition: filter 0.1s ease;
+}
+.proj-selector.global {
+  display: flex; gap: 4px; margin-top: 4px;
+  position: static;
+}
+.proj-btn.global {
+  background: rgba(20, 20, 30, 0.65);
+  border: 1px solid rgba(126, 200, 227, 0.25);
+  color: #cdd;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.proj-btn.global.active {
+  background: rgba(42, 74, 106, 0.85);
+  border-color: #7ec8e3;
+  color: #fff;
+}
+.proj-btn.global:hover:not(.active) {
+  background: rgba(42, 58, 90, 0.85);
+  color: #fff;
+}
+
+/* Click the preview to open the lightbox */
+canvas.dome.gl { cursor: zoom-in; }
+
+/* ============================================================
+   Lightbox — near-fullscreen overlay with a single big dome canvas
+   ============================================================ */
+#lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 8, 14, 0.92);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+}
+#lightbox.open { display: flex; }
+#lightbox .lb-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+#lightbox .panel-wrap { width: 100%; max-width: 100%; }
+#lightbox canvas.gl,
+#lightbox canvas.overlay {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px;
+}
+#lightbox[data-projection="fisheye"] canvas.gl,
+#lightbox[data-projection="fisheye"] canvas.overlay {
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+}
+#lightbox[data-projection="equirect"] canvas.gl,
+#lightbox[data-projection="equirect"] canvas.overlay,
+#lightbox[data-projection="sunfacing"] canvas.gl,
+#lightbox[data-projection="sunfacing"] canvas.overlay {
+  aspect-ratio: 2 / 1;
+}
+#lightbox .lb-title {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  color: #fff;
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+#lightbox .lb-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: rgba(20, 20, 30, 0.65);
+  border: 1px solid rgba(126, 200, 227, 0.25);
+  color: #cdd;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+#lightbox .lb-close:hover {
+  background: rgba(42, 58, 90, 0.85);
+  color: #fff;
+}
+#lightbox .lb-controls {
+  position: absolute;
+  left: 32px;
+  right: 32px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #cdd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  cursor: default;
+}
+#lightbox .lb-meta {
+  display: flex; gap: 10px; align-items: center;
+  font-size: 0.8rem; opacity: 0.85;
+}
+#lightbox .lb-meta-sep { opacity: 0.4; }
+#lightbox .lb-meta-item span { color: #7ec8e3; font-weight: 600; margin-left: 4px; }
+#lightbox #lbHour {
+  width: 100%; accent-color: #7ec8e3; cursor: pointer;
+}
+#lightbox .lb-hour-axis {
+  display: flex; justify-content: space-between;
+  font-size: 0.7rem; opacity: 0.55;
+}
+
+/* ============================================================
+   Illustrative gradient tracks for style sliders.
+   The webkit selectors target -webkit-slider-runnable-track and friends.
+   ============================================================ */
+.controls.style input[type=range]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+}
+.controls.style input[type=range] { height: 18px; -webkit-appearance: none; appearance: none; background: transparent; }
+.controls.style input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid #c8a2e3;
+  margin-top: -4px; cursor: pointer;
+}
+
+/* Hue Shift: full rainbow (muted) */
+#hueShift::-webkit-slider-runnable-track {
+  background: linear-gradient(to right,
+    hsl(0,55%,48%), hsl(60,55%,48%), hsl(120,55%,48%),
+    hsl(180,55%,48%), hsl(240,55%,48%), hsl(300,55%,48%), hsl(360,55%,48%));
+}
+/* Saturation: gray → muted blue */
+#saturation::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #6a6a6a, #6a8090, #4a6a88, #2f5070);
+}
+/* Vibrance: dull → muted vivid */
+#vibrance::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #4a4a4a, #6a7884, #8898a8, #98b0c4);
+}
+/* Exposure: dark → bright (muted) */
+#exposure::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #0a0a10, #2a2a35, #5a6070, #98a0b0, #d8d8e0);
+}
+/* Contrast: soft → punchy (muted) */
+#contrast::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #6a6a6a, #4a4a60, #28283a 30%, #28283a 70%, #08081a);
+}
+/* Warmth: cool blue → warm orange (muted) */
+#warmth::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #4068a0, #7e909e, #b8a888, #b87838);
+}
+/* Twilight Glow: gray-blue → warm orange-pink (muted sunset) */
+#twilightGlow::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #2a3a4f, #5a3e54, #a06854, #d09060);
+}
+/* Night Tint: black → muted deep blue-purple */
+#nightTint::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #000, #0a0a18, #161630, #221638);
+}
+/* Time of Day: night → sunrise → noon → sunset → night (muted) */
+#hour::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(to right,
+    #0a0a18 0%, #1a1a30 10%, #a06850 22%, #c0a070 30%,
+    #5a8eb0 50%, #c08c70 70%, #a05050 78%, #1a1a30 90%, #0a0a18 100%);
+}
+#hour { height: 18px; -webkit-appearance: none; appearance: none; background: transparent; }
+#hour::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid #7ec8e3;
+  margin-top: -4px; cursor: pointer;
+}
+
+/* Planet-physics gradient tracks. Same thumb treatment as the style sliders.
+   Atmo Density: vacuum → Earth-like → Venusian thick → opaque.
+   Sun Distance: hot inner → Earth → cool outer (warm white → cool blue/dim). */
+.controls.planet input[type=range]#atmoDensity,
+.controls.planet input[type=range]#sunDistance {
+  height: 18px;
+  -webkit-appearance: none; appearance: none;
+  background: transparent;
+}
+.controls.planet input[type=range]#atmoDensity::-webkit-slider-runnable-track,
+.controls.planet input[type=range]#sunDistance::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 3px;
+}
+.controls.planet input[type=range]#atmoDensity::-webkit-slider-thumb,
+.controls.planet input[type=range]#sunDistance::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #fff; border: 2px solid #e3c87e;
+  margin-top: -4px; cursor: pointer;
+}
+#atmoDensity::-webkit-slider-runnable-track {
+  background: linear-gradient(to right,
+    #0a0a12 0%,      /* 0   — vacuum */
+    #1a2030 10%,
+    #3a5878 22%,     /* 1   — Earth-like muted blue */
+    #6a7888 40%,
+    #98886a 60%,
+    #a08850 78%,
+    #483018 100%);   /* 5   — opaque */
+}
+#sunDistance::-webkit-slider-runnable-track {
+  background: linear-gradient(to right,
+    #d8d8b8 0%,      /* 0.3 AU */
+    #c8b88c 10%,
+    #c8be9a 16%,     /* 1    — Earth */
+    #b0a890 30%,
+    #909aa8 50%,
+    #506880 75%,
+    #1a2230 100%);   /* 10 */
+}
+

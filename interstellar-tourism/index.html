@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500;700&display=swap" rel="stylesheet">
+<title>Sky Color Models — WebGL</title>
+<link rel="stylesheet" href="/src/styles.css">
+</head>
+<body data-layout="standard">
+
+<header class="page-title">
+  <h1>Interstellar Tourism</h1>
+  <p class="subtitle">Atmospheric sky color models, compared across the day — Preetham, Nishita, Hosek-Wilkie, and friends</p>
+</header>
+
+<div class="controls atmosphere">
+  <div class="controls-label">Atmosphere &amp; Sky</div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Turbidity" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Turbidity</a> <span class="val" id="vTurb">3.0</span> <button class="geo-btn" id="turbBtn" title="Fetch live aerosol optical depth from your location (Open-Meteo)">&#x2316;</button></label>
+    <input type="range" id="turbidity" min="1" max="10" step="0.5" value="3">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Latitude" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Latitude</a> <span class="val" id="vLat">40°</span> <button class="geo-btn" id="geoBtn" title="Use current location">&#x2316;</button></label>
+    <input type="range" id="latitude" min="-70" max="70" step="1" value="40">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Horizontal_coordinate_system" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">View Elevation</a> <span class="dim-note">(1d only)</span> <span class="val" id="vElev">90°</span> <button class="geo-btn" id="oriBtn" title="Use device orientation">&#x2316;</button></label>
+    <input type="range" id="viewElev" min="5" max="90" step="1" value="90">
+  </div>
+  <div class="control">
+    <label>Day of Year <span class="val" id="vDay">172 (Jun 21)</span> <button class="geo-btn" id="doyBtn" title="Use today">&#x2316;</button></label>
+    <input type="range" id="dayOfYear" min="1" max="365" step="1" value="183">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Albedo" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Ground Albedo</a> <span class="val" id="vAlbedo">0.3</span></label>
+    <input type="range" id="albedo" min="0" max="1" step="0.05" value="0.3">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Ozone_layer" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Ozone</a> <span class="val" id="vOzone">1.00</span></label>
+    <input type="range" id="ozoneStrength" min="0" max="3" step="0.05" value="1">
+  </div>
+</div>
+
+<div class="controls style">
+  <div class="controls-label">Style Adjustments <button class="inline-reset" id="resetStyle" type="button" title="Reset style sliders to defaults">↺ reset all</button></div>
+  <div class="control">
+    <label>Hue Shift <span class="val" id="vHue">0°</span></label>
+    <input type="range" id="hueShift" min="-180" max="180" step="1" value="0">
+  </div>
+  <div class="control">
+    <label>Saturation <span class="val" id="vSat">1.00</span></label>
+    <input type="range" id="saturation" min="0" max="3" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>Vibrance <span class="val" id="vVib">0.00</span></label>
+    <input type="range" id="vibrance" min="-1" max="1" step="0.05" value="0">
+  </div>
+  <div class="control">
+    <label>Exposure <span class="val" id="vExp">0.0</span></label>
+    <input type="range" id="exposure" min="-2" max="2" step="0.1" value="0">
+  </div>
+  <div class="control">
+    <label>Contrast <span class="val" id="vCont">1.00</span></label>
+    <input type="range" id="contrast" min="0.3" max="2.5" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>Warmth <span class="val" id="vWarm">0.00</span></label>
+    <input type="range" id="warmth" min="-1" max="1" step="0.05" value="0">
+  </div>
+  <div class="control">
+    <label>Twilight Glow <span class="val" id="vGlow">1.00</span></label>
+    <input type="range" id="twilightGlow" min="0" max="3" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label>Night Tint <span class="val" id="vNight">0.00</span></label>
+    <input type="range" id="nightTint" min="0" max="1" step="0.05" value="0">
+  </div>
+</div>
+
+<div class="controls display">
+  <div class="control">
+    <label>View Mode</label>
+    <div class="proj-selector global">
+      <button class="proj-btn global active" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn global" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn global" data-proj="fisheye">Fisheye</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Layout</label>
+    <div class="proj-selector global" id="layoutToggle">
+      <button class="proj-btn global active" data-layout="standard">Standard</button>
+      <button class="proj-btn global" data-layout="detail">Detail</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Night Stars</label>
+    <div class="proj-selector global" id="starsToggle">
+      <button class="proj-btn global active" data-stars="on">On</button>
+      <button class="proj-btn global" data-stars="off">Off</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Planet Scale</label>
+    <div class="proj-selector global" id="scaleToggle">
+      <button class="proj-btn global active" data-scale="visual">Friendly</button>
+      <button class="proj-btn global" data-scale="actual">Proportional</button>
+    </div>
+  </div>
+</div>
+
+<details class="presets-wrap" open>
+  <summary><h2 style="display:inline;cursor:pointer">Planetary Presets</h2><span class="preset-summary" id="presetSummary"></span></summary>
+  <div class="preset-grid" style="margin-top:10px">
+    <button class="preset-btn earth-row active" data-preset="earth">
+      <span class="preset-name">Earth</span>
+      <span class="preset-source">Sol III</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="mars">
+      <span class="preset-name">Mars</span>
+      <span class="preset-source">Sol IV</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="venus">
+      <span class="preset-name">Venus</span>
+      <span class="preset-source">Sol II</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="titan">
+      <span class="preset-name">Titan</span>
+      <span class="preset-source">Saturn VI</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="jupiter">
+      <span class="preset-name">Jupiter</span>
+      <span class="preset-source">Sol V</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="saturn">
+      <span class="preset-name">Saturn</span>
+      <span class="preset-source">Sol VI</span>
+      <span class="preset-star">G2V — 5778 K</span>
+    </button>
+    <button class="preset-btn" data-preset="arrakis">
+      <span class="preset-name">Arrakis</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Arrakis" target="_blank">Dune</a></span>
+      <span class="preset-star">G-type — 5800 K</span>
+    </button>
+    <button class="preset-btn" data-preset="vulcan">
+      <span class="preset-name">Vulcan</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Vulcan_(Star_Trek)" target="_blank">Star Trek</a></span>
+      <span class="preset-star">K1V — 5000 K</span>
+    </button>
+    <button class="preset-btn" data-preset="krypton">
+      <span class="preset-name">Krypton</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Krypton_(planet)" target="_blank">DC</a></span>
+      <span class="preset-star">Red dwarf — 3800 K</span>
+    </button>
+    <button class="preset-btn" data-preset="pandora">
+      <span class="preset-name">Pandora</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Pandora_(Avatar)" target="_blank">Avatar</a></span>
+      <span class="preset-star">A-type — 8500 K</span>
+    </button>
+    <button class="preset-btn" data-preset="tatooine">
+      <span class="preset-name">Tatooine</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Tatooine" target="_blank">Star Wars</a></span>
+      <span class="preset-star">Binary: G2V + K1V</span>
+    </button>
+    <button class="preset-btn" data-preset="hoth">
+      <span class="preset-name">Hoth</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Hoth" target="_blank">Star Wars</a></span>
+      <span class="preset-star">Blue-white — 9000 K</span>
+    </button>
+    <button class="preset-btn" data-preset="qonos">
+      <span class="preset-name">Qo'noS</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Qo%27noS" target="_blank">Star Trek</a></span>
+      <span class="preset-star">K-type — 4600 K</span>
+    </button>
+    <button class="preset-btn" data-preset="namek">
+      <span class="preset-name">Namek</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Namek" target="_blank">Dragon Ball</a></span>
+      <span class="preset-star">Triple: 3× G-type</span>
+    </button>
+    <button class="preset-btn" data-preset="gallifrey">
+      <span class="preset-name">Gallifrey</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Gallifrey" target="_blank">Doctor Who</a></span>
+      <span class="preset-star">Binary: G + K</span>
+    </button>
+    <button class="preset-btn" data-preset="vormir">
+      <span class="preset-name">Vormir</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Vormir" target="_blank">MCU</a></span>
+      <span class="preset-star">Binary: K + M</span>
+    </button>
+    <button class="preset-btn" data-preset="thessia">
+      <span class="preset-name">Thessia</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Mass_Effect" target="_blank">Mass Effect</a></span>
+      <span class="preset-star">F-type — 6500 K</span>
+    </button>
+    <button class="preset-btn" data-preset="romulus">
+      <span class="preset-name">Romulus</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Romulan" target="_blank">Star Trek</a></span>
+      <span class="preset-star">K-type — 4900 K</span>
+    </button>
+    <button class="preset-btn" data-preset="mustafar">
+      <span class="preset-name">Mustafar</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Mustafar" target="_blank">Star Wars</a></span>
+      <span class="preset-star">G-type — 5500 K</span>
+    </button>
+    <button class="preset-btn" data-preset="bespin">
+      <span class="preset-name">Bespin</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Bespin" target="_blank">Star Wars</a></span>
+      <span class="preset-star">K-type — 4400 K</span>
+    </button>
+    <button class="preset-btn" data-preset="solaris">
+      <span class="preset-name">Solaris</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Solaris_(novel)" target="_blank">Lem</a></span>
+      <span class="preset-star">binary — M+B</span>
+    </button>
+    <button class="preset-btn" data-preset="trantor">
+      <span class="preset-name">Trantor</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Trantor" target="_blank">Asimov</a></span>
+      <span class="preset-star">G-type — 5778 K</span>
+    </button>
+  </div>
+</details>
+
+<div class="controls planet" id="planetControls">
+  <div class="controls-label">Planet Physics <button class="inline-reset" id="resetPlanet" type="button" title="Reset to current preset's defaults">↺ reset all</button></div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Atmosphere" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Atmo Density</a> <span class="val" id="vAtmoDens">1.00</span></label>
+    <input type="range" id="atmoDensity" min="0.01" max="5" step="0.01" value="1">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Astronomical_unit" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Sun Distance</a> <span class="val" id="vSunDist">1.00 AU</span></label>
+    <input type="range" id="sunDistance" min="0.3" max="10" step="0.05" value="1">
+  </div>
+  <div class="control">
+    <label><a href="https://en.wikipedia.org/wiki/Stellar_classification" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Stellar Temp</a> <span class="val" id="vStellarTemp">5778 K</span></label>
+    <input type="range" id="stellarTemp" min="2500" max="12000" step="50" value="5778" class="stellar-temp-slider">
+  </div>
+  <div class="control">
+    <label>Time of Day <span class="val" id="vHour">12:00</span></label>
+    <input type="range" id="hour" min="3" max="22" step="0.01" value="12">
+  </div>
+  <div class="control">
+    <label>Ground <span class="val" id="vGround">planet</span></label>
+    <div class="ground-row">
+      <input type="color" id="groundColor" value="#505f3c">
+      <button class="reset-btn small" id="groundReset" title="Use planet's ground color">↺</button>
+    </div>
+  </div>
+</div>
+
+<main class="model-grid" id="modelGrid">
+<div class="strip-container">
+  <div class="strip-header">
+    <button class="expand-caret" data-model="rayleigh">&#x25B8;</button>
+    <span class="strip-title">Rayleigh Only</span>
+    <span class="strip-desc">Nishita with Mie scattering disabled — pure molecular scattering baseline</span>
+  </div>
+  <div class="strip-wrap">
+    <div class="panel-wrap">
+      <canvas class="strip gl" id="cRayleigh"></canvas>
+      <canvas class="strip overlay" id="oRayleigh"></canvas>
+    </div>
+    <div class="time-cursor" id="curRayleigh"></div>
+  </div>
+  <div class="time-axis" id="axRayleigh"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Rayleigh Scattering Only</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mi>&lambda;</mi></msub><mo>=</mo>
+          <msub><mi>I</mi><mtext>sun</mtext></msub>
+          <msubsup><mo>&int;</mo><mn>0</mn><mi>D</mi></msubsup>
+          <msub><mi>&beta;</mi><mi>R</mi></msub><mo>(</mo><mi>&lambda;</mi><mo>)</mo>
+          <msub><mi>&rho;</mi><mi>R</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <msub><mi>P</mi><mi>R</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <msup><mi>e</mi><mrow><mo>-</mo><msub><mi>&tau;</mi><mi>R</mi></msub></mrow></msup>
+          <mi>d</mi><mi>s</mi>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Scattering Coefficient</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&beta;</mi><mi>R</mi></msub><mo>&prop;</mo>
+          <mfrac><mn>1</mn><msup><mi>&lambda;</mi><mn>4</mn></msup></mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">No Mie Term</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&beta;</mi><mi>M</mi></msub><mo>=</mo><mn>0</mn>
+        </mrow>
+      </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="rayleigh">
+    <div class="dome-wrap">
+      <div class="dome-frame">
+        <div class="panel-wrap">
+          <canvas class="dome gl" data-model="rayleigh" width="480" height="480"></canvas>
+          <canvas class="dome overlay" data-model="rayleigh" id="odrayleigh" width="480" height="480"></canvas>
+        </div>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
+      <div class="dome-caption" data-model="rayleigh"></div>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <button class="expand-caret" data-model="preetham">&#x25B8;</button>
+    <span class="strip-title">Preetham (1999)</span>
+    <span class="strip-desc">Analytical — Perez sky luminance/chromaticity model</span>
+  </div>
+  <div class="strip-wrap">
+    <div class="panel-wrap">
+      <canvas class="strip gl" id="cPreetham"></canvas>
+      <canvas class="strip overlay" id="oPreetham"></canvas>
+    </div>
+    <div class="time-cursor" id="curPreetham"></div>
+  </div>
+  <div class="time-axis" id="axPreetham"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Perez Sky Function</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mrow><mo>(</mo>
+            <mn>1</mn><mo>+</mo><mi>A</mi><mo>&InvisibleTimes;</mo>
+            <msup><mi>e</mi><mfrac><mi>B</mi><mrow><mi>cos</mi><mi>&theta;</mi></mrow></mfrac></msup>
+          <mo>)</mo></mrow>
+          <mrow><mo>(</mo>
+            <mn>1</mn><mo>+</mo>
+            <mi>C</mi><mo>&InvisibleTimes;</mo><msup><mi>e</mi><mrow><mi>D</mi><mi>&gamma;</mi></mrow></msup>
+            <mo>+</mo><mi>E</mi><mo>&InvisibleTimes;</mo><msup><mrow><mi>cos</mi></mrow><mn>2</mn></msup><mi>&gamma;</mi>
+          <mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Sky Radiance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>L</mi><mi>&lambda;</mi></msub>
+          <mo>=</mo>
+          <msub><mi>L</mi><mi>z</mi></msub>
+          <mo>&sdot;</mo>
+          <mfrac>
+            <mrow><mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo></mrow>
+            <mrow><mi>F</mi><mo>(</mo><mn>0</mn><mo>,</mo><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow>
+          </mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Zenith Luminance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>Y</mi><mi>z</mi></msub><mo>=</mo>
+          <mrow><mo>(</mo><mn>4.0453</mn><mi>T</mi><mo>-</mo><mn>4.971</mn><mo>)</mo></mrow>
+          <mi>tan</mi><mi>&chi;</mi>
+          <mo>-</mo><mn>0.2155</mn><mi>T</mi><mo>+</mo><mn>2.4192</mn>
+        </mrow>
+      </math>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>&chi;</mi><mo>=</mo>
+          <mrow><mo>(</mo>
+            <mfrac><mn>4</mn><mn>9</mn></mfrac><mo>-</mo><mfrac><mi>T</mi><mn>120</mn></mfrac>
+          <mo>)</mo></mrow>
+          <mrow><mo>(</mo><mi>&pi;</mi><mo>-</mo><mn>2</mn><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="preetham">
+    <div class="dome-wrap">
+      <div class="dome-frame">
+        <div class="panel-wrap">
+          <canvas class="dome gl" data-model="preetham" width="480" height="480"></canvas>
+          <canvas class="dome overlay" data-model="preetham" id="odpreetham" width="480" height="480"></canvas>
+        </div>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
+      <div class="dome-caption" data-model="preetham"></div>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <button class="expand-caret" data-model="nishita">&#x25B8;</button>
+    <span class="strip-title">Nishita (1993)</span>
+    <span class="strip-desc">Ray-marching — single-scattering Rayleigh + Mie</span>
+  </div>
+  <div class="strip-wrap">
+    <div class="panel-wrap">
+      <canvas class="strip gl" id="cNishita"></canvas>
+      <canvas class="strip overlay" id="oNishita"></canvas>
+    </div>
+    <div class="time-cursor" id="curNishita"></div>
+  </div>
+  <div class="time-axis" id="axNishita"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Single-Scattering Integral</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mi>&lambda;</mi></msub>
+          <mo>=</mo>
+          <msub><mi>I</mi><mtext>sun</mtext></msub>
+          <msubsup><mo>&int;</mo><mn>0</mn><mi>D</mi></msubsup>
+          <mrow><mo>[</mo>
+            <msub><mi>&beta;</mi><mi>R</mi></msub><mo>(</mo><mi>&lambda;</mi><mo>)</mo>
+            <msub><mi>&rho;</mi><mi>R</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+            <msub><mi>P</mi><mi>R</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+            <mo>+</mo>
+            <msub><mi>&beta;</mi><mi>M</mi></msub>
+            <msub><mi>&rho;</mi><mi>M</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+            <msub><mi>P</mi><mi>M</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <mo>]</mo></mrow>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mi>&tau;</mi><mo>(</mo><mover><mi>x</mi><mo>&rarr;</mo></mover><mo>,</mo><mover><mi>s</mi><mo>&rarr;</mo></mover><mo>)</mo>
+            <mo>-</mo><mi>&tau;</mi><mo>(</mo><mover><mi>x</mi><mo>&rarr;</mo></mover><mo>,</mo><mover><mi>v</mi><mo>&rarr;</mo></mover><mo>)</mo></mrow>
+          </msup>
+          <mi>d</mi><mi>s</mi>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Rayleigh Phase</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>P</mi><mi>R</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac>
+          <mrow><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Henyey-Greenstein Mie Phase</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>P</mi><mi>M</mi></msub><mo>(</mo><mi>&theta;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mfrac>
+            <mrow><mn>3</mn><mo>(</mo><mn>1</mn><mo>-</mo><msup><mi>g</mi><mn>2</mn></msup><mo>)</mo>
+            <mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></mrow>
+            <mrow><mn>8</mn><mi>&pi;</mi><mo>(</mo><mn>2</mn><mo>+</mo><msup><mi>g</mi><mn>2</mn></msup><mo>)</mo>
+            <msup><mrow><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>g</mi><mn>2</mn></msup><mo>-</mo><mn>2</mn><mi>g</mi><mi>cos</mi><mi>&theta;</mi><mo>)</mo></mrow>
+            <mfrac><mn>3</mn><mn>2</mn></mfrac></msup></mrow>
+          </mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Density Profiles</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&rho;</mi><mi>R</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mo>=</mo>
+          <msup><mi>e</mi><mrow><mo>-</mo><mi>h</mi><mo>/</mo><msub><mi>H</mi><mi>R</mi></msub></mrow></msup>
+        </mrow>
+      </math>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&rho;</mi><mi>M</mi></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mo>=</mo>
+          <msup><mi>e</mi><mrow><mo>-</mo><mi>h</mi><mo>/</mo><msub><mi>H</mi><mi>M</mi></msub></mrow></msup>
+        </mrow>
+      </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="nishita">
+    <div class="dome-wrap">
+      <div class="dome-frame">
+        <div class="panel-wrap">
+          <canvas class="dome gl" data-model="nishita" width="480" height="480"></canvas>
+          <canvas class="dome overlay" data-model="nishita" id="odnishita" width="480" height="480"></canvas>
+        </div>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
+      <div class="dome-caption" data-model="nishita"></div>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <button class="expand-caret" data-model="hosek">&#x25B8;</button>
+    <span class="strip-title">Hosek-Wilkie (2012)</span>
+    <span class="strip-desc">Enhanced analytical — improved horizon, ground albedo feedback</span>
+  </div>
+  <div class="strip-wrap">
+    <div class="panel-wrap">
+      <canvas class="strip gl" id="cHosek"></canvas>
+      <canvas class="strip overlay" id="oHosek"></canvas>
+    </div>
+    <div class="time-cursor" id="curHosek"></div>
+  </div>
+  <div class="time-axis" id="axHosek"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">9-Parameter Sky Radiance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo>
+          <mo>=</mo>
+          <mrow><mo>(</mo>
+            <mn>1</mn><mo>+</mo><mi>A</mi><msup><mi>e</mi>
+              <mfrac><mi>B</mi><mrow><mi>cos</mi><mi>&theta;</mi><mo>+</mo><mn>0.01</mn></mrow></mfrac>
+            </msup>
+          <mo>)</mo></mrow>
+          <mrow><mo>(</mo>
+            <mi>C</mi>
+            <mo>+</mo><mi>D</mi><msup><mi>e</mi><mrow><mi>E</mi><mi>&gamma;</mi></mrow></msup>
+            <mo>+</mo><mi>F</mi><msup><mi>cos</mi><mn>2</mn></msup><mi>&gamma;</mi>
+            <mo>+</mo><mi>G</mi><mi>&chi;</mi><mo>(</mo><mi>H</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo>
+            <mo>+</mo><mi>I</mi><msqrt><mrow><mi>cos</mi><mi>&theta;</mi></mrow></msqrt>
+          <mo>)</mo></mrow>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Multiple Scattering</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mtext>ms</mtext></msub>
+          <mo>&approx;</mo>
+          <msub><mi>I</mi><mtext>ss</mtext></msub>
+          <mo>&sdot;</mo>
+          <msub><mi>k</mi><mtext>ms</mtext></msub>
+          <mo>(</mo><mn>1</mn><mo>+</mo>
+          <mfrac><mi>A</mi><mn>2</mn></mfrac>
+          <mo>)</mo>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Ground Albedo Feedback</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>I</mi><mtext>ground</mtext></msub>
+          <mo>=</mo>
+          <mi>A</mi>
+          <mo>&sdot;</mo>
+          <msub><mi>E</mi><mtext>sun</mtext></msub>
+          <mo>&sdot;</mo>
+          <mi>sin</mi><msub><mi>&alpha;</mi><mi>s</mi></msub>
+          <mo>&sdot;</mo>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mi>&tau;</mi><mo>(</mo><mtext>g</mtext><mo>&rarr;</mo><mtext>s</mtext><mo>)</mo></mrow>
+          </msup>
+          <mo>&sdot;</mo>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mi>&tau;</mi><mo>(</mo><mtext>g</mtext><mo>&rarr;</mo><mtext>v</mtext><mo>)</mo></mrow>
+          </msup>
+        </mrow>
+      </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="hosek">
+    <div class="dome-wrap">
+      <div class="dome-frame">
+        <div class="panel-wrap">
+          <canvas class="dome gl" data-model="hosek" width="480" height="480"></canvas>
+          <canvas class="dome overlay" data-model="hosek" id="odhosek" width="480" height="480"></canvas>
+        </div>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
+      <div class="dome-caption" data-model="hosek"></div>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <button class="expand-caret" data-model="ozone">&#x25B8;</button>
+    <span class="strip-title">Nishita + Ozone</span>
+    <span class="strip-desc">Adds Chappuis band absorption — deeper blues during twilight</span>
+  </div>
+  <div class="strip-wrap">
+    <div class="panel-wrap">
+      <canvas class="strip gl" id="cOzone"></canvas>
+      <canvas class="strip overlay" id="oOzone"></canvas>
+    </div>
+    <div class="time-cursor" id="curOzone"></div>
+  </div>
+  <div class="time-axis" id="axOzone"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Total Optical Depth</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>&tau;</mi><mo>=</mo>
+          <msub><mi>&tau;</mi><mi>R</mi></msub><mo>+</mo>
+          <msub><mi>&tau;</mi><mi>M</mi></msub><mo>+</mo>
+          <msub><mi>&tau;</mi><msub><mi>O</mi><mn>3</mn></msub></msub>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Ozone Density</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&rho;</mi><msub><mi>O</mi><mn>3</mn></msub></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mo>=</mo>
+          <msup><mi>e</mi>
+            <mrow><mo>-</mo><mn>2</mn>
+              <mfrac>
+                <mrow><mo>|</mo><mi>h</mi><mo>-</mo><mn>25</mn><mtext>km</mtext><mo>|</mo></mrow>
+                <mrow><mn>15</mn><mtext>km</mtext></mrow>
+              </mfrac>
+            </mrow>
+          </msup>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Chappuis Absorption</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <msub><mi>&tau;</mi><msub><mi>O</mi><mn>3</mn></msub></msub>
+          <mo>=</mo>
+          <mo>&int;</mo>
+          <msub><mi>&beta;</mi><msub><mi>O</mi><mn>3</mn></msub></msub><mo>(</mo><mi>&lambda;</mi><mo>)</mo>
+          <msub><mi>&rho;</mi><msub><mi>O</mi><mn>3</mn></msub></msub><mo>(</mo><mi>h</mi><mo>)</mo>
+          <mi>d</mi><mi>s</mi>
+        </mrow>
+      </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="ozone">
+    <div class="dome-wrap">
+      <div class="dome-frame">
+        <div class="panel-wrap">
+          <canvas class="dome gl" data-model="ozone" width="480" height="480"></canvas>
+          <canvas class="dome overlay" data-model="ozone" id="odozone" width="480" height="480"></canvas>
+        </div>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
+      <div class="dome-caption" data-model="ozone"></div>
+    </div>
+  </div>
+</div>
+
+<div class="strip-container">
+  <div class="strip-header">
+    <button class="expand-caret" data-model="cie">&#x25B8;</button>
+    <span class="strip-title">CIE Standard Clear Sky (Type 12)</span>
+    <span class="strip-desc">Empirical luminance model — ISO 15469 architectural standard</span>
+  </div>
+  <div class="strip-wrap">
+    <div class="panel-wrap">
+      <canvas class="strip gl" id="cCie"></canvas>
+      <canvas class="strip overlay" id="oCie"></canvas>
+    </div>
+    <div class="time-cursor" id="curCie"></div>
+  </div>
+  <div class="time-axis" id="axCie"></div>
+  <div class="math-block">
+    <div class="math-cell">
+      <div class="math-label">Sky Luminance</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mfrac>
+            <mrow><mi>L</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo></mrow>
+            <msub><mi>L</mi><mi>z</mi></msub>
+          </mfrac>
+          <mo>=</mo>
+          <mfrac>
+            <mrow><mi>&phi;</mi><mo>(</mo><mi>&theta;</mi><mo>)</mo><mo>&sdot;</mo><mi>f</mi><mo>(</mo><mi>&gamma;</mi><mo>)</mo></mrow>
+            <mrow><mi>&phi;</mi><mo>(</mo><mn>0</mn><mo>)</mo><mo>&sdot;</mo><mi>f</mi><mo>(</mo><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow>
+          </mfrac>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Gradation</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>&phi;</mi><mo>(</mo><mi>&theta;</mi><mo>)</mo><mo>=</mo>
+          <mn>1</mn><mo>+</mo><mi>a</mi>
+          <msup><mi>e</mi><mrow><mi>b</mi><mo>/</mo><mi>cos</mi><mi>&theta;</mi></mrow></msup>
+        </mrow>
+      </math>
+    </div>
+    <div class="math-cell">
+      <div class="math-label">Indicatrix</div>
+      <math xmlns="http://www.w3.org/1998/Math/MathML" display="block">
+        <mrow>
+          <mi>f</mi><mo>(</mo><mi>&gamma;</mi><mo>)</mo><mo>=</mo>
+          <mn>1</mn><mo>+</mo><mi>c</mi>
+          <mrow><mo>(</mo><msup><mi>e</mi><mrow><mi>d</mi><mi>&gamma;</mi></mrow></msup>
+          <mo>-</mo><msup><mi>e</mi><mrow><mi>d</mi><mi>&pi;</mi><mo>/</mo><mn>2</mn></mrow></msup><mo>)</mo></mrow>
+          <mo>+</mo><mi>e</mi><msup><mi>cos</mi><mn>2</mn></msup><mi>&gamma;</mi>
+        </mrow>
+      </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="cie">
+    <div class="dome-wrap">
+      <div class="dome-frame">
+        <div class="panel-wrap">
+          <canvas class="dome gl" data-model="cie" width="480" height="480"></canvas>
+          <canvas class="dome overlay" data-model="cie" id="odcie" width="480" height="480"></canvas>
+        </div>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
+      <div class="dome-caption" data-model="cie"></div>
+    </div>
+  </div>
+</div>
+</main>
+
+<div class="planet-area">
+  <nav class="planet-toolbar" id="planetToolbar" role="toolbar" aria-label="Planet presets"></nav>
+</div>
+
+<div class="param-table-wrap">
+  <h2>Parameter Matrix</h2>
+  <table class="param-table">
+    <thead>
+      <tr>
+        <th>Parameter</th>
+        <th></th>
+        <th>Rayleigh</th>
+        <th>Preetham</th>
+        <th>Nishita</th>
+        <th>Hosek-Wilkie</th>
+        <th>Nishita+O&#x2083;</th>
+        <th>CIE Clear</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="group-header"><td colspan="8">Geometry</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Position_of_the_Sun" target="_blank">Sun position</a></td>
+        <td class="sym"><math><msub><mi>&alpha;</mi><mi>s</mi></msub></math></td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+        <td class="y">&#x2713;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Zenith_angle" target="_blank">Viewing elevation</a></td>
+        <td class="sym"><math><mi>&theta;</mi></math></td>
+        <td class="note">ray direction</td>
+        <td class="note">Perez <math><mfrac><mrow><mi>F</mi><mo>(</mo><mi>&theta;</mi><mo>,</mo><mi>&gamma;</mi><mo>)</mo></mrow><mrow><mi>F</mi><mo>(</mo><mn>0</mn><mo>,</mo><msub><mi>&theta;</mi><mi>s</mi></msub><mo>)</mo></mrow></mfrac></math></td>
+        <td class="note">ray direction</td>
+        <td class="note">ray direction</td>
+        <td class="note">ray direction</td>
+        <td class="note"><math><mi>&phi;</mi><mo>(</mo><mi>&theta;</mi><mo>)</mo></math> gradation</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Air_mass_(astronomy)" target="_blank">Observer altitude</a></td>
+        <td class="sym"><math><msub><mi>h</mi><mn>0</mn></msub></math></td>
+        <td class="y">ray origin</td>
+        <td class="n">&mdash;</td>
+        <td class="y">ray origin</td>
+        <td class="y">ray origin</td>
+        <td class="y">ray origin</td>
+        <td class="n">&mdash;</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Atmospheric Scattering</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Rayleigh_scattering" target="_blank">Rayleigh coefficient</a></td>
+        <td class="sym"><math><msub><mi>&beta;</mi><mi>R</mi></msub></math></td>
+        <td class="y">sole scatter term</td>
+        <td class="note">implicit in Perez fit</td>
+        <td class="y">per-channel</td>
+        <td class="y">per-channel</td>
+        <td class="y">per-channel</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Mie_scattering" target="_blank">Mie coefficient</a></td>
+        <td class="sym"><math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="note"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>=</mo><mn>0</mn></math></td>
+        <td class="note">implicit in Perez fit</td>
+        <td class="y"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>&prop;</mo><mi>T</mi></math></td>
+        <td class="y"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>&prop;</mo><mi>T</mi></math></td>
+        <td class="y"><math><msub><mi>&beta;</mi><mi>M</mi></msub><mo>&prop;</mo><mi>T</mi></math></td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Scale_height" target="_blank">Rayleigh scale height</a></td>
+        <td class="sym"><math><msub><mi>H</mi><mi>R</mi></msub></math></td>
+        <td class="y">8 km</td>
+        <td class="n">&mdash;</td>
+        <td class="y">8 km</td>
+        <td class="y">8 km</td>
+        <td class="y">8 km</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Scale_height" target="_blank">Mie scale height</a></td>
+        <td class="sym"><math><msub><mi>H</mi><mi>M</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y">1.2 km</td>
+        <td class="y">1.2 km</td>
+        <td class="y">1.2 km</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Turbidity" target="_blank">Turbidity</a></td>
+        <td class="sym"><math><mi>T</mi></math></td>
+        <td class="note">scales <math><msub><mi>&rho;</mi><mi>R</mi></msub></math></td>
+        <td class="y">drives all Perez coeffs</td>
+        <td class="y">scales <math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="y">scales <math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="y">scales <math><msub><mi>&beta;</mi><mi>M</mi></msub></math></td>
+        <td class="note">affects CCT</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Phase Functions</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Rayleigh_scattering" target="_blank">Rayleigh phase</a></td>
+        <td class="sym"><math><msub><mi>P</mi><mi>R</mi></msub></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="note">baked into Perez <math><mi>E</mi></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="y"><math><mfrac><mn>3</mn><mrow><mn>16</mn><mi>&pi;</mi></mrow></mfrac><mo>(</mo><mn>1</mn><mo>+</mo><msup><mi>cos</mi><mn>2</mn></msup><mi>&theta;</mi><mo>)</mo></math></td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Mie_scattering" target="_blank">Mie phase</a></td>
+        <td class="sym"><math><msub><mi>P</mi><mi>M</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">baked into Perez <math><mi>C</mi><mo>,</mo><mi>D</mi></math></td>
+        <td class="note"><a href="https://en.wikipedia.org/wiki/Henyey%E2%80%93Greenstein_phase_function" target="_blank">Henyey-Greenstein</a></td>
+        <td class="note"><a href="https://en.wikipedia.org/wiki/Mie_scattering" target="_blank">Cornette-Shanks</a></td>
+        <td class="note"><a href="https://en.wikipedia.org/wiki/Henyey%E2%80%93Greenstein_phase_function" target="_blank">Henyey-Greenstein</a></td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Henyey%E2%80%93Greenstein_phase_function#The_asymmetry_parameter_(g)" target="_blank">Asymmetry parameter</a></td>
+        <td class="sym"><math><mi>g</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y"><math><mn>0.76</mn></math> (fixed)</td>
+        <td class="y"><math><mn>0.76</mn></math> (fixed)</td>
+        <td class="y"><math><mn>0.76</mn></math> (fixed)</td>
+        <td class="n">&mdash;</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Absorption &amp; Ozone</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Ozone_layer" target="_blank">Ozone absorption</a></td>
+        <td class="sym"><math><msub><mi>&beta;</mi><msub><mi>O</mi><mn>3</mn></msub></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y"><a href="https://en.wikipedia.org/wiki/Chappuis_absorption" target="_blank">Chappuis band</a>, 3-ch</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Ozone_layer#Distribution_in_the_stratosphere" target="_blank">Ozone density</a></td>
+        <td class="sym"><math><msub><mi>&rho;</mi><msub><mi>O</mi><mn>3</mn></msub></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="note"><math><msup><mi>e</mi><mrow><mo>-</mo><mn>2</mn><mfrac><mrow><mo>|</mo><mi>h</mi><mo>-</mo><mn>25</mn><mo>|</mo></mrow><mn>15</mn></mfrac></mrow></msup></math> km</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Dobson_unit" target="_blank">Ozone column strength</a></td>
+        <td class="sym"><math><msub><mi>S</mi><msub><mi>O</mi><mn>3</mn></msub></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y">slider <math><mo>(</mo><mn>0</mn><mo>&ndash;</mo><mn>3</mn><mo>)</mo></math></td>
+        <td class="n">&mdash;</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Surface &amp; Multi-Scatter</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Albedo" target="_blank">Ground albedo</a></td>
+        <td class="sym"><math><mi>A</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y"><math><msub><mi>I</mi><mtext>g</mtext></msub><mo>=</mo><mi>A</mi><mo>&sdot;</mo><msub><mi>E</mi><mo>&#x2609;</mo></msub><msup><mi>e</mi><mrow><mo>-</mo><mi>&tau;</mi></mrow></msup></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Radiative_transfer" target="_blank">Multiple scattering</a></td>
+        <td class="sym"><math><msub><mi>I</mi><mtext>ms</mtext></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">implicit in empirical fit</td>
+        <td class="n">&mdash;</td>
+        <td class="note">order-2, <math><msub><mi>k</mi><mtext>ms</mtext></msub><mo>=</mo><mn>0.075</mn></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">implicit in empirical fit</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Color &amp; Tone Mapping</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/SRGB" target="_blank">Color space</a></td>
+        <td class="sym"></td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">CIE <math><mi>Y</mi><mi>x</mi><mi>y</mi></math> &rarr; sRGB</td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">spectral RGB &rarr; sRGB</td>
+        <td class="note">CCT &rarr; <math><mi>Y</mi><mi>x</mi><mi>y</mi></math> &rarr; sRGB</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Tone_mapping" target="_blank">Tone mapping</a></td>
+        <td class="sym"><math><mi>k</mi></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>0.04</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>1.0</mn></math></td>
+        <td class="note">Reinhard, <math><mi>k</mi><mo>=</mo><mn>0.15</mn></math></td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Twilight" target="_blank">Twilight handling</a></td>
+        <td class="sym"></td>
+        <td class="note">indirect glow</td>
+        <td class="note">fade to <math><mo>-</mo><mn>6</mn><mo>&deg;</mo></math></td>
+        <td class="note">indirect glow</td>
+        <td class="note">indirect glow</td>
+        <td class="note">indirect glow</td>
+        <td class="note">fade to <math><mo>-</mo><mn>6</mn><mo>&deg;</mo></math></td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">CIE-Specific</td></tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/International_Commission_on_Illumination" target="_blank">Sky type coefficients</a></td>
+        <td class="sym"><math><mi>a</mi><mo>&ndash;</mo><mi>e</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="y">Type 12 (clear, polluted)</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/Correlated_color_temperature" target="_blank">Correlated color temp</a></td>
+        <td class="sym"><math><msub><mi>T</mi><mtext>cc</mtext></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="note"><math><mn>3500</mn><mo>&ndash;</mo><mn>15000</mn></math> K</td>
+      </tr>
+
+      <tr class="group-header"><td colspan="8">Preetham-Specific</td></tr>
+      <tr>
+        <td><a href="https://docs.agi32.com/AGi32/Content/references/Perez_All-Weather_Sky_Model.htm" target="_blank">Perez coefficients</a></td>
+        <td class="sym"><math><mi>A</mi><mo>&ndash;</mo><mi>E</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="y">3 sets <math><mo>(</mo><mi>Y</mi><mo>,</mo><mi>x</mi><mo>,</mo><mi>y</mi><mo>)</mo><mo>&times;</mo><mi>T</mi></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+      </tr>
+      <tr>
+        <td><a href="https://en.wikipedia.org/wiki/CIE_1931_color_space#Chromaticity_diagram" target="_blank">Zenith chromaticity</a></td>
+        <td class="sym"><math><msub><mi>x</mi><mi>z</mi></msub><mo>,</mo><msub><mi>y</mi><mi>z</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="note">polynomial in <math><mi>T</mi><mo>,</mo><msub><mi>&theta;</mi><mi>s</mi></msub></math></td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+        <td class="n">&mdash;</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="legend">
+  <strong>Notes:</strong> All models show the sky color at the selected viewing elevation angle.
+  Below the horizon the sun is shown as dark.
+  Hosek-Wilkie uses an analytical approximation of the published model (full dataset is ~100KB of coefficients).
+  Colors are tone-mapped to sRGB and may clip in extreme conditions.
+</div>
+
+<div id="lightbox">
+  <div class="lb-title" id="lbTitle"></div>
+  <button class="lb-close" id="lbClose">Close ✕</button>
+  <div class="lb-inner">
+    <div class="panel-wrap">
+      <canvas class="gl" id="lbCanvas"></canvas>
+      <canvas class="overlay" id="lbOverlay"></canvas>
+    </div>
+  </div>
+  <div class="lb-controls">
+    <div class="lb-meta">
+      <span class="lb-meta-item">Time <span id="lbHourVal">12:00</span></span>
+      <span class="lb-meta-sep">·</span>
+      <span class="lb-meta-item">Sun elev <span id="lbElev">—</span></span>
+      <span class="lb-meta-sep">·</span>
+      <span class="lb-meta-item">Preset <span id="lbPreset">—</span></span>
+    </div>
+    <input type="range" id="lbHour" min="3" max="22" step="0.01" value="12">
+    <div class="lb-hour-axis">
+      <span>3a</span><span>6a</span><span>9a</span><span>noon</span><span>3p</span><span>6p</span><span>9p</span>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
