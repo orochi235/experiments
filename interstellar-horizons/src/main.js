@@ -829,7 +829,7 @@ const URL_PARAMS = [
   },
   {
     name: 'wb',
-    parse: s => ['physical', 'adapted'].includes(s) ? s : null,
+    parse: s => ['physical', 'adapted', 'd65'].includes(s) ? s : null,
     apply: v => {
       const btn = document.querySelector(`#wbToggle .proj-btn[data-wb="${v}"]`);
       if (btn) btn.click();
