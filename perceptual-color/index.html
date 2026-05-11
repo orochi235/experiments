@@ -508,6 +508,20 @@
   body:has(#expandedSliders:not(:checked)) .fullrange-toggle { display: none; }
   body:has(#expandedSliders:checked) .chroma-condensed,
   body:has(#expandedSliders:checked) .l-condensed { display: none; }
+  /* Section header row: section label on the left, toggles pushed to the
+     right via margin-left: auto on the toggle group. */
+  .section-label-row {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .section-toggles {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .section-toggle {
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    text-transform: none; letter-spacing: normal;
+    font-weight: 500; color: var(--cs-fg-faint);
+  }
 
   /* Per-thumb readouts shown below each multi-thumb. */
   .mt-readout {
@@ -833,20 +847,22 @@
       </div>
     </div>
     <div class="grid">
-      <div class="section-label" style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+      <div class="section-label section-label-row">
         <span>Lightness</span>
-        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);">
-          <input type="checkbox" id="expandedSliders">
-          <span>Expanded sliders</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);">
-          <input type="checkbox" id="boundedChroma" checked>
-          <span>Bound to safe sRGB ranges</span>
-        </label>
-        <label class="fullrange-toggle" style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);" title="When bounded, draw the slider's full unbounded range and visually lock out the disallowed portion. When off, the slider just shrinks to the bounded range.">
-          <input type="checkbox" id="fullRangeSlider" checked>
-          <span>Force full range</span>
-        </label>
+        <div class="section-toggles">
+          <label class="section-toggle">
+            <input type="checkbox" id="expandedSliders">
+            <span>Expanded sliders</span>
+          </label>
+          <label class="section-toggle">
+            <input type="checkbox" id="boundedChroma" checked>
+            <span>Bound to safe sRGB ranges</span>
+          </label>
+          <label class="section-toggle fullrange-toggle" title="When bounded, draw the slider's full unbounded range and visually lock out the disallowed portion. When off, the slider just shrinks to the bounded range.">
+            <input type="checkbox" id="fullRangeSlider" checked>
+            <span>Force full range</span>
+          </label>
+        </div>
       </div>
 
       <!-- Condensed: 2-thumb L range slider -->
