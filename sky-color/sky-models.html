@@ -1509,7 +1509,7 @@ function nishitaColor(sunElev, turbidity, viewElevDeg, altitude, mieScale) {
 // - Ground albedo feedback (light reflected off ground re-enters atmosphere)
 // - Multiple scattering approximation
 // - Cornette-Shanks phase function for Mie
-function hosekColor(sunElev, turbidity, viewElevDeg, altitude, albedo) {
+function hosekColor(sunElev, turbidity, viewElevDeg, viewAzDeg, altitude, albedo) {
   if (sunElev < deg(-8)) return [0, 0, 0];
 
   const numSamples = 24;
@@ -1520,8 +1520,7 @@ function hosekColor(sunElev, turbidity, viewElevDeg, altitude, albedo) {
   const observerH = EARTH_R + altitude;
   const ro = [0, observerH, 0];
 
-  const ve = deg(viewElevDeg);
-  const viewDir = [0, Math.sin(ve), Math.cos(ve)];
+  const viewDir = viewDirFromAzEl(viewAzDeg || 0, viewElevDeg);
   const sunDir = [0, Math.sin(sunElev), Math.cos(sunElev)];
 
   const cosViewSun = viewDir[0]*sunDir[0] + viewDir[1]*sunDir[1] + viewDir[2]*sunDir[2];
@@ -1620,11 +1619,11 @@ function hosekColor(sunElev, turbidity, viewElevDeg, altitude, albedo) {
 // ============================================================
 // CIE STANDARD CLEAR SKY (Type 12)
 // ============================================================
-function cieClearColor(sunElev, turbidity, viewElevDeg) {
+function cieClearColor(sunElev, turbidity, viewElevDeg, viewAzDeg) {
   if (sunElev < deg(-6)) return [0, 0, 0];
   const sunTheta = PI / 2 - sunElev;
   const viewTheta = PI / 2 - deg(viewElevDeg);
-  const gamma = Math.abs(viewTheta - sunTheta);
+  const gamma = scatteringAngle(sunElev, viewElevDeg, viewAzDeg || 0);
 
   // CIE Type 12 parameters (Clear sky, polluted)
   const a = -1.0, b = -0.32, c = 10.0, d = -3.0, e = 0.45;
@@ -1915,9 +1914,9 @@ function renderAll() {
         } else if (name === 'ozone') {
           contrib = nishitaOzoneColor(sElev, T, ve, alt, ozone);
         } else if (name === 'cie') {
-          contrib = cieClearColor(sElev, T, ve);
+          contrib = cieClearColor(sElev, T, ve, 0);
         } else {
-          contrib = hosekColor(sElev, T, ve, alt, alb);
+          contrib = hosekColor(sElev, T, ve, 0, alt, alb);
         }
 
         // Tint by this star's blackbody color and scale by intensity
