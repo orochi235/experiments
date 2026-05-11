@@ -2443,9 +2443,10 @@ function viewAzElToPixel(projection, viewAz, viewEl, w, h) {
 
 const GROUND_COLOR = [26, 26, 31]; // dark ground, matches #1a1a1f-ish
 
-function renderDome(name) {
+async function renderDome(name, isCancelled) {
   const state = domeState[name];
   if (!state.expanded) return;
+  if (isCancelled && isCancelled()) return;
   const canvas = document.querySelector(`canvas.dome[data-model="${name}"]`);
   if (!canvas) return;
   const caption = document.querySelector(`.dome-caption[data-model="${name}"]`);
@@ -2502,53 +2503,62 @@ function renderDome(name) {
     return { elev: p[0], azOffsetDeg: angleDiffRad(p[1], primaryPos[1]) * 180 / PI };
   });
 
-  for (let py = 0; py < h; py += step) {
-    for (let px = 0; px < w; px += step) {
-      const ve = pixelToViewAzEl(state.projection, px, py, w, h);
-      if (!ve) {
+  // Chunked rendering: process ROWS_PER_CHUNK logical rows per rAF, then yield.
+  // This lets new schedule requests preempt an in-flight render via isCancelled().
+  const ROWS_PER_CHUNK = 16;
+  const physRowsPerChunk = step * ROWS_PER_CHUNK;
+  for (let chunkStart = 0; chunkStart < h; chunkStart += physRowsPerChunk) {
+    if (isCancelled && isCancelled()) return;
+    const chunkEnd = Math.min(h, chunkStart + physRowsPerChunk);
+    for (let py = chunkStart; py < chunkEnd; py += step) {
+      for (let px = 0; px < w; px += step) {
+        const ve = pixelToViewAzEl(state.projection, px, py, w, h);
+        if (!ve) {
+          for (let dy = 0; dy < step && py + dy < h; dy++) {
+            for (let dx = 0; dx < step && px + dx < w; dx++) {
+              const j = ((py + dy) * w + (px + dx)) * 4;
+              data[j] = GROUND_COLOR[0];
+              data[j + 1] = GROUND_COLOR[1];
+              data[j + 2] = GROUND_COLOR[2];
+              data[j + 3] = 255;
+            }
+          }
+          continue;
+        }
+        const [viewAz, viewEl] = ve;
+        let rgb = [0, 0, 0];
+        for (let si = 0; si < nStars; si++) {
+          const star = activeStars[si];
+          const g = starGeom[si];
+          const contrib = modelCall(name, g.elev, T, viewEl, viewAz - g.azOffsetDeg, alt, alb, ozone);
+          rgb[0] += contrib[0] * star.color[0] * star.intensity;
+          rgb[1] += contrib[1] * star.color[1] * star.intensity;
+          rgb[2] += contrib[2] * star.color[2] * star.intensity;
+        }
+        if (preset.scatterTweak) {
+          let [hh, ss, ll] = rgbToHsl(clamp(rgb[0],0,255), clamp(rgb[1],0,255), clamp(rgb[2],0,255));
+          hh += preset.scatterTweak.hueShift / 360;
+          ss *= preset.scatterTweak.satBoost;
+          ss = clamp(ss, 0, 1);
+          rgb = hslToRgb(hh, ss, ll);
+        }
+        rgb = applyStyle(rgb, primarySunElev, style);
+        const r = clamp(Math.round(rgb[0]), 0, 255);
+        const g = clamp(Math.round(rgb[1]), 0, 255);
+        const b = clamp(Math.round(rgb[2]), 0, 255);
         for (let dy = 0; dy < step && py + dy < h; dy++) {
           for (let dx = 0; dx < step && px + dx < w; dx++) {
             const j = ((py + dy) * w + (px + dx)) * 4;
-            data[j] = GROUND_COLOR[0];
-            data[j + 1] = GROUND_COLOR[1];
-            data[j + 2] = GROUND_COLOR[2];
-            data[j + 3] = 255;
+            data[j] = r; data[j + 1] = g; data[j + 2] = b; data[j + 3] = 255;
           }
-        }
-        continue;
-      }
-      const [viewAz, viewEl] = ve;
-      let rgb = [0, 0, 0];
-      for (let si = 0; si < nStars; si++) {
-        const star = activeStars[si];
-        const g = starGeom[si];
-        // viewAz is relative to the primary's meridian; subtract this star's offset
-        // so the model sees the pixel's view-direction relative to *this* star's sun.
-        const contrib = modelCall(name, g.elev, T, viewEl, viewAz - g.azOffsetDeg, alt, alb, ozone);
-        rgb[0] += contrib[0] * star.color[0] * star.intensity;
-        rgb[1] += contrib[1] * star.color[1] * star.intensity;
-        rgb[2] += contrib[2] * star.color[2] * star.intensity;
-      }
-      if (preset.scatterTweak) {
-        let [hh, ss, ll] = rgbToHsl(clamp(rgb[0],0,255), clamp(rgb[1],0,255), clamp(rgb[2],0,255));
-        hh += preset.scatterTweak.hueShift / 360;
-        ss *= preset.scatterTweak.satBoost;
-        ss = clamp(ss, 0, 1);
-        rgb = hslToRgb(hh, ss, ll);
-      }
-      rgb = applyStyle(rgb, primarySunElev, style);
-      const r = clamp(Math.round(rgb[0]), 0, 255);
-      const g = clamp(Math.round(rgb[1]), 0, 255);
-      const b = clamp(Math.round(rgb[2]), 0, 255);
-      for (let dy = 0; dy < step && py + dy < h; dy++) {
-        for (let dx = 0; dx < step && px + dx < w; dx++) {
-          const j = ((py + dy) * w + (px + dx)) * 4;
-          data[j] = r; data[j + 1] = g; data[j + 2] = b; data[j + 3] = 255;
         }
       }
     }
+    // Commit just this chunk's rows so progress is visible.
+    ctx.putImageData(img, 0, 0, 0, chunkStart, w, chunkEnd - chunkStart);
+    await new Promise(r => requestAnimationFrame(r));
   }
-  ctx.putImageData(img, 0, 0);
+  if (isCancelled && isCancelled()) return;
 
   // Sun disk pass — one per star, in its own color and at its actual sky position
   // (relative to the primary, which sits at viewAz=0).
@@ -2587,20 +2597,62 @@ function renderDome(name) {
   }
 }
 
-let domeRaf = null;
+// Render generation — bumped every time work is scheduled. Each chunk of an
+// in-flight render checks its captured generation against this and bails if stale.
+let renderGen = 0;
 let domeTimer = null;
+let queueRunning = false;
+const visiblePanes = new Set(); // model names currently in viewport
+
 function scheduleDomeRender(delayMs) {
   if (domeTimer) clearTimeout(domeTimer);
   const delay = delayMs == null ? 150 : delayMs;
   domeTimer = setTimeout(() => {
-    if (domeRaf) cancelAnimationFrame(domeRaf);
-    domeRaf = requestAnimationFrame(() => {
-      for (const name of Object.keys(domeState)) {
-        if (domeState[name].expanded) renderDome(name);
-      }
-    });
+    domeTimer = null;
+    renderGen++;
+    if (!queueRunning) runRenderQueue();
   }, delay);
 }
+
+async function runRenderQueue() {
+  queueRunning = true;
+  try {
+    // Outer loop: restart with a fresh queue whenever the generation bumps mid-run.
+    while (true) {
+      const myGen = renderGen;
+      const expanded = Object.keys(domeState).filter(n => domeState[n].expanded);
+      // Visible panes first; off-screen panes are skipped entirely during scrub
+      // and only refreshed once the user releases.
+      const queue = scrubbing
+        ? expanded.filter(n => visiblePanes.has(n))
+        : expanded.slice().sort((a, b) =>
+            (visiblePanes.has(b) ? 1 : 0) - (visiblePanes.has(a) ? 1 : 0));
+      const isCancelled = () => renderGen !== myGen;
+      for (const name of queue) {
+        if (isCancelled()) break;
+        await renderDome(name, isCancelled);
+      }
+      if (renderGen === myGen) break;
+    }
+  } finally {
+    queueRunning = false;
+  }
+}
+
+// IntersectionObserver — flips visibility flags so the queue can prioritize
+// panes the user can actually see.
+const domeIO = new IntersectionObserver((entries) => {
+  let anyShown = false;
+  for (const e of entries) {
+    const name = e.target.dataset.model;
+    if (!name) continue;
+    if (e.isIntersecting) { if (!visiblePanes.has(name)) anyShown = true; visiblePanes.add(name); }
+    else visiblePanes.delete(name);
+  }
+  // A pane just became visible — kick a fresh render so it catches up.
+  if (anyShown) scheduleDomeRender(50);
+}, { rootMargin: '100px' });
+document.querySelectorAll('.expanded-pane').forEach(p => domeIO.observe(p));
 
 function setExpanded(name, open) {
   domeState[name].expanded = open;
@@ -2609,7 +2661,7 @@ function setExpanded(name, open) {
   if (pane) pane.classList.toggle('open', open);
   if (caret) caret.classList.toggle('open', open);
   persistDomeState();
-  if (open) renderDome(name);
+  if (open) scheduleDomeRender(0);
 }
 function setProjection(name, proj) {
   domeState[name].projection = proj;
@@ -2620,7 +2672,7 @@ function setProjection(name, proj) {
     });
   }
   persistDomeState();
-  renderDome(name);
+  scheduleDomeRender(0);
 }
 
 document.querySelectorAll('.expand-caret').forEach(btn => {
