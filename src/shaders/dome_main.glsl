@@ -3,9 +3,15 @@
 
 void main() {
   float viewAz, viewEl;
-  bool inside = pixelToViewAzEl(gl_FragCoord.xy, uResolution, viewAz, viewEl);
-  if (!inside) {
-    fragColor = vec4(GROUND_COLOR / 255.0, 1.0);
+  bool inProj = pixelToViewAzEl(gl_FragCoord.xy, uResolution, viewAz, viewEl);
+  if (!inProj) {
+    // Fisheye corner (outside the disc) — use deep, unlit ground.
+    fragColor = vec4(uGroundColor * 0.4 / 255.0, 1.0);
+    return;
+  }
+  if (viewEl < 0.0) {
+    // Below horizon — directionally-lit ground.
+    fragColor = vec4(shadeGround(viewAz, viewEl) / 255.0, 1.0);
     return;
   }
   vec3 rgb = vec3(0.0);

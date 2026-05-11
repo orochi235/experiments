@@ -60,4 +60,8 @@ export function setSharedUniforms(gl, prog, state) {
   const tweak = state.scatterTweak;
   gl.uniform1f(u(gl, prog, 'uScatterHueShift'), tweak?.hueShift ?? 0);
   gl.uniform1f(u(gl, prog, 'uScatterSatBoost'), tweak?.satBoost ?? 1);
+
+  // Ground color (per-preset, with optional user override)
+  const gc = state.groundOverride || state.groundColor || [26, 26, 31];
+  gl.uniform3fv(u(gl, prog, 'uGroundColor'), new Float32Array(gc));
 }

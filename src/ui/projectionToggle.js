@@ -1,14 +1,15 @@
 import { state, scheduleRender } from '../state.js';
 
+// Global view-mode toggle in the Style Adjustments panel.
+// One projection applies to all 6 dome previews and the lightbox.
 export function wireProjectionToggles() {
-  document.querySelectorAll('.proj-btn').forEach(btn => {
+  document.querySelectorAll('.proj-btn.global').forEach(btn => {
     btn.addEventListener('click', () => {
-      const model = btn.parentElement.parentElement.querySelector('canvas.dome.gl').dataset.model;
       const proj = btn.dataset.proj;
-      if (!model || !proj || !state.dome[model]) return;
-      state.dome[model].projection = proj;
-      btn.parentElement.querySelectorAll('.proj-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+      if (!proj) return;
+      state.projection = proj;
+      document.querySelectorAll('.proj-btn.global').forEach(b =>
+        b.classList.toggle('active', b === btn));
       scheduleRender();
     });
   });

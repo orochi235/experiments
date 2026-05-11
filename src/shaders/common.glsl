@@ -51,8 +51,9 @@ uniform float uScatterSatBoost;
 uniform float uHueShift, uSaturation, uVibrance, uExposure,
               uContrast, uWarmth, uTwilightGlow, uNightTint;
 
-// Ground color
-const vec3 GROUND_COLOR = vec3(26.0, 26.0, 31.0);
+// Ground color (per-preset, set via uniform)
+uniform vec3 uGroundColor;
+#define GROUND_COLOR uGroundColor
 
 // ============================================================
 // UTILITIES
@@ -246,37 +247,59 @@ float sunElevationAt(float hour) {
 bool pixelToViewAzEl(vec2 px, vec2 dims, out float viewAz, out float viewEl) {
   viewAz = 0.0;
   viewEl = 0.0;
+  // gl_FragCoord.y has origin at the bottom — flip so top of canvas = sky-up.
+  float yTop = dims.y - px.y;
 
   if (uProjection == 0) {
     // Fisheye: circular disc maps full hemisphere
     float cx = dims.x / 2.0;
     float cy = dims.y / 2.0;
     float dx = (px.x - cx) / cx;   // -1..1
-    float dy = (px.y - cy) / cy;   // -1..1
+    float dy = (yTop  - cy) / cy;  // -1..1, +y = up on screen
     float r  = sqrt(dx * dx + dy * dy);
     if (r > 1.0) return false;
     viewEl = (1.0 - r) * 90.0;
-    viewAz = atan(dx, -dy) * 180.0 / PI;   // atan(y,x) in GLSL
+    viewAz = atan(dx, -dy) * 180.0 / PI;
     return true;
   }
 
   if (uProjection == 1) {
-    // Equirect: full 360° az, last 10% of height is below horizon
+    // Equirect: full 360° az. viewEl can be negative (below horizon → ground).
     viewAz = (px.x / dims.x) * 360.0 - 180.0;
-    viewEl = 90.0 - (px.y / dims.y) * 100.0;
-    if (viewEl < 0.0) return false;
+    viewEl = 90.0 - (yTop / dims.y) * 100.0;
     return true;
   }
 
   if (uProjection == 2) {
-    // Sun-facing: ±90° az, last 10% of height is below horizon
+    // Sun-facing: ±90° az. viewEl can be negative.
     viewAz = (px.x / dims.x) * 180.0 - 90.0;
-    viewEl = 90.0 - (px.y / dims.y) * 100.0;
-    if (viewEl < 0.0) return false;
+    viewEl = 90.0 - (yTop / dims.y) * 100.0;
     return true;
   }
 
   return false;
+}
+
+// Directionally-lit ground shading. Brighter on the sun-facing side, dimmer
+// when the sun is low, fades toward atmospheric haze near horizon. All
+// inputs in degrees / radians as labeled.
+vec3 shadeGround(float viewAzDeg, float viewElDeg) {
+  float sunElev = uStarElev[0];           // radians
+  float sunAzDeg = uStarAzOff[0];         // degrees, relative to primary
+  // Directional component: 1 facing the sun, 0 facing away
+  float azDiff = radians(viewAzDeg - sunAzDeg);
+  float dirLight = cos(azDiff) * 0.5 + 0.5;
+  // Ambient from sun elevation (sin gives Lambertian-like falloff)
+  float ambient = clamp(sin(sunElev), 0.0, 1.0) * 0.7 + 0.15;
+  // Depth: 0 at horizon, 1 at -10° (deeper looking down)
+  float depth = clamp(-viewElDeg / 10.0, 0.0, 1.0);
+  vec3 lit = uGroundColor * (0.35 + 0.65 * ambient * dirLight);
+  // Atmospheric haze near horizon: bias toward primary star tint
+  vec3 hazeTint = uStarColor[0] * 255.0 * 0.3;
+  lit = mix(hazeTint + lit * 0.7, lit, depth);
+  // Subtle darkening at maximum depth
+  lit = mix(lit, lit * 0.7, depth * 0.4);
+  return clamp(lit, 0.0, 255.0);
 }
 
 // Apply per-scatter hue shift and saturation boost (operates in 0-255 RGB space).

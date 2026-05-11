@@ -2,17 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500;700&display=swap" rel="stylesheet">
 <title>Sky Color Models — WebGL</title>
 <link rel="stylesheet" href="/src/styles.css">
 </head>
-<body>
+<body data-layout="standard">
 
-<h1>Atmospheric Sky Color Models</h1>
-<p class="subtitle">Zenith sky color across the day — comparing Preetham, Nishita, and Hosek-Wilkie</p>
+<header class="page-title">
+  <h1>Interstellar Tourism</h1>
+  <p class="subtitle">Atmospheric sky color models, compared across the day — Preetham, Nishita, Hosek-Wilkie, and friends</p>
+</header>
 
-<div class="controls">
+<div class="controls atmosphere">
+  <div class="controls-label">Atmosphere &amp; Sky</div>
   <div class="control">
-    <label><a href="https://en.wikipedia.org/wiki/Turbidity" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Turbidity</a> <span class="val" id="vTurb">3.0</span></label>
+    <label><a href="https://en.wikipedia.org/wiki/Turbidity" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Turbidity</a> <span class="val" id="vTurb">3.0</span> <button class="geo-btn" id="turbBtn" title="Fetch live aerosol optical depth from your location (Open-Meteo)">&#x2316;</button></label>
     <input type="range" id="turbidity" min="1" max="10" step="0.5" value="3">
   </div>
   <div class="control">
@@ -20,7 +26,7 @@
     <input type="range" id="latitude" min="-70" max="70" step="1" value="40">
   </div>
   <div class="control">
-    <label><a href="https://en.wikipedia.org/wiki/Horizontal_coordinate_system" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">View Elevation</a> <span class="val" id="vElev">90°</span> <button class="geo-btn" id="oriBtn" title="Use device orientation">&#x2316;</button></label>
+    <label><a href="https://en.wikipedia.org/wiki/Horizontal_coordinate_system" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">View Elevation</a> <span class="dim-note">(1d only)</span> <span class="val" id="vElev">90°</span> <button class="geo-btn" id="oriBtn" title="Use device orientation">&#x2316;</button></label>
     <input type="range" id="viewElev" min="5" max="90" step="1" value="90">
   </div>
   <div class="control">
@@ -38,7 +44,7 @@
 </div>
 
 <div class="controls style">
-  <div class="controls-label">Style Adjustments</div>
+  <div class="controls-label">Style Adjustments <button class="inline-reset" id="resetStyle" type="button" title="Reset style sliders to defaults">↺ reset all</button></div>
   <div class="control">
     <label>Hue Shift <span class="val" id="vHue">0°</span></label>
     <input type="range" id="hueShift" min="-180" max="180" step="1" value="0">
@@ -71,7 +77,38 @@
     <label>Night Tint <span class="val" id="vNight">0.00</span></label>
     <input type="range" id="nightTint" min="0" max="1" step="0.05" value="0">
   </div>
-  <button class="reset-btn" id="resetStyle">Reset Style</button>
+</div>
+
+<div class="controls display">
+  <div class="control">
+    <label>View Mode</label>
+    <div class="proj-selector global">
+      <button class="proj-btn global active" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn global" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn global" data-proj="fisheye">Fisheye</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Layout</label>
+    <div class="proj-selector global" id="layoutToggle">
+      <button class="proj-btn global active" data-layout="standard">Standard</button>
+      <button class="proj-btn global" data-layout="detail">Detail</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Night Stars</label>
+    <div class="proj-selector global" id="starsToggle">
+      <button class="proj-btn global active" data-stars="on">On</button>
+      <button class="proj-btn global" data-stars="off">Off</button>
+    </div>
+  </div>
+  <div class="control">
+    <label>Planet Scale</label>
+    <div class="proj-selector global" id="scaleToggle">
+      <button class="proj-btn global active" data-scale="visual">Friendly</button>
+      <button class="proj-btn global" data-scale="actual">Proportional</button>
+    </div>
+  </div>
 </div>
 
 <details class="presets-wrap" open>
@@ -162,11 +199,36 @@
       <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Mass_Effect" target="_blank">Mass Effect</a></span>
       <span class="preset-star">F-type — 6500 K</span>
     </button>
+    <button class="preset-btn" data-preset="romulus">
+      <span class="preset-name">Romulus</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Romulan" target="_blank">Star Trek</a></span>
+      <span class="preset-star">K-type — 4900 K</span>
+    </button>
+    <button class="preset-btn" data-preset="mustafar">
+      <span class="preset-name">Mustafar</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Mustafar" target="_blank">Star Wars</a></span>
+      <span class="preset-star">G-type — 5500 K</span>
+    </button>
+    <button class="preset-btn" data-preset="bespin">
+      <span class="preset-name">Bespin</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Bespin" target="_blank">Star Wars</a></span>
+      <span class="preset-star">K-type — 4400 K</span>
+    </button>
+    <button class="preset-btn" data-preset="solaris">
+      <span class="preset-name">Solaris</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Solaris_(novel)" target="_blank">Lem</a></span>
+      <span class="preset-star">binary — M+B</span>
+    </button>
+    <button class="preset-btn" data-preset="trantor">
+      <span class="preset-name">Trantor</span>
+      <span class="preset-source"><a href="https://en.wikipedia.org/wiki/Trantor" target="_blank">Asimov</a></span>
+      <span class="preset-star">G-type — 5778 K</span>
+    </button>
   </div>
 </details>
 
 <div class="controls planet" id="planetControls">
-  <div class="controls-label">Planet Physics</div>
+  <div class="controls-label">Planet Physics <button class="inline-reset" id="resetPlanet" type="button" title="Reset to current preset's defaults">↺ reset all</button></div>
   <div class="control">
     <label><a href="https://en.wikipedia.org/wiki/Atmosphere" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Atmo Density</a> <span class="val" id="vAtmoDens">1.00</span></label>
     <input type="range" id="atmoDensity" min="0.01" max="5" step="0.01" value="1">
@@ -179,8 +241,20 @@
     <label><a href="https://en.wikipedia.org/wiki/Stellar_classification" target="_blank" style="color:#aaa;text-decoration:none;border-bottom:1px dotted #555">Stellar Temp</a> <span class="val" id="vStellarTemp">5778 K</span></label>
     <input type="range" id="stellarTemp" min="2500" max="12000" step="50" value="5778" class="stellar-temp-slider">
   </div>
+  <div class="control">
+    <label>Time of Day <span class="val" id="vHour">12:00</span></label>
+    <input type="range" id="hour" min="3" max="22" step="0.01" value="12">
+  </div>
+  <div class="control">
+    <label>Ground <span class="val" id="vGround">planet</span></label>
+    <div class="ground-row">
+      <input type="color" id="groundColor" value="#505f3c">
+      <button class="reset-btn small" id="groundReset" title="Use planet's ground color">↺</button>
+    </div>
+  </div>
 </div>
 
+<main class="model-grid" id="modelGrid">
 <div class="strip-container">
   <div class="strip-header">
     <button class="expand-caret" data-model="rayleigh">&#x25B8;</button>
@@ -675,6 +749,11 @@
     </div>
   </div>
 </div>
+</main>
+
+<div class="planet-area">
+  <nav class="planet-toolbar" id="planetToolbar" role="toolbar" aria-label="Planet presets"></nav>
+</div>
 
 <div class="param-table-wrap">
   <h2>Parameter Matrix</h2>
@@ -946,6 +1025,30 @@
   Below the horizon the sun is shown as dark.
   Hosek-Wilkie uses an analytical approximation of the published model (full dataset is ~100KB of coefficients).
   Colors are tone-mapped to sRGB and may clip in extreme conditions.
+</div>
+
+<div id="lightbox">
+  <div class="lb-title" id="lbTitle"></div>
+  <button class="lb-close" id="lbClose">Close ✕</button>
+  <div class="lb-inner">
+    <div class="panel-wrap">
+      <canvas class="gl" id="lbCanvas"></canvas>
+      <canvas class="overlay" id="lbOverlay"></canvas>
+    </div>
+  </div>
+  <div class="lb-controls">
+    <div class="lb-meta">
+      <span class="lb-meta-item">Time <span id="lbHourVal">12:00</span></span>
+      <span class="lb-meta-sep">·</span>
+      <span class="lb-meta-item">Sun elev <span id="lbElev">—</span></span>
+      <span class="lb-meta-sep">·</span>
+      <span class="lb-meta-item">Preset <span id="lbPreset">—</span></span>
+    </div>
+    <input type="range" id="lbHour" min="3" max="22" step="0.01" value="12">
+    <div class="lb-hour-axis">
+      <span>3a</span><span>6a</span><span>9a</span><span>noon</span><span>3p</span><span>6p</span><span>9p</span>
+    </div>
+  </div>
 </div>
 
 <script type="module" src="/src/main.js"></script>

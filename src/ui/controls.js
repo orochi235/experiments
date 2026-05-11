@@ -4,7 +4,19 @@ const SLIDERS = [
   { id: 'turbidity',     path: 'T',                  label: 'vTurb',   fmt: v => v.toFixed(1) },
   { id: 'latitude',      path: 'lat',                label: 'vLat',    fmt: v => v + '°' },
   { id: 'viewElev',      path: 'viewEl',             label: 'vElev',   fmt: v => v + '°' },
-  { id: 'dayOfYear',     path: '_doySlider',         label: 'vDay',    fmt: v => `${v}` },
+  { id: 'dayOfYear',     path: '_doySlider',         label: 'vDay',
+    fmt: v => {
+      // Slider is offset by the winter-solstice convention. Use a 365-day
+      // (non-leap) calendar so the same doy always maps to the same
+      // month/day regardless of whether the current year has Feb 29.
+      const doy = ((parseInt(v) - 1 + 354) % 365) + 1;
+      const md = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      let d = doy, m = 0;
+      while (d > md[m] && m < 11) { d -= md[m]; m++; }
+      const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                      'Jul','Aug','Sep','Oct','Nov','Dec'];
+      return `${months[m]} ${d}`;
+    } },
   { id: 'albedo',        path: 'albedo',             label: 'vAlbedo', fmt: v => v.toFixed(2) },
   { id: 'ozoneStrength', path: 'ozone',              label: 'vOzone',  fmt: v => v.toFixed(2) },
   { id: 'hueShift',      path: 'style.hueShift',     label: 'vHue',    fmt: v => v + '°' },
@@ -18,6 +30,11 @@ const SLIDERS = [
   { id: 'atmoDensity',   path: 'atmoDens',           label: 'vAtmoDens',  fmt: v => v.toFixed(2) },
   { id: 'sunDistance',   path: 'sunDist',            label: 'vSunDist',   fmt: v => v.toFixed(2) + ' AU' },
   { id: 'stellarTemp',   path: 'stellarTemp',        label: 'vStellarTemp', fmt: v => Math.round(v) + ' K' },
+  { id: 'hour',          path: 'hour',               label: 'vHour',
+    fmt: v => {
+      const h = Math.floor(v), m = Math.round((v - h) * 60);
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+    } },
 ];
 
 export function wireControls() {
