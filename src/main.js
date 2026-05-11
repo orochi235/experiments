@@ -75,6 +75,35 @@ for (const p of panels) ro.observe(p.canvas);
 
 const PROJ_MAP = { fisheye: 0, equirect: 1, sunfacing: 2 };
 
+function setupHourScrub() {
+  const HOUR_START = 3;
+  const HOUR_END = 22;
+  for (const p of panels.filter(pp => pp.kind === 'strip')) {
+    const canvas = p.canvas;
+    let down = false;
+    function updateFromEvent(ev) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (ev.clientX - rect.left) / rect.width;
+      const hour = HOUR_START + Math.max(0, Math.min(1, x)) * (HOUR_END - HOUR_START);
+      state.hour = hour;
+      scheduleRender();
+    }
+    canvas.addEventListener('pointerdown', e => {
+      down = true;
+      canvas.setPointerCapture(e.pointerId);
+      updateFromEvent(e);
+    });
+    canvas.addEventListener('pointermove', e => {
+      if (down) updateFromEvent(e);
+    });
+    canvas.addEventListener('pointerup', e => {
+      down = false;
+      try { canvas.releasePointerCapture(e.pointerId); } catch {}
+    });
+    canvas.style.cursor = 'crosshair';
+  }
+}
+
 function render() {
   recomputeDerived(state, state.hour);
 
@@ -102,6 +131,7 @@ function render() {
 }
 setRenderFn(render);
 
+setupHourScrub();
 wireControls();
 wireProjectionToggles();
 applyPreset('earth');  // Initial render trigger (via scheduleRender)
