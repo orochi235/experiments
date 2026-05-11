@@ -1847,6 +1847,8 @@ function renderRows() {
     renderRow(el.querySelector('[data-row]'), families[i]);
   });
   paintFamilyHueSliders();
+  // Keep the C(L) diagram's per-index sample dots in sync with the row chips.
+  if (typeof updateChromaCurveDiagram === 'function') updateChromaCurveDiagram();
 }
 function makeFamilyEl(fam, i) {
   const el = document.createElement('div');
@@ -3102,7 +3104,19 @@ function renderChromaCurveDiagram(target) {
   // Curve outline (closed triangle to mirror the original demo).
   parts.push(`<path d="M ${A.x} ${A.y} L ${B.x} ${B.y} L ${C.x} ${C.y} Z" fill="none" stroke="${curveStroke}" stroke-width="1.25"/>`);
 
-  // Control points + labels
+  // Per-index sample dots — one per palette index at its (L, C) sample point.
+  // Sits on the B–P–T envelope; their density along the curve shifts with
+  // lGamma even though the triangle's shape stays put.
+  for (const idx of params.indices) {
+    const L = lightnessFor(idx);
+    if (L < params.lMin - 1e-6 || L > params.lMax + 1e-6) continue;
+    const C = chromaFor(L);
+    const lin = ccdCornerLinearRgb(L, C, hue);
+    const hex = ccdLinearRgbToHex(lin);
+    parts.push(`<circle cx="${xAt(L)}" cy="${yAt(C)}" r="2.5" fill="${hex}" stroke="${pointStroke}" stroke-width="1"/>`);
+  }
+
+  // Control points + labels (drawn last so vertices sit above any coincident sample dots)
   for (const v of verts) {
     parts.push(`<circle cx="${v.x}" cy="${v.y}" r="5" fill="${v.hex}" stroke="${pointStroke}" stroke-width="1.5"/>`);
     parts.push(`<text x="${v.x + v.labelDx}" y="${v.y - 9}" font-size="10" font-weight="600" font-family="ui-monospace, monospace" fill="${labelFill}" stroke="${labelHalo}" stroke-width="2.5" paint-order="stroke" text-anchor="middle">${v.label}</text>`);
