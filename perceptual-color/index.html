@@ -138,6 +138,23 @@
     font: 1rem/1 'IBM Plex Sans', sans-serif;
     display: flex; align-items: center; justify-content: center;
   }
+  /* Inverted from the other .cs-btn instances: foreground swatch in light
+     mode, background swatch in dark mode. Makes the toggle pop. */
+  #themeToggle,
+  [data-theme="dark"] #themeToggle {
+    background: var(--cs-fg);
+    color: var(--cs-bg);
+    border-color: var(--cs-fg);
+    text-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  #themeToggle:hover,
+  [data-theme="dark"] #themeToggle:hover {
+    background: var(--cs-fg-muted);
+    border-color: var(--cs-fg-muted);
+    color: var(--cs-bg);
+  }
 
   /* Dark-mode overrides — color values targeted to keep chips/visualizations
      untouched while flipping page chrome. */
@@ -299,6 +316,14 @@
     font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-faint);
   }
   .ccd-hue input[type=range] { flex: 1; }
+  /* Compact-slider sizing for the reference hue, matching the family hue
+     sliders. No washout filter — the full saturated hue spectrum is the
+     point of this track. */
+  #ccdHue.grad { height: 16px; }
+  #ccdHue.grad::-webkit-slider-runnable-track { height: 16px; }
+  #ccdHue.grad::-moz-range-track { height: 16px; }
+  #ccdHue.grad::-webkit-slider-thumb { width: 9px; height: 20px; margin-top: -2px; }
+  #ccdHue.grad::-moz-range-thumb { width: 9px; height: 20px; }
   .ccd-hue .val { min-width: 36px; text-align: right; color: var(--cs-fg); font-variant-numeric: tabular-nums; }
   .ccd-caption {
     font: 400 0.6rem/1.4 'IBM Plex Sans', sans-serif;
@@ -825,7 +850,7 @@
       </div>
       <label class="ccd-hue">
         <span>Reference hue</span>
-        <input type="range" id="ccdHue" min="0" max="360" step="1" value="200">
+        <input type="range" id="ccdHue" class="grad" min="0" max="360" step="1" value="200">
         <span class="val" id="ccdHueVal">200°</span>
       </label>
       <div class="ccd-caption">
@@ -1406,6 +1431,9 @@ function paintAllGradSliders() {
   paintGradSlider(document.getElementById('cTop'),  v => ({ L: params.lMax, C: v, H: refHue }));
   paintGradSlider(document.getElementById('cPeak'), v => ({ L,             C: v, H: refHue }));
   paintGradSlider(document.getElementById('cBot'),  v => ({ L: params.lMin, C: v, H: refHue }));
+  // Reference hue: paint the full saturated hue spectrum at midL / peak C.
+  // No washout transform — show the actual colors at full chroma.
+  paintGradSlider(document.getElementById('ccdHue'), h => ({ L, C, H: h }));
 
   // Track position = position in the resulting scale (idx fraction). The track repaints
   // as the user drags so they see what curve their setting produces.
@@ -3008,7 +3036,7 @@ function renderChromaCurveDiagram(target) {
   const sysIsDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
   const apply = (theme) => {
     document.documentElement.dataset.theme = theme;
-    btn.textContent = theme === 'dark' ? '☀' : '☾';
+    btn.textContent = theme === 'dark' ? '☾' : '☀';
     btn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
   };
   const stored = localStorage.getItem('cs-theme');
