@@ -3,7 +3,7 @@
 // generic enough that no per-program attribute binding is needed).
 
 export function createGL(canvas) {
-  const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false });
+  const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
   if (!gl) throw new Error('WebGL2 not available');
   return gl;
 }
