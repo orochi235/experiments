@@ -1,0 +1,8 @@
+# Tool-internal scratch dirs (Claude Code / Playwright MCP)
+.claude/
+.playwright-mcp/
+.superpowers/
+
+# Stray screenshot artifacts from browser-driven testing (repo root only;
+# experiment subdirs can still commit PNGs as legitimate assets).
+/*.png
