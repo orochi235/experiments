@@ -3039,7 +3039,6 @@ function renderChromaCurveDiagram(target) {
 
   // SVG overlay: frame, gridlines, range tracks, curve, control points.
   const isDark = document.documentElement.dataset.theme === 'dark';
-  const frameStroke = isDark ? '#3A3D47' : '#C2C5CD';
   const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
   const dashStroke = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
   const rangeStroke = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
@@ -3055,8 +3054,6 @@ function renderChromaCurveDiagram(target) {
 
   const parts = [];
 
-  // Plot frame
-  parts.push(`<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="none" stroke="${frameStroke}"/>`);
   // Y gridlines — step adapts to the C-axis scale (~4–5 lines).
   const gridStep = maxC > 0.25 ? 0.10 : 0.05;
   for (let c = gridStep; c < maxC - 1e-6; c += gridStep) {
