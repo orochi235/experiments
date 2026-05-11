@@ -34,6 +34,15 @@ uniform vec3  uStarColor[MAX_STARS];
 uniform float uStarIntensity[MAX_STARS];
 uniform float uStarHourOffset[MAX_STARS];
 
+// Atmosphere physics (mutated by presets)
+uniform float uEarthR;
+uniform float uAtmoR;
+uniform float uHR;
+uniform float uHM;
+uniform vec3  uBetaR;
+uniform float uBetaM;
+uniform float uSunIntensity;
+
 // Scatter tweak
 uniform float uScatterHueShift;
 uniform float uScatterSatBoost;

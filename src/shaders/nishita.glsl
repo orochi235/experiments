@@ -1,13 +1,6 @@
 // nishita.glsl — Nishita sky model
 // Depends on: common.glsl
 
-const float EARTH_R      = 6371000.0;
-const float ATMO_R       = 6471000.0;
-const float HR           = 8000.0;
-const float HM           = 1200.0;
-const vec3  BETA_R       = vec3(5.5e-6, 13.0e-6, 22.4e-6);
-const float BETA_M       = 21e-6;
-const float SUN_INTENSITY = 20.0;
 
 // Returns vec2(tFar, tFar) on hit (ray exits sphere at tFar >= 0).
 // Returns vec2(-1.0) if no intersection.
@@ -30,10 +23,10 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
   const int numSamples      = 24;
   const int numSamplesLight = 8;
 
-  float mieCoeff = BETA_M * (T / 3.0) * mieScale;
+  float mieCoeff = uBetaM * (T / 3.0) * mieScale;
 
   // Observer position
-  float observerH = EARTH_R + alt;
+  float observerH = uEarthR + alt;
   vec3  ro        = vec3(0.0, observerH, 0.0);
 
   // View direction from azimuth and elevation
@@ -49,7 +42,7 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
   float cosViewSun = dot(viewDir, sunDir);
 
   // Ray march: find exit distance through atmosphere
-  vec2 tHit = raySphereIntersect(ro, viewDir, ATMO_R);
+  vec2 tHit = raySphereIntersect(ro, viewDir, uAtmoR);
   if (tHit.x < 0.0) return vec3(0.0);
   float tMax = tHit.x;
 
@@ -62,17 +55,17 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
   for (int i = 0; i < numSamples; i++) {
     float t  = (float(i) + 0.5) * ds;
     vec3  p  = ro + viewDir * t;
-    float height = length(p) - EARTH_R;
+    float height = length(p) - uEarthR;
 
     if (height < 0.0) break; // hit ground
 
-    float hr = exp(-height / HR) * ds;
-    float hm = exp(-height / HM) * ds;
+    float hr = exp(-height / uHR) * ds;
+    float hm = exp(-height / uHM) * ds;
     opticalDepthR += hr;
     opticalDepthM += hm;
 
     // Sun ray from this sample point
-    vec2 tSunHit = raySphereIntersect(p, sunDir, ATMO_R);
+    vec2 tSunHit = raySphereIntersect(p, sunDir, uAtmoR);
     if (tSunHit.x < 0.0) continue;
     float tSun = tSunHit.x;
 
@@ -84,10 +77,10 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
     for (int j = 0; j < numSamplesLight; j++) {
       float ts = (float(j) + 0.5) * dsSun;
       vec3  s  = p + sunDir * ts;
-      float sh = length(s) - EARTH_R;
+      float sh = length(s) - uEarthR;
       if (sh < 0.0) { hitGround = true; break; }
-      odR_sun += exp(-sh / HR) * dsSun;
-      odM_sun += exp(-sh / HM) * dsSun;
+      odR_sun += exp(-sh / uHR) * dsSun;
+      odM_sun += exp(-sh / uHM) * dsSun;
     }
     if (hitGround) continue;
 
@@ -101,16 +94,16 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
                    ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * cosViewSun, 1.5));
 
     // Per-channel accumulation (Rayleigh is wavelength-dependent; Mie is not)
-    vec3 tau  = BETA_R * (opticalDepthR + odR_sun) +
+    vec3 tau  = uBetaR * (opticalDepthR + odR_sun) +
                 mieCoeff * 1.1 * (opticalDepthM + odM_sun);
     vec3 attn = exp(-tau);
 
-    totalR += attn * (BETA_R * hr * phaseR + mieCoeff * hm * phaseM);
+    totalR += attn * (uBetaR * hr * phaseR + mieCoeff * hm * phaseM);
   }
 
   // Twilight boost: indirect illumination during twilight
   float twilightBoost = sunElev < 0.0 ? exp(sunElev * 4.0) * 0.3 : 0.0;
 
-  vec3 rgb = (totalR + twilightBoost * 0.001) * SUN_INTENSITY;
+  vec3 rgb = (totalR + twilightBoost * 0.001) * uSunIntensity;
   return toneMap(rgb, 1.0);
 }
