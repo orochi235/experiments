@@ -344,8 +344,9 @@
     border-radius: 4px;
   }
   .ccd-figure-label {
-    /* Left edge aligns with the L-axis "0" tick (SVG PAD.l = 28). */
-    position: absolute; top: 6px; left: 28px;
+    /* Top-left aligns with the C-axis top tick / L-axis "0" tick
+       (SVG PAD.t = 20, PAD.l = 28). */
+    position: absolute; top: 20px; left: 28px;
     font: 600 0.7rem/1 'IBM Plex Mono', monospace;
     color: var(--cs-fg-faint);
     text-transform: uppercase;
