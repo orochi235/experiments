@@ -2434,6 +2434,8 @@ function renderDome(name) {
     canvas.width = 480; canvas.height = 240;
   }
   const w = canvas.width, h = canvas.height;
+  // Coarse render during cursor scrub — replicate every (step × step) block
+  const step = scrubbing ? 4 : 1;
   const ctx = canvas.getContext('2d');
   const img = ctx.createImageData(w, h);
   const data = img.data;
@@ -2443,15 +2445,19 @@ function renderDome(name) {
   const primarySunElev = sunElevation(lat, doy, selectedHour + primaryStar.hourOffset);
   const starElevs = activeStars.map(s => sunElevation(lat, doy, selectedHour + s.hourOffset));
 
-  for (let py = 0; py < h; py++) {
-    for (let px = 0; px < w; px++) {
-      const idx = (py * w + px) * 4;
+  for (let py = 0; py < h; py += step) {
+    for (let px = 0; px < w; px += step) {
       const ve = pixelToViewAzEl(state.projection, px, py, w, h);
       if (!ve) {
-        data[idx]     = GROUND_COLOR[0];
-        data[idx + 1] = GROUND_COLOR[1];
-        data[idx + 2] = GROUND_COLOR[2];
-        data[idx + 3] = 255;
+        for (let dy = 0; dy < step && py + dy < h; dy++) {
+          for (let dx = 0; dx < step && px + dx < w; dx++) {
+            const j = ((py + dy) * w + (px + dx)) * 4;
+            data[j] = GROUND_COLOR[0];
+            data[j + 1] = GROUND_COLOR[1];
+            data[j + 2] = GROUND_COLOR[2];
+            data[j + 3] = 255;
+          }
+        }
         continue;
       }
       const [viewAz, viewEl] = ve;
@@ -2472,10 +2478,15 @@ function renderDome(name) {
         rgb = hslToRgb(hh, ss, ll);
       }
       rgb = applyStyle(rgb, primarySunElev, style);
-      data[idx]     = clamp(Math.round(rgb[0]), 0, 255);
-      data[idx + 1] = clamp(Math.round(rgb[1]), 0, 255);
-      data[idx + 2] = clamp(Math.round(rgb[2]), 0, 255);
-      data[idx + 3] = 255;
+      const r = clamp(Math.round(rgb[0]), 0, 255);
+      const g = clamp(Math.round(rgb[1]), 0, 255);
+      const b = clamp(Math.round(rgb[2]), 0, 255);
+      for (let dy = 0; dy < step && py + dy < h; dy++) {
+        for (let dx = 0; dx < step && px + dx < w; dx++) {
+          const j = ((py + dy) * w + (px + dx)) * 4;
+          data[j] = r; data[j + 1] = g; data[j + 2] = b; data[j + 3] = 255;
+        }
+      }
     }
   }
   ctx.putImageData(img, 0, 0);
@@ -2518,8 +2529,9 @@ function renderDome(name) {
 
 let domeRaf = null;
 let domeTimer = null;
-function scheduleDomeRender() {
+function scheduleDomeRender(delayMs) {
   if (domeTimer) clearTimeout(domeTimer);
+  const delay = delayMs == null ? 150 : delayMs;
   domeTimer = setTimeout(() => {
     if (domeRaf) cancelAnimationFrame(domeRaf);
     domeRaf = requestAnimationFrame(() => {
@@ -2527,7 +2539,7 @@ function scheduleDomeRender() {
         if (domeState[name].expanded) renderDome(name);
       }
     });
-  }, 150);
+  }, delay);
 }
 
 function setExpanded(name, open) {
@@ -2595,7 +2607,7 @@ for (const [name, canvas] of Object.entries(canvases)) {
     scrubbing = true;
     selectedHour = hourFromEvent(canvas, ev);
     updateTimeCursors();
-    scheduleDomeRender();
+    scheduleDomeRender(50);
     ev.preventDefault();
   });
 }
@@ -2607,7 +2619,12 @@ window.addEventListener('mousemove', (ev) => {
   updateTimeCursors();
   scheduleDomeRender();
 });
-window.addEventListener('mouseup', () => { scrubbing = false; });
+window.addEventListener('mouseup', () => {
+  if (scrubbing) {
+    scrubbing = false;
+    scheduleDomeRender(0); // final full-res render
+  }
+});
 
 // Initial render
 renderAll();
