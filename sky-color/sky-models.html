@@ -2441,6 +2441,7 @@ function renderDome(name) {
   const nStars = activeStars.length;
   const primaryStar = activeStars[0];
   const primarySunElev = sunElevation(lat, doy, selectedHour + primaryStar.hourOffset);
+  const starElevs = activeStars.map(s => sunElevation(lat, doy, selectedHour + s.hourOffset));
 
   for (let py = 0; py < h; py++) {
     for (let px = 0; px < w; px++) {
@@ -2457,7 +2458,7 @@ function renderDome(name) {
       let rgb = [0, 0, 0];
       for (let si = 0; si < nStars; si++) {
         const star = activeStars[si];
-        const sElev = sunElevation(lat, doy, selectedHour + star.hourOffset);
+        const sElev = starElevs[si];
         const contrib = modelCall(name, sElev, T, viewEl, viewAz, alt, alb, ozone);
         rgb[0] += contrib[0] * star.color[0] * star.intensity;
         rgb[1] += contrib[1] * star.color[1] * star.intensity;
@@ -2487,11 +2488,13 @@ function renderDome(name) {
     const sunElDeg = sElev * 180 / PI;
     const [sx, sy, vis] = viewAzElToPixel(state.projection, sAz, sunElDeg, w, h);
     if (!vis) continue;
+    const SUN_RADIUS_DEG = 1.0;   // ~2° diameter sun disk
+    const GLOW_RATIO = 4;         // soft halo extends 4× disk radius
     const pxPerDeg = state.projection === 'fisheye'
       ? (w / 2) / 90
       : w / (state.projection === 'sunfacing' ? 180 : 360);
-    const rDisk = Math.max(2, pxPerDeg * 1.0);
-    const rGlow = rDisk * 4;
+    const rDisk = Math.max(2, pxPerDeg * SUN_RADIUS_DEG);
+    const rGlow = rDisk * GLOW_RATIO;
     const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, rGlow);
     const [sr, sg, sb] = star.color;
     grad.addColorStop(0, `rgba(${Math.round(sr*255)},${Math.round(sg*255)},${Math.round(sb*255)},1)`);
