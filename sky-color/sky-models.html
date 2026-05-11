@@ -1014,6 +1014,27 @@ const deg = a => a * PI / 180;
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const lerp = (a, b, t) => a + (b - a) * t;
 
+// View direction vector from azimuth+elevation (degrees).
+// Coordinates match the existing sky models: sun lives at +z meridian.
+// x: east (perpendicular to sun meridian), y: up, z: toward sun horizontally.
+// viewAz = 0 → in sun's vertical plane (same as legacy hardcoded viewDir).
+function viewDirFromAzEl(azDeg, elDeg) {
+  const az = azDeg * PI / 180;
+  const el = elDeg * PI / 180;
+  const ce = Math.cos(el);
+  return [ce * Math.sin(az), Math.sin(el), ce * Math.cos(az)];
+}
+
+// Scattering angle γ between view and sun directions, both in radians.
+// sunAz is assumed = 0 throughout this lab.
+function scatteringAngle(sunElevRad, viewElDeg, viewAzDeg) {
+  const ve = viewElDeg * PI / 180;
+  const va = viewAzDeg * PI / 180;
+  const cosG = Math.sin(sunElevRad) * Math.sin(ve) +
+               Math.cos(sunElevRad) * Math.cos(ve) * Math.cos(va);
+  return Math.acos(clamp(cosG, -1, 1));
+}
+
 // Sun elevation in radians given latitude (deg), day of year, hour (local solar time)
 function sunElevation(latDeg, doy, hour) {
   const decl = 23.4393 * Math.sin(TAU * (284 + doy) / 365);
@@ -1148,7 +1169,7 @@ function applyStyle(rgb, sunElev, style) {
 // ============================================================
 // PREETHAM MODEL
 // ============================================================
-function preethamColor(sunElev, turbidity, viewElevDeg) {
+function preethamColor(sunElev, turbidity, viewElevDeg, viewAzDeg) {
   const sunTheta = PI / 2 - sunElev; // sun zenith angle
   if (sunElev < deg(-6)) return [0, 0, 0]; // deep twilight
 
@@ -1196,7 +1217,7 @@ function preethamColor(sunElev, turbidity, viewElevDeg) {
 
   // View direction
   const viewTheta = PI / 2 - deg(viewElevDeg); // view zenith angle
-  const gamma = Math.abs(viewTheta - st); // simplified: view in sun's vertical plane
+  const gamma = scatteringAngle(sunElev, viewElevDeg, viewAzDeg || 0);
 
   // Sky color at view direction = zenith value * F(viewTheta, gamma) / F(0, sunTheta)
   const fRatioY = perez(pY, viewTheta, gamma) / perez(pY, 0, st);
@@ -1888,7 +1909,7 @@ function renderAll() {
         if (name === 'rayleigh') {
           contrib = nishitaColor(sElev, T, ve, alt, 0);
         } else if (name === 'preetham') {
-          contrib = preethamColor(sElev, T, ve);
+          contrib = preethamColor(sElev, T, ve, 0);
         } else if (name === 'nishita') {
           contrib = nishitaColor(sElev, T, ve, alt);
         } else if (name === 'ozone') {
