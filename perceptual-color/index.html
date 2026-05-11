@@ -504,7 +504,8 @@
 
   /* Toggle visibility based on the shared condensed/component checkbox. */
   body:has(#expandedSliders:not(:checked)) .chroma-component,
-  body:has(#expandedSliders:not(:checked)) .l-component { display: none; }
+  body:has(#expandedSliders:not(:checked)) .l-component,
+  body:has(#expandedSliders:not(:checked)) .fullrange-toggle { display: none; }
   body:has(#expandedSliders:checked) .chroma-condensed,
   body:has(#expandedSliders:checked) .l-condensed { display: none; }
 
@@ -842,9 +843,9 @@
           <input type="checkbox" id="boundedChroma" checked>
           <span>Bound to safe sRGB ranges</span>
         </label>
-        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);" title="When bounded, draw the slider's full unbounded range and visually lock out the disallowed portion. When off, the slider just shrinks to the bounded range.">
+        <label class="fullrange-toggle" style="display: flex; align-items: center; gap: 6px; cursor: pointer; text-transform: none; letter-spacing: normal; font-weight: 500; color: var(--cs-fg-faint);" title="When bounded, draw the slider's full unbounded range and visually lock out the disallowed portion. When off, the slider just shrinks to the bounded range.">
           <input type="checkbox" id="fullRangeSlider" checked>
-          <span>Show full range with locked-out region</span>
+          <span>Force full range</span>
         </label>
       </div>
 
