@@ -68,6 +68,20 @@
   .strip-title { font-size: 1rem; font-weight: 600; }
   .strip-desc { font-size: 0.75rem; color: #888; }
   canvas.strip { width: 100%; height: 70px; border-radius: 6px; display: block; }
+  .strip-wrap { position: relative; }
+  .time-cursor {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: rgba(255,255,255,0.5); pointer-events: none;
+    transform: translateX(-0.5px);
+  }
+  .time-cursor::before {
+    content: ''; position: absolute; top: -2px; left: -4px;
+    width: 0; height: 0;
+    border-left: 4px solid transparent; border-right: 4px solid transparent;
+    border-top: 6px solid rgba(255,255,255,0.7);
+    pointer-events: auto; cursor: ew-resize;
+  }
+  canvas.strip { cursor: crosshair; }
   .time-axis {
     display: flex; justify-content: space-between;
     font-size: 0.7rem; color: #666; margin-top: 4px; padding: 0 2px;
@@ -371,7 +385,10 @@
     <span class="strip-title">Rayleigh Only</span>
     <span class="strip-desc">Nishita with Mie scattering disabled — pure molecular scattering baseline</span>
   </div>
-  <canvas class="strip" id="cRayleigh"></canvas>
+  <div class="strip-wrap">
+    <canvas class="strip" id="cRayleigh"></canvas>
+    <div class="time-cursor" id="curRayleigh"></div>
+  </div>
   <div class="time-axis" id="axRayleigh"></div>
   <div class="math-block">
     <div class="math-cell">
@@ -414,7 +431,10 @@
     <span class="strip-title">Preetham (1999)</span>
     <span class="strip-desc">Analytical — Perez sky luminance/chromaticity model</span>
   </div>
-  <canvas class="strip" id="cPreetham"></canvas>
+  <div class="strip-wrap">
+    <canvas class="strip" id="cPreetham"></canvas>
+    <div class="time-cursor" id="curPreetham"></div>
+  </div>
   <div class="time-axis" id="axPreetham"></div>
   <div class="math-block">
     <div class="math-cell">
@@ -478,7 +498,10 @@
     <span class="strip-title">Nishita (1993)</span>
     <span class="strip-desc">Ray-marching — single-scattering Rayleigh + Mie</span>
   </div>
-  <canvas class="strip" id="cNishita"></canvas>
+  <div class="strip-wrap">
+    <canvas class="strip" id="cNishita"></canvas>
+    <div class="time-cursor" id="curNishita"></div>
+  </div>
   <div class="time-axis" id="axNishita"></div>
   <div class="math-block">
     <div class="math-cell">
@@ -558,7 +581,10 @@
     <span class="strip-title">Hosek-Wilkie (2012)</span>
     <span class="strip-desc">Enhanced analytical — improved horizon, ground albedo feedback</span>
   </div>
-  <canvas class="strip" id="cHosek"></canvas>
+  <div class="strip-wrap">
+    <canvas class="strip" id="cHosek"></canvas>
+    <div class="time-cursor" id="curHosek"></div>
+  </div>
   <div class="time-axis" id="axHosek"></div>
   <div class="math-block">
     <div class="math-cell">
@@ -627,7 +653,10 @@
     <span class="strip-title">Nishita + Ozone</span>
     <span class="strip-desc">Adds Chappuis band absorption — deeper blues during twilight</span>
   </div>
-  <canvas class="strip" id="cOzone"></canvas>
+  <div class="strip-wrap">
+    <canvas class="strip" id="cOzone"></canvas>
+    <div class="time-cursor" id="curOzone"></div>
+  </div>
   <div class="time-axis" id="axOzone"></div>
   <div class="math-block">
     <div class="math-cell">
@@ -679,7 +708,10 @@
     <span class="strip-title">CIE Standard Clear Sky (Type 12)</span>
     <span class="strip-desc">Empirical luminance model — ISO 15469 architectural standard</span>
   </div>
-  <canvas class="strip" id="cCie"></canvas>
+  <div class="strip-wrap">
+    <canvas class="strip" id="cCie"></canvas>
+    <div class="time-cursor" id="curCie"></div>
+  </div>
   <div class="time-axis" id="axCie"></div>
   <div class="math-block">
     <div class="math-cell">
@@ -1791,6 +1823,22 @@ function applyPresetPhysics(preset, atmoDensity, sunDist, stellarTemp) {
   stellarColor = [r/mx, g/mx, b/mx];
 }
 
+let selectedHour = 12.0;
+const cursors = {
+  rayleigh: document.getElementById('curRayleigh'),
+  preetham: document.getElementById('curPreetham'),
+  nishita:  document.getElementById('curNishita'),
+  hosek:    document.getElementById('curHosek'),
+  ozone:    document.getElementById('curOzone'),
+  cie:      document.getElementById('curCie'),
+};
+
+function updateTimeCursors() {
+  const frac = (selectedHour - HOUR_START) / (HOUR_END - HOUR_START);
+  const pct = clamp(frac, 0, 1) * 100;
+  for (const el of Object.values(cursors)) el.style.left = pct + '%';
+}
+
 function renderAll() {
   // Apply preset physics before reading sliders
   const preset = PRESETS[activePreset];
@@ -1977,6 +2025,7 @@ function renderAll() {
       el.appendChild(span);
     }
   }
+  updateTimeCursors();
 }
 
 // Debounced rendering
@@ -2154,6 +2203,35 @@ document.getElementById('iq').addEventListener('input', () => {
       `<span class="ps-star">${btn.querySelector('.preset-star').innerHTML}</span>`;
   }
 })();
+
+// Forward declaration — real implementation lands in Task 5.
+function scheduleDomeRender() { /* implemented in Task 5 */ }
+
+function hourFromEvent(canvas, ev) {
+  const rect = canvas.getBoundingClientRect();
+  const x = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+  return HOUR_START + x * (HOUR_END - HOUR_START);
+}
+
+let scrubbing = false;
+for (const [name, canvas] of Object.entries(canvases)) {
+  canvas.addEventListener('mousedown', (ev) => {
+    scrubbing = true;
+    selectedHour = hourFromEvent(canvas, ev);
+    updateTimeCursors();
+    scheduleDomeRender();
+    ev.preventDefault();
+  });
+}
+window.addEventListener('mousemove', (ev) => {
+  if (!scrubbing) return;
+  const target = ev.target.closest && ev.target.closest('canvas.strip');
+  const canvas = target || canvases.rayleigh;
+  selectedHour = hourFromEvent(canvas, ev);
+  updateTimeCursors();
+  scheduleDomeRender();
+});
+window.addEventListener('mouseup', () => { scrubbing = false; });
 
 // Initial render
 renderAll();
