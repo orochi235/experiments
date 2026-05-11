@@ -46,3 +46,19 @@ export function u(gl, prog, name) {
   if (prog._u[name] === undefined) prog._u[name] = gl.getUniformLocation(prog, name);
   return prog._u[name];
 }
+
+import { sunPos, angleDiffRad } from '../stars.js';
+
+// Fill state.stars[i]._elev and _azOff for the current hour/lat/doy.
+// Primary star sits at azOff = 0; secondaries are offset by their sky azimuth
+// relative to the primary's.
+export function recomputeDerived(state, selectedHour) {
+  const lat = state.lat, doy = state.doy;
+  const primary = sunPos(lat, doy, selectedHour + state.stars[0].hourOffset);
+  for (const s of state.stars) {
+    const p = sunPos(lat, doy, selectedHour + s.hourOffset);
+    s._elev = p[0];
+    s._azOff = angleDiffRad(p[1], primary[1]) * 180 / Math.PI;
+  }
+  state._primarySunElev = primary[0];
+}
