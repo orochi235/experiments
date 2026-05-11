@@ -4,6 +4,7 @@ import { buildPrograms } from './render/programs.js';
 import { setSharedUniforms } from './render/uniforms.js';
 import { wireControls } from './ui/controls.js';
 import { wireProjectionToggles } from './ui/projectionToggle.js';
+import { drawStripOverlay, drawDomeOverlay } from './render/overlay.js';
 import './styles.css';
 
 const MODELS = ['rayleigh', 'preetham', 'nishita', 'hosek', 'ozone', 'cie'];
@@ -14,8 +15,14 @@ const panels = [];
 for (const m of MODELS) {
   const stripCanvas = document.getElementById(`c${cap(m)}`);
   const domeCanvas = document.querySelector(`canvas.dome.gl[data-model="${m}"]`);
-  if (stripCanvas) panels.push({ kind: 'strip', model: m, canvas: stripCanvas });
-  if (domeCanvas)  panels.push({ kind: 'dome',  model: m, canvas: domeCanvas });
+  if (stripCanvas) {
+    const overlay = document.getElementById(`o${cap(m)}`);
+    panels.push({ kind: 'strip', model: m, canvas: stripCanvas, overlay });
+  }
+  if (domeCanvas) {
+    const overlay = document.getElementById(`od${m}`);
+    panels.push({ kind: 'dome', model: m, canvas: domeCanvas, overlay });
+  }
 }
 
 // Per-panel GL context + program
@@ -65,6 +72,10 @@ function sizeCanvas(p) {
   if (p.canvas.width !== w || p.canvas.height !== h) {
     p.canvas.width = w;
     p.canvas.height = h;
+  }
+  if (p.overlay && (p.overlay.width !== w || p.overlay.height !== h)) {
+    p.overlay.width = w;
+    p.overlay.height = h;
   }
 }
 const ro = new ResizeObserver(() => {
@@ -127,6 +138,11 @@ function render() {
       gl.uniform1i(gl.getUniformLocation(p.program, 'uProjection'), proj);
     }
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+    if (p.overlay) {
+      const ctx = p.overlay.getContext('2d');
+      if (p.kind === 'strip') drawStripOverlay(ctx, state);
+      else drawDomeOverlay(ctx, state, p.model);
+    }
   }
 }
 setRenderFn(render);
