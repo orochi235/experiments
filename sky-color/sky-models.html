@@ -211,17 +211,20 @@
     border-top: 1px solid #2a3a5a;
   }
   .expanded-pane.open { display: block; }
-  .proj-selector { display: flex; gap: 4px; margin-bottom: 10px; }
-  .proj-btn {
-    background: #1a1a2e; border: 1px solid #2a3a5a; color: #aaa;
-    border-radius: 4px; padding: 4px 10px; cursor: pointer;
-    font-size: 0.75rem;
+  .proj-selector {
+    position: absolute; top: 8px; left: 8px; z-index: 2;
+    display: flex; gap: 4px; margin: 0;
   }
-  .proj-btn.active { background: #2a4a6a; border-color: #7ec8e3; color: #fff; }
-  .proj-btn:hover:not(.active) { background: #2a3a5a; color: #ddd; }
+  .proj-btn {
+    background: rgba(20, 20, 30, 0.65); border: 1px solid rgba(126, 200, 227, 0.25);
+    color: #cdd; border-radius: 4px; padding: 4px 10px; cursor: pointer;
+    font-size: 0.75rem; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  }
+  .proj-btn.active { background: rgba(42, 74, 106, 0.85); border-color: #7ec8e3; color: #fff; }
+  .proj-btn:hover:not(.active) { background: rgba(42, 58, 90, 0.85); color: #fff; }
   canvas.dome { display: block; background: #0a0a14; border-radius: 6px; }
   canvas.dome[data-projection="fisheye"] {
-    width: min(100%, 560px); aspect-ratio: 1 / 1;
+    width: 100%; aspect-ratio: 1 / 1;
   }
   canvas.dome[data-projection="equirect"],
   canvas.dome[data-projection="sunfacing"] {
@@ -234,6 +237,8 @@
   .dome-wrap {
     display: flex; flex-direction: column; align-items: center; width: 100%;
   }
+  .dome-frame { position: relative; width: 100%; }
+  .dome-frame[data-projection="fisheye"] { max-width: 560px; }
 </style>
 </head>
 <body>
@@ -462,13 +467,15 @@
     </div>
   </div>
   <div class="expanded-pane" data-model="rayleigh">
-    <div class="proj-selector">
-      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
-      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
-      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
-    </div>
     <div class="dome-wrap">
-      <canvas class="dome" data-model="rayleigh" width="480" height="480"></canvas>
+      <div class="dome-frame">
+        <canvas class="dome" data-model="rayleigh" width="480" height="480"></canvas>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
       <div class="dome-caption" data-model="rayleigh"></div>
     </div>
   </div>
@@ -541,13 +548,15 @@
     </div>
   </div>
   <div class="expanded-pane" data-model="preetham">
-    <div class="proj-selector">
-      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
-      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
-      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
-    </div>
     <div class="dome-wrap">
-      <canvas class="dome" data-model="preetham" width="480" height="480"></canvas>
+      <div class="dome-frame">
+        <canvas class="dome" data-model="preetham" width="480" height="480"></canvas>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
       <div class="dome-caption" data-model="preetham"></div>
     </div>
   </div>
@@ -636,13 +645,15 @@
     </div>
   </div>
   <div class="expanded-pane" data-model="nishita">
-    <div class="proj-selector">
-      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
-      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
-      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
-    </div>
     <div class="dome-wrap">
-      <canvas class="dome" data-model="nishita" width="480" height="480"></canvas>
+      <div class="dome-frame">
+        <canvas class="dome" data-model="nishita" width="480" height="480"></canvas>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
       <div class="dome-caption" data-model="nishita"></div>
     </div>
   </div>
@@ -720,13 +731,15 @@
     </div>
   </div>
   <div class="expanded-pane" data-model="hosek">
-    <div class="proj-selector">
-      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
-      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
-      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
-    </div>
     <div class="dome-wrap">
-      <canvas class="dome" data-model="hosek" width="480" height="480"></canvas>
+      <div class="dome-frame">
+        <canvas class="dome" data-model="hosek" width="480" height="480"></canvas>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
       <div class="dome-caption" data-model="hosek"></div>
     </div>
   </div>
@@ -787,13 +800,15 @@
     </div>
   </div>
   <div class="expanded-pane" data-model="ozone">
-    <div class="proj-selector">
-      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
-      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
-      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
-    </div>
     <div class="dome-wrap">
-      <canvas class="dome" data-model="ozone" width="480" height="480"></canvas>
+      <div class="dome-frame">
+        <canvas class="dome" data-model="ozone" width="480" height="480"></canvas>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
       <div class="dome-caption" data-model="ozone"></div>
     </div>
   </div>
@@ -851,13 +866,15 @@
     </div>
   </div>
   <div class="expanded-pane" data-model="cie">
-    <div class="proj-selector">
-      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
-      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
-      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
-    </div>
     <div class="dome-wrap">
-      <canvas class="dome" data-model="cie" width="480" height="480"></canvas>
+      <div class="dome-frame">
+        <canvas class="dome" data-model="cie" width="480" height="480"></canvas>
+        <div class="proj-selector">
+          <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
+          <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+          <button class="proj-btn" data-proj="fisheye">Fisheye</button>
+        </div>
+      </div>
       <div class="dome-caption" data-model="cie"></div>
     </div>
   </div>
@@ -2456,6 +2473,8 @@ function renderDome(name) {
   // Size canvas internal buffer to match its displayed size × DPR.
   // The CSS rules set the display dimensions and aspect ratio per projection.
   canvas.dataset.projection = state.projection;
+  const frame = canvas.closest('.dome-frame');
+  if (frame) frame.dataset.projection = state.projection;
   const cssRect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
   const aspect = state.projection === 'fisheye' ? 1 : 2; // width / height
