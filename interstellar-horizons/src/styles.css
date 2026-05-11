@@ -711,7 +711,8 @@ body[data-layout="standard"] .strip-container {
   display: block;
   margin: 0;
 }
-body[data-layout="standard"] .strip-container > .strip-header { display: block; margin-bottom: 4px; }
+body[data-layout="standard"] .strip-container { padding: 8px 14px 14px; }
+body[data-layout="standard"] .strip-container > .strip-header { display: block; margin: 0 0 10px; }
 body[data-layout="standard"] .strip-title {
   font: 300 1.2rem/1.2 'Oswald', 'IBM Plex Mono', monospace;
   color: #fff;
@@ -1090,5 +1091,57 @@ canvas.dome.gl { cursor: zoom-in; }
     #909aa8 50%,
     #506880 75%,
     #1a2230 100%);   /* 10 */
+}
+
+/* ============================================================
+   Mobile: shrink horizontal chrome so previews use the full width.
+   ============================================================ */
+@media (max-width: 720px) {
+  body { padding: 16px 12px; }
+  h1 { margin-left: 8px; font-size: 1.4rem; }
+  body > p.subtitle,
+  .page-title .subtitle { font-size: 1rem; }
+  .page-title {
+    padding: 14px 16px;
+    border-radius: 18px;
+    margin-bottom: -24px;
+  }
+  .page-title h1 { font-size: 1.7rem; }
+  /* Title banner aligns to body content edge on mobile (no 20px indent) */
+  .page-title { margin-left: 0; }
+
+  /* Panels: trim interior padding so content has room */
+  .controls { padding: 12px 12px; gap: 14px 20px; }
+  /* Planet toolbar bleeds to the new (narrower) body content edge */
+  .planet-toolbar { margin: 0 0 12px; padding: 12px 0; }
+
+  /* Wall preview grid: drop to 2 columns */
+  body[data-layout="standard"] .model-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  /* Detail layout strip-container's right-column min becomes too constraining */
+  .strip-container {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
+    column-gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  body { padding: 12px 8px; }
+  /* Single column of previews on tiny screens */
+  body[data-layout="standard"] .model-grid {
+    grid-template-columns: 1fr;
+  }
+  /* Detail layout collapses to single column too — preview drops below text */
+  .strip-container {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto;
+  }
+  .strip-container > .expanded-pane {
+    grid-column: 1;
+    grid-row: 5;
+    margin-top: 8px;
+  }
 }
 
