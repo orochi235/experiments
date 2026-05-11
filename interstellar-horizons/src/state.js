@@ -27,6 +27,10 @@ export const state = {
   showStars: true,
   // 'visual' (default) | 'actual' — planet toolbar orb sizing mode
   planetScale: 'visual',
+  // 'physical' = blackbody RGB as-is (Sol = warm-ish white)
+  // 'adapted'  = divide every star color by Sol's blackbody so 5778K reads
+  //              as neutral white — matches how a tourist's eye would adapt
+  whiteBalance: 'adapted',
 
   // Global projection (one toggle controls all 6 dome previews + lightbox)
   projection: 'sunfacing',

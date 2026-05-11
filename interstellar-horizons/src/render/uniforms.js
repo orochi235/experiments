@@ -40,13 +40,25 @@ export function setSharedUniforms(gl, prog, state) {
   const elev = new Float32Array(4), azOff = new Float32Array(4),
         color = new Float32Array(12), intensity = new Float32Array(4),
         hourOff = new Float32Array(4);
+
+  // Adapted white-balance: divide every star's RGB by Sol's blackbody so
+  // a 5778 K sun appears neutral white — matches eye-adapted perception.
+  // The reference is a fixed precomputed value (blackbodyRGB(5778)).
+  const SOL_REF = [1.0, 0.8805083522703855, 0.8280576651790191];
+  const wbAdapt = state.whiteBalance === 'adapted';
   for (let i = 0; i < n; i++) {
     const s = state.stars[i];
     elev[i] = s._elev ?? 0;
     azOff[i] = s._azOff ?? 0;
-    color[i*3]     = s.color[0];
-    color[i*3 + 1] = s.color[1];
-    color[i*3 + 2] = s.color[2];
+    if (wbAdapt) {
+      color[i*3]     = s.color[0] / SOL_REF[0];
+      color[i*3 + 1] = s.color[1] / SOL_REF[1];
+      color[i*3 + 2] = s.color[2] / SOL_REF[2];
+    } else {
+      color[i*3]     = s.color[0];
+      color[i*3 + 1] = s.color[1];
+      color[i*3 + 2] = s.color[2];
+    }
     intensity[i] = s.intensity;
     hourOff[i]   = s.hourOffset;
   }

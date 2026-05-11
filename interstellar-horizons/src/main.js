@@ -739,6 +739,16 @@ document.querySelectorAll('#scaleToggle .proj-btn').forEach(btn => {
   });
 });
 
+// White-balance toggle (Physical / Adapted)
+document.querySelectorAll('#wbToggle .proj-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#wbToggle .proj-btn').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    state.whiteBalance = btn.dataset.wb;
+    scheduleRender();
+  });
+});
+
 // ============================================================
 // URL <-> state synchronization
 // ============================================================
@@ -817,6 +827,15 @@ const URL_PARAMS = [
     },
     read:  () => state.planetScale,
   },
+  {
+    name: 'wb',
+    parse: s => ['physical', 'adapted'].includes(s) ? s : null,
+    apply: v => {
+      const btn = document.querySelector(`#wbToggle .proj-btn[data-wb="${v}"]`);
+      if (btn) btn.click();
+    },
+    read:  () => state.whiteBalance,
+  },
 ];
 
 function applyParamsFromURL() {
@@ -865,7 +884,7 @@ window.addEventListener('preset-change', scheduleURLWrite);
 for (const id of ['hour', 'latitude', 'dayOfYear', 'turbidity']) {
   document.getElementById(id)?.addEventListener('input', scheduleURLWrite);
 }
-// Toggle buttons (projection, layout, scale)
-for (const sel of ['.proj-selector.global > .proj-btn', '#layoutToggle .proj-btn', '#scaleToggle .proj-btn']) {
+// Toggle buttons (projection, layout, scale, wb)
+for (const sel of ['.proj-selector.global > .proj-btn', '#layoutToggle .proj-btn', '#scaleToggle .proj-btn', '#wbToggle .proj-btn']) {
   document.querySelectorAll(sel).forEach(b => b.addEventListener('click', scheduleURLWrite));
 }
