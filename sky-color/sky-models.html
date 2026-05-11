@@ -463,9 +463,9 @@
   </div>
   <div class="expanded-pane" data-model="rayleigh">
     <div class="proj-selector">
-      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
-      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
       <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
     </div>
     <div class="dome-wrap">
       <canvas class="dome" data-model="rayleigh" width="480" height="480"></canvas>
@@ -542,9 +542,9 @@
   </div>
   <div class="expanded-pane" data-model="preetham">
     <div class="proj-selector">
-      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
-      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
       <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
     </div>
     <div class="dome-wrap">
       <canvas class="dome" data-model="preetham" width="480" height="480"></canvas>
@@ -637,9 +637,9 @@
   </div>
   <div class="expanded-pane" data-model="nishita">
     <div class="proj-selector">
-      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
-      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
       <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
     </div>
     <div class="dome-wrap">
       <canvas class="dome" data-model="nishita" width="480" height="480"></canvas>
@@ -721,9 +721,9 @@
   </div>
   <div class="expanded-pane" data-model="hosek">
     <div class="proj-selector">
-      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
-      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
       <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
     </div>
     <div class="dome-wrap">
       <canvas class="dome" data-model="hosek" width="480" height="480"></canvas>
@@ -788,9 +788,9 @@
   </div>
   <div class="expanded-pane" data-model="ozone">
     <div class="proj-selector">
-      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
-      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
       <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
     </div>
     <div class="dome-wrap">
       <canvas class="dome" data-model="ozone" width="480" height="480"></canvas>
@@ -852,9 +852,9 @@
   </div>
   <div class="expanded-pane" data-model="cie">
     <div class="proj-selector">
-      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
-      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn active" data-proj="equirect">Panorama 360°</button>
       <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+      <button class="proj-btn" data-proj="fisheye">Fisheye</button>
     </div>
     <div class="dome-wrap">
       <canvas class="dome" data-model="cie" width="480" height="480"></canvas>
@@ -2318,13 +2318,13 @@ document.getElementById('iq').addEventListener('input', () => {
 // =========================================================================
 
 const domeState = {
-  // model name -> { expanded: bool, projection: 'fisheye'|'equirect'|'sunfacing' }
-  rayleigh: { expanded: false, projection: 'fisheye' },
-  preetham: { expanded: false, projection: 'fisheye' },
-  nishita:  { expanded: false, projection: 'fisheye' },
-  hosek:    { expanded: false, projection: 'fisheye' },
-  ozone:    { expanded: false, projection: 'fisheye' },
-  cie:      { expanded: false, projection: 'fisheye' },
+  // model name -> { expanded: bool, projection: 'equirect'|'sunfacing'|'fisheye' }
+  rayleigh: { expanded: false, projection: 'equirect' },
+  preetham: { expanded: false, projection: 'equirect' },
+  nishita:  { expanded: false, projection: 'equirect' },
+  hosek:    { expanded: false, projection: 'equirect' },
+  ozone:    { expanded: false, projection: 'equirect' },
+  cie:      { expanded: false, projection: 'equirect' },
 };
 
 const DOME_STORAGE_KEY = 'sky-models-dome-state-v1';
