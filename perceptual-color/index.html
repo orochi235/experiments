@@ -271,6 +271,96 @@
     position: absolute; left: 138px; top: 70px; font: 700 0.85rem/1 'IBM Plex Mono', monospace; color: #3366FF;
   }
 
+  /* Chroma curve diagram — triangle of (L, C) control points with
+     barycentric-interpolated vertex colors. Lives to the right of the HCL
+     grid in the same .panel-body flexbox. */
+  .chroma-curve-diagram {
+    flex: 0 0 240px;
+    align-self: flex-start;
+    border-left: 1px solid var(--cs-border);
+    padding-left: 14px;
+  }
+  .chroma-curve-diagram .caption {
+    font: 600 0.7rem/1.4 'IBM Plex Mono', monospace;
+    color: #98A3B3;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+  .ccd-figure {
+    position: relative; width: 240px; height: 200px;
+    background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);
+    border-radius: 4px;
+  }
+  .ccd-canvas { position: absolute; inset: 0; display: block; width: 240px; height: 200px; }
+  .ccd-overlay { position: absolute; inset: 0; pointer-events: none; }
+  .ccd-hue {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px;
+    font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-faint);
+  }
+  .ccd-hue input[type=range] { flex: 1; }
+  .ccd-hue .val { min-width: 36px; text-align: right; color: var(--cs-fg); font-variant-numeric: tabular-nums; }
+  .ccd-caption {
+    font: 400 0.6rem/1.4 'IBM Plex Sans', sans-serif;
+    color: var(--cs-fg-faint);
+    margin-top: 8px;
+  }
+  [data-theme="dark"] .chroma-curve-diagram { border-left-color: #2A2D35; }
+
+  /* Expand button in the corner of the small triangle figure. */
+  .ccd-expand {
+    position: absolute; top: 6px; right: 6px;
+    width: 24px; height: 24px; padding: 4px;
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in srgb, var(--cs-bg, #fff) 70%, transparent);
+    border: 1px solid var(--cs-border);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--cs-fg-faint);
+    z-index: 2;
+  }
+  .ccd-expand:hover { color: var(--cs-fg); border-color: var(--cs-border-strong); }
+  .ccd-expand svg { display: block; width: 12px; height: 12px; }
+
+  /* Lightbox modal for the expanded triangle diagram. */
+  .ccd-modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(2px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+    padding: 24px;
+  }
+  .ccd-modal-backdrop[hidden] { display: none; }
+  .ccd-modal {
+    position: relative;
+    background: var(--cs-panel-bg);
+    border: 1px solid var(--cs-border);
+    border-radius: 8px;
+    padding: 20px;
+    max-width: 95vw; max-height: 95vh;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .ccd-modal-figure {
+    position: relative; width: 640px; height: 520px;
+    background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);
+    border-radius: 4px;
+  }
+  .ccd-modal .ccd-canvas {
+    position: absolute; inset: 0; display: block; width: 640px; height: 520px;
+  }
+  .ccd-modal .ccd-overlay { position: absolute; inset: 0; pointer-events: none; }
+  .ccd-modal-close {
+    position: absolute; top: 8px; right: 8px;
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--cs-border);
+    border-radius: 4px; cursor: pointer;
+    font: 500 1rem/1 'IBM Plex Sans', sans-serif;
+    color: var(--cs-fg-faint);
+  }
+  .ccd-modal-close:hover { color: var(--cs-fg); border-color: var(--cs-border-strong); }
+
   .row-inline { display: flex; gap: 12px; align-items: center; }
   .row-inline label {
     font: 500 0.7rem/1 'IBM Plex Mono', monospace; color: #3E424F;
@@ -326,6 +416,11 @@
   }
   input[type=range].grad::-webkit-slider-runnable-track { background: transparent; height: 24px; }
   input[type=range].grad::-moz-range-track { background: transparent; height: 24px; }
+  .family input[type=range].grad { height: 16px; }
+  .family input[type=range].grad::-webkit-slider-runnable-track { height: 16px; }
+  .family input[type=range].grad::-moz-range-track { height: 16px; }
+  .family input[type=range].grad::-webkit-slider-thumb { width: 9px; height: 20px; margin-top: -2px; }
+  .family input[type=range].grad::-moz-range-thumb { width: 9px; height: 20px; }
   /* Flatten the L-curve gamma bar so its 2-D gradient doesn't read as 3D
      next to the rest of the (1-D) sliders. */
   #lGamma { filter: contrast(0.85) saturate(0.55); }
@@ -622,26 +717,26 @@
         <div><span class="ax" style="color:#3366FF;">C</span><span id="axisC">Chroma (radius)</span></div>
         <div><span class="ax" style="color:#F79009;">H</span><span id="axisH">Hue (angle)</span></div>
       </div>
-<div class="hatch-panel" style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);">
-        <div style="font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-fainter); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;">Hatch</div>
+<div class="hatch-panel" style="margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent); opacity: 0.3;">
+        <div style="font: 500 0.6rem/1 'IBM Plex Mono', monospace; color: var(--cs-fg-fainter); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; user-select: none;">Hatching</div>
         <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
           <span style="min-width: 40px;">Angle</span>
-          <input type="range" id="hatchAngle" min="0" max="180" step="1" value="135" style="flex: 1;">
+          <input type="range" id="hatchAngle" min="0" max="180" step="1" value="135" style="flex: 1;" disabled>
           <span id="hatchAngleVal" style="min-width: 32px; text-align: right;">135°</span>
         </label>
         <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
           <span style="min-width: 40px;">Stripe</span>
-          <input type="range" id="hatchStripe" min="1" max="10" step="1" value="2" style="flex: 1;">
+          <input type="range" id="hatchStripe" min="1" max="10" step="1" value="2" style="flex: 1;" disabled>
           <span id="hatchStripeVal" style="min-width: 32px; text-align: right;">2px</span>
         </label>
         <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint); margin-bottom: 4px;">
           <span style="min-width: 40px;">Gap</span>
-          <input type="range" id="hatchGap" min="1" max="20" step="1" value="4" style="flex: 1;">
+          <input type="range" id="hatchGap" min="1" max="20" step="1" value="4" style="flex: 1;" disabled>
           <span id="hatchGapVal" style="min-width: 32px; text-align: right;">4px</span>
         </label>
         <label style="display: flex; align-items: center; gap: 6px; font: 500 0.6rem/1.2 'IBM Plex Mono', monospace; color: var(--cs-fg-faint);">
           <span style="min-width: 40px;">Dim</span>
-          <input type="range" id="hatchDim" min="0" max="100" step="1" value="75" style="flex: 1;">
+          <input type="range" id="hatchDim" min="0" max="100" step="1" value="75" style="flex: 1;" disabled>
           <span id="hatchDimVal" style="min-width: 32px; text-align: right;">75%</span>
         </label>
       </div>
@@ -685,7 +780,7 @@
       <div class="section-label">Chroma (triangle along L)</div>
 
       <!-- Condensed: single slider with three thumbs -->
-      <label class="chroma-condensed" title="T = top (lightest L) · P = peak (mid L) · B = bottom (darkest L)">Chroma — top / peak / bottom</label>
+      <label class="chroma-condensed" title="T = top (lightest L) · P = peak (mid L) · B = bottom (darkest L)">Top / peak / bottom</label>
       <div id="chromaMulti" class="multi-slider chroma-condensed"></div>
       <span class="val chroma-condensed">&nbsp;</span>
 
@@ -712,6 +807,30 @@
       <label>Hue shift across L (°)</label>
       <input type="range" id="hueShift" class="grad" min="-40" max="40" step="1" value="0">
       <span class="val" id="hueShiftVal">0°</span>
+    </div>
+
+    <div class="chroma-curve-diagram">
+      <div class="caption"><i>C</i>(<i>L</i>)</div>
+      <div class="ccd-figure">
+        <canvas class="ccd-canvas" width="240" height="200"></canvas>
+        <svg class="ccd-overlay" width="240" height="200"></svg>
+        <button class="ccd-expand" id="ccdExpand" type="button" aria-label="Open larger triangle diagram" title="Expand">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="1,5 1,1 5,1"/>
+            <polyline points="7,1 11,1 11,5"/>
+            <polyline points="11,7 11,11 7,11"/>
+            <polyline points="5,11 1,11 1,7"/>
+          </svg>
+        </button>
+      </div>
+      <label class="ccd-hue">
+        <span>Reference hue</span>
+        <input type="range" id="ccdHue" min="0" max="360" step="1" value="200">
+        <span class="val" id="ccdHueVal">200°</span>
+      </label>
+      <div class="ccd-caption">
+        Triangle vertices are <b>B</b>(L<sub>min</sub>, c<sub>bot</sub>), <b>P</b>(L<sub>peak</sub>, c<sub>peak</sub>), <b>T</b>(L<sub>max</sub>, c<sub>top</sub>). Interior is a linear-RGB barycentric blend of the three corner colors at the reference hue. The reference hue also drives the L and C slider tracks above. Dashed tracks show each thumb's bounded slide range.
+      </div>
     </div>
   </div>
 
@@ -765,6 +884,16 @@
 
 <div class="legend">
   Dashed orange border = the requested point falls outside the selected gamut and is being clipped on display. Lower chroma to bring it in range.
+</div>
+
+<div class="ccd-modal-backdrop" id="ccdModal" hidden>
+  <div class="ccd-modal" role="dialog" aria-modal="true" aria-label="Chroma curve diagram (expanded)">
+    <button class="ccd-modal-close" id="ccdModalClose" type="button" aria-label="Close">×</button>
+    <div class="ccd-modal-figure">
+      <canvas class="ccd-canvas" width="640" height="520"></canvas>
+      <svg class="ccd-overlay" width="640" height="520"></svg>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -914,6 +1043,7 @@ const params = {
   diagramLGamma: 1.0,
   diagramL: 0.5,
   notchedThumbs: false,
+  ccdHue: 200,
 };
 // Per-gamut "safe" ranges + the single absolute (unbounded) range.
 // L bounds don't really vary across gamuts (L is L), but chroma maxima do —
@@ -1257,7 +1387,7 @@ function paintGradSlider(input, sample, colorTransform) {
 function paintScalePreview(input, sampler) {
   const stops = [];
   const N = 24;
-  const refHue = families[0]?.hue ?? 200;
+  const refHue = params.ccdHue;
   for (let i = 0; i <= N; i++) {
     const t = i / N;
     const { L, C, H } = sampler(t, refHue);
@@ -1267,7 +1397,7 @@ function paintScalePreview(input, sampler) {
   input.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 function paintAllGradSliders() {
-  const refHue = families[0]?.hue ?? 200;
+  const refHue = params.ccdHue;
   const L = midL(), C = midC();
   // L sliders sweep L at ref C and ref H
   paintGradSlider(document.getElementById('lMax'), v => ({ L: v, C, H: refHue }));
@@ -1310,7 +1440,7 @@ function paint2DGammaSlider(input) {
   const ctx = _gammaCanvas.getContext('2d');
   const img = ctx.createImageData(w, h);
   const data = img.data;
-  const refHue = families[0]?.hue ?? 200;
+  const refHue = params.ccdHue;
   const minG = parseFloat(input.min), maxG = parseFloat(input.max);
   // Compress the L range toward middle gray and boost chroma slightly so the
   // gamma curve reads as a soft tinted map rather than a stark high-contrast
@@ -1412,6 +1542,20 @@ function updateModelDiagram() {
     const top = parseFloat(getComputedStyle(lBarEl).top) || 8;
     const height = lBarEl.offsetHeight || 184;
     lThumb.style.top = (top + (1 - tFromL) * height) + 'px';
+  }
+
+  // H-vector arrow: rotation from reference hue (disc paints H counterclockwise
+  // via atan2(-dy, dx); CSS rotate is clockwise — negate to match). Length
+  // tracks chromaFor(diagramL) / cMax × disc-radius, so the arrow shrinks at
+  // low-chroma L positions and reaches the rim when the curve hits cMax.
+  const arrow = document.querySelector('.dgm-disc-arrow');
+  const discEl = document.querySelector('.dgm-disc');
+  if (arrow) {
+    arrow.style.transform = `translateY(-50%) rotate(${-params.ccdHue}deg)`;
+    const discRadius = discEl ? discEl.offsetWidth / 2 : 80;
+    const cMaxArrow = (params.boundedChroma ? PARAM_BOUNDS.bounded.cPeak : PARAM_BOUNDS.unbounded.cPeak).max;
+    const cAt = chromaFor(params.diagramL);
+    arrow.style.width = Math.max(0, Math.min(1, cAt / cMaxArrow)) * discRadius + 'px';
   }
 
   // Disc: 2-D color picker on canvas. The chosen model determines how
@@ -1929,6 +2073,30 @@ bindSlider('cPeak',    'cPeak',    3);
 bindSlider('cBot',     'cBot',     3);
 bindSlider('cPeakPos', 'cPeakPos', 3);
 bindSlider('hueShift', 'hueShift', 0, '°');
+bindSlider('ccdHue',   'ccdHue',   0, '°');
+
+// Triangle diagram lightbox modal: expand button opens a larger view; close
+// via the × button, clicking the backdrop, or Escape.
+{
+  const expandBtn = document.getElementById('ccdExpand');
+  const modal = document.getElementById('ccdModal');
+  const closeBtn = document.getElementById('ccdModalClose');
+  const open = () => {
+    if (!modal) return;
+    ccdModalOpen = true;
+    modal.hidden = false;
+    if (typeof updateChromaCurveDiagram === 'function') updateChromaCurveDiagram();
+  };
+  const close = () => {
+    if (!modal) return;
+    ccdModalOpen = false;
+    modal.hidden = true;
+  };
+  expandBtn?.addEventListener('click', open);
+  closeBtn?.addEventListener('click', close);
+  modal?.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && ccdModalOpen) close(); });
+}
 document.getElementById('model').addEventListener('change', e => { params.model = e.target.value; redraw(); pushHistory(); });
 document.getElementById('gamut').addEventListener('change', e => {
   params.gamut = e.target.value;
@@ -2053,7 +2221,7 @@ const multiChromaRefresh = (function setupMultiChroma() {
     const m = maxRange();
     const stops = [];
     const N = 16;
-    const refHue = families[0]?.hue ?? 200;
+    const refHue = params.ccdHue;
     for (let i = 0; i <= N; i++) {
       const t = i / N;
       const lin = oklchToLinearRgb(midL(), t * m, refHue);
@@ -2271,6 +2439,17 @@ const multiLRefresh = (function setupMultiL() {
     redraw();
   });
   dim.addEventListener('change', pushHistory);
+
+  // Hatch sliders ship disabled (decoration) — double-click the panel to
+  // re-enable them and undim.
+  const hatchPanel = document.querySelector('.hatch-panel');
+  if (hatchPanel) {
+    hatchPanel.addEventListener('dblclick', () => {
+      for (const inp of [ang, sw, gp, dim]) inp.disabled = false;
+      hatchPanel.style.opacity = '';
+    });
+  }
+
   // Drag on the L bar to set diagramL (which the donut samples at).
   const lBar = document.querySelector('.dgm-l-bar');
   if (lBar) {
@@ -2312,7 +2491,7 @@ document.getElementById('copyIndices').addEventListener('click', e => {
 const eyedropper = document.createElement('div');
 eyedropper.className = 'cs-eyedropper';
 document.body.appendChild(eyedropper);
-function refHueForEyedropper() { return families[0]?.hue ?? 200; }
+function refHueForEyedropper() { return params.ccdHue; }
 // Returns {L, C, H} for the slider's current state. Sliders that affect the
 // scale's shape (gamma, peakPos, hueShift) show the index-500 color of the
 // resulting scale; direct sliders (L, C) show their own value mapped to the
@@ -2345,11 +2524,17 @@ function eyedropperColorFor(input) {
   if (id === 'cTop')                             return { L: params.lMax, C: v, H };
   if (id === 'cPeak')                            return { L,             C: v, H };
   if (id === 'cBot')                             return { L: params.lMin, C: v, H };
-  if (id === 'hueShift')                         return { L, C, H: H + v };
-  // Curve sliders: show the resulting scale's mid step.
+  if (id === 'hueShift') return { L, C, H: H + v };
+  // cPeakPos: match the swatch under the thumb. The track is painted by
+  // paintScalePreview sampling the resulting scale along slider position, so
+  // sample the same function at the thumb's normalized position.
   if (id === 'cPeakPos') {
-    const L500 = lightnessFor(500);
-    return { L: L500, C: chromaFor(L500), H: hueFor(H, L500) };
+    const minV = parseFloat(input.min);
+    const maxV = parseFloat(input.max);
+    const t = (v - minV) / (maxV - minV);
+    const idx = Math.max(0, Math.min(1000, t * 1000));
+    const Lh = lightnessFor(idx);
+    return { L: Lh, C: chromaFor(Lh), H: hueFor(H, Lh) };
   }
   if (input.matches('[data-hue]')) {
     const famEl = input.closest('.family');
@@ -2621,11 +2806,200 @@ function redraw() {
   if (typeof multiChromaRefresh === 'function') multiChromaRefresh();
   if (typeof multiLRefresh === 'function') multiLRefresh();
   updateModelDiagram();
+  updateChromaCurveDiagram();
   // drawGamutDiagram() runs ~10k pixel ops; keep it OUT of the hot path that
   // fires on every slider input event. Call it explicitly when the gamut
   // selection or theme changes.
   updateSwatches();
   renderRows();
+}
+
+//// ---------- chroma curve diagram (right of HCL sliders) ----------
+// Two rendering targets share the same logic: the small inline figure and
+// the expanded lightbox modal. The modal target is only included when open.
+const CCD_TARGETS = [
+  { selector: '.chroma-curve-diagram .ccd-figure', W: 240, H: 200, PAD: { l: 28, r: 12, t: 20, b: 28 } },
+];
+const CCD_MODAL_TARGET = {
+  selector: '.ccd-modal .ccd-modal-figure', W: 640, H: 520, PAD: { l: 56, r: 24, t: 36, b: 44 },
+};
+let ccdModalOpen = false;
+function ccdCornerLinearRgb(L, C, H) {
+  const lin = models[params.model].linearRgb(L, C, H);
+  return {
+    r: Math.max(0, Math.min(1, lin.r)),
+    g: Math.max(0, Math.min(1, lin.g)),
+    b: Math.max(0, Math.min(1, lin.b)),
+  };
+}
+function ccdLinearRgbToHex(lin) {
+  return linearToHex(lin.r, lin.g, lin.b);
+}
+function updateChromaCurveDiagram() {
+  const targets = ccdModalOpen ? [...CCD_TARGETS, CCD_MODAL_TARGET] : CCD_TARGETS;
+  for (const target of targets) renderChromaCurveDiagram(target);
+}
+function renderChromaCurveDiagram(target) {
+  const root = document.querySelector(target.selector);
+  if (!root) return;
+  const canvas = root.querySelector('.ccd-canvas');
+  const overlay = root.querySelector('.ccd-overlay');
+  if (!canvas || !overlay) return;
+
+  const { W: VW, H: VH, PAD } = target;
+  const plotW = VW - PAD.l - PAD.r;
+  const plotH = VH - PAD.t - PAD.b;
+  const hue = params.ccdHue;
+  const midL = params.lMin + params.cPeakPos * (params.lMax - params.lMin);
+  // Range tracks reflect each thumb's actual slide range: bounded clamps
+  // when "bound to safe sRGB" is on, full unbounded extents otherwise.
+  const ranges = params.boundedChroma ? activeBoundedRanges() : PARAM_BOUNDS_UNBOUNDED;
+  const maxC = Math.max(
+    0.22,
+    ranges.cTop.max, ranges.cPeak.max, ranges.cBot.max,
+    params.cTop, params.cPeak, params.cBot,
+  );
+  const xAt = L => PAD.l + Math.max(0, Math.min(1, L)) * plotW;
+  const yAt = c => PAD.t + (1 - Math.max(0, Math.min(1, c / maxC))) * plotH;
+
+  const verts = [
+    { key: 'cBot',  L: params.lMin, C: params.cBot,  label: 'B', labelDx: -8 },
+    { key: 'cPeak', L: midL,        C: params.cPeak, label: 'P', labelDx:  8 },
+    { key: 'cTop',  L: params.lMax, C: params.cTop,  label: 'T', labelDx:  8 },
+  ];
+  verts.forEach(v => {
+    v.lin = ccdCornerLinearRgb(v.L, v.C, hue);
+    v.hex = ccdLinearRgbToHex(v.lin);
+    v.x = xAt(v.L);
+    v.y = yAt(v.C);
+  });
+
+  // Paint the triangle interior via barycentric-interpolated linear RGB.
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const [A, B, C] = verts;
+  const denom = (B.y - C.y) * (A.x - C.x) + (C.x - B.x) * (A.y - C.y);
+  if (Math.abs(denom) > 1e-9) {
+    const minX = Math.max(0, Math.floor(Math.min(A.x, B.x, C.x)));
+    const maxX = Math.min(canvas.width - 1, Math.ceil(Math.max(A.x, B.x, C.x)));
+    const minY = Math.max(0, Math.floor(Math.min(A.y, B.y, C.y)));
+    const maxY = Math.min(canvas.height - 1, Math.ceil(Math.max(A.y, B.y, C.y)));
+    const W = maxX - minX + 1;
+    const Hp = maxY - minY + 1;
+    if (W > 0 && Hp > 0) {
+      const img = ctx.createImageData(W, Hp);
+      const data = img.data;
+      for (let py = minY; py <= maxY; py++) {
+        for (let px = minX; px <= maxX; px++) {
+          const wA = ((B.y - C.y) * (px - C.x) + (C.x - B.x) * (py - C.y)) / denom;
+          const wB = ((C.y - A.y) * (px - C.x) + (A.x - C.x) * (py - C.y)) / denom;
+          const wC = 1 - wA - wB;
+          if (wA < 0 || wB < 0 || wC < 0) continue;
+          const r = wA * A.lin.r + wB * B.lin.r + wC * C.lin.r;
+          const g = wA * A.lin.g + wB * B.lin.g + wC * C.lin.g;
+          const b = wA * A.lin.b + wB * B.lin.b + wC * C.lin.b;
+          const i = ((py - minY) * W + (px - minX)) * 4;
+          data[i]     = Math.round(gammaEncode(Math.max(0, Math.min(1, r))) * 255);
+          data[i + 1] = Math.round(gammaEncode(Math.max(0, Math.min(1, g))) * 255);
+          data[i + 2] = Math.round(gammaEncode(Math.max(0, Math.min(1, b))) * 255);
+          data[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, minX, minY);
+    }
+  }
+
+  // SVG overlay: frame, gridlines, range tracks, curve, control points.
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const frameStroke = isDark ? '#3A3D47' : '#C2C5CD';
+  const gridStroke = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  const dashStroke = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.12)';
+  const rangeStroke = isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
+  // L-range tracks: muted goldenrod in dark mode, muted dark blue in light mode.
+  const lRangeStroke = isDark
+    ? 'rgba(218, 165, 32, 0.65)'
+    : 'rgba(55, 90, 145, 0.60)';
+  const curveStroke = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.65)';
+  const labelFill = isDark ? '#FFFFFF' : '#000000';
+  const labelHalo = isDark ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.65)';
+  const pointStroke = isDark ? '#ECEEF2' : '#161921';
+  const axisFaint = isDark ? '#5E6371' : '#98A3B3';
+
+  const parts = [];
+
+  // Plot frame
+  parts.push(`<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="none" stroke="${frameStroke}"/>`);
+  // Y gridlines — step adapts to the C-axis scale (~4–5 lines).
+  const gridStep = maxC > 0.25 ? 0.10 : 0.05;
+  for (let c = gridStep; c < maxC - 1e-6; c += gridStep) {
+    const y = yAt(c);
+    parts.push(`<line x1="${PAD.l}" y1="${y}" x2="${PAD.l + plotW}" y2="${y}" stroke="${gridStroke}"/>`);
+  }
+  // Dashed vertical at midL
+  const midX = xAt(midL);
+  parts.push(`<line x1="${midX}" y1="${PAD.t}" x2="${midX}" y2="${PAD.t + plotH}" stroke="${dashStroke}" stroke-dasharray="2 3"/>`);
+
+  // Per-vertex range tracks — always shown; bounds expand when constraints
+  // are off.
+  for (const v of verts) {
+    const b = ranges[v.key];
+    if (!b) continue;
+    const x = v.x;
+    const yTop = yAt(b.max);
+    const yBot = yAt(b.min);
+    const tail = 4;
+    parts.push(`<g stroke="${rangeStroke}" stroke-width="1">`);
+    parts.push(`<line x1="${x}" y1="${yTop}" x2="${x}" y2="${yBot}" stroke-dasharray="2 2"/>`);
+    parts.push(`<line x1="${x - tail}" y1="${yTop}" x2="${x + tail}" y2="${yTop}"/>`);
+    parts.push(`<line x1="${x - tail}" y1="${yBot}" x2="${x + tail}" y2="${yBot}"/>`);
+    parts.push(`</g>`);
+  }
+  // Horizontal range tracks along L: peak position at the P vertex, and the
+  // L-range endpoints at the B (lMin) and T (lMax) vertices. Each spans the
+  // slider's reachable L positions and expands when constraints are off.
+  const hTracks = [
+    (() => {
+      const inp = document.getElementById('cPeakPos');
+      const lo = inp ? parseFloat(inp.min) : 0.10;
+      const hi = inp ? parseFloat(inp.max) : 0.90;
+      return {
+        lLo: params.lMin + lo * (params.lMax - params.lMin),
+        lHi: params.lMin + hi * (params.lMax - params.lMin),
+        C: params.cPeak,
+        stroke: lRangeStroke,
+      };
+    })(),
+    { lLo: ranges.lMin.min, lHi: ranges.lMin.max, C: params.cBot, stroke: lRangeStroke },
+    { lLo: ranges.lMax.min, lHi: ranges.lMax.max, C: params.cTop, stroke: lRangeStroke },
+  ];
+  for (const t of hTracks) {
+    const xLo = xAt(t.lLo);
+    const xHi = xAt(t.lHi);
+    const y = yAt(t.C);
+    const tail = 4;
+    parts.push(`<g stroke="${t.stroke}" stroke-width="1">`);
+    parts.push(`<line x1="${xLo}" y1="${y}" x2="${xHi}" y2="${y}" stroke-dasharray="2 2"/>`);
+    parts.push(`<line x1="${xLo}" y1="${y - tail}" x2="${xLo}" y2="${y + tail}"/>`);
+    parts.push(`<line x1="${xHi}" y1="${y - tail}" x2="${xHi}" y2="${y + tail}"/>`);
+    parts.push(`</g>`);
+  }
+
+  // Curve outline (closed triangle to mirror the original demo).
+  parts.push(`<path d="M ${A.x} ${A.y} L ${B.x} ${B.y} L ${C.x} ${C.y} Z" fill="none" stroke="${curveStroke}" stroke-width="1.25"/>`);
+
+  // Control points + labels
+  for (const v of verts) {
+    parts.push(`<circle cx="${v.x}" cy="${v.y}" r="5" fill="${v.hex}" stroke="${pointStroke}" stroke-width="1.5"/>`);
+    parts.push(`<text x="${v.x + v.labelDx}" y="${v.y - 9}" font-size="10" font-weight="600" font-family="ui-monospace, monospace" fill="${labelFill}" stroke="${labelHalo}" stroke-width="2.5" paint-order="stroke" text-anchor="middle">${v.label}</text>`);
+  }
+
+  // Axis labels
+  parts.push(`<text x="${PAD.l}" y="${VH - 8}" font-size="10" font-family="ui-monospace, monospace" fill="${axisFaint}">L: 0</text>`);
+  parts.push(`<text x="${PAD.l + plotW}" y="${VH - 8}" font-size="10" font-family="ui-monospace, monospace" fill="${axisFaint}" text-anchor="end">1</text>`);
+  const cMidY = PAD.t + plotH / 2;
+  parts.push(`<text x="8" y="${cMidY}" font-size="10" font-family="ui-monospace, monospace" fill="${axisFaint}" transform="rotate(-90 8 ${cMidY})" text-anchor="middle">C</text>`);
+
+  overlay.innerHTML = parts.join('');
 }
 
 //// ---------- light/dark theme ----------
