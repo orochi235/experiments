@@ -147,7 +147,31 @@ function render() {
 }
 setRenderFn(render);
 
+function wireExpandCarets() {
+  document.querySelectorAll('.expand-caret').forEach(btn => {
+    const model = btn.dataset.model;
+    if (!model) return;
+    btn.addEventListener('click', () => {
+      const pane = document.querySelector(`.expanded-pane[data-model="${model}"]`);
+      if (!pane) return;
+      const isOpen = pane.classList.toggle('open');
+      btn.classList.toggle('open', isOpen);
+      state.dome[model].expanded = isOpen;
+      scheduleRender();
+    });
+  });
+  // Open all dome panes by default so the user sees content on first load
+  document.querySelectorAll('.expanded-pane').forEach(pane => {
+    pane.classList.add('open');
+    const model = pane.dataset.model;
+    if (model) state.dome[model].expanded = true;
+    const caret = document.querySelector(`.expand-caret[data-model="${model}"]`);
+    if (caret) caret.classList.add('open');
+  });
+}
+
 setupHourScrub();
 wireControls();
 wireProjectionToggles();
+wireExpandCarets();
 applyPreset('earth');  // Initial render trigger (via scheduleRender)
