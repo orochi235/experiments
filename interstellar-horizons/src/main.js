@@ -739,4 +739,133 @@ document.querySelectorAll('#scaleToggle .proj-btn').forEach(btn => {
   });
 });
 
-applyPreset('earth');  // Initial render trigger (via scheduleRender)
+// ============================================================
+// URL <-> state synchronization
+// ============================================================
+// Each param: parse(raw) → value | null; apply(value); read() → string | null
+const URL_PARAMS = [
+  {
+    name: 'planet',
+    parse: s => PRESETS[s] ? s : null,
+    apply: v => applyPreset(v),
+    read:  () => state.preset,
+  },
+  {
+    name: 'hour',
+    parse: s => { const v = parseFloat(s); return Number.isFinite(v) && v >= 3 && v <= 22 ? v : null; },
+    apply: v => {
+      state.hour = v;
+      const el = document.getElementById('hour');
+      if (el) { el.value = v.toFixed(2); fireInput(el); }
+    },
+    read:  () => state.hour.toFixed(2),
+  },
+  {
+    name: 'lat',
+    parse: s => { const v = parseFloat(s); return Number.isFinite(v) && v >= -70 && v <= 70 ? v : null; },
+    apply: v => {
+      const el = document.getElementById('latitude');
+      if (el) { el.value = v; fireInput(el); }
+    },
+    read:  () => String(state.lat),
+  },
+  {
+    name: 'doy',
+    parse: s => { const v = parseInt(s, 10); return Number.isFinite(v) && v >= 1 && v <= 365 ? v : null; },
+    apply: v => {
+      // Param is the calendar (state.doy 1..365). Invert the slider's
+      // winter-solstice offset to set the underlying slider value.
+      const sliderVal = ((v - 1 - 354) % 365 + 365) % 365 + 1;
+      const el = document.getElementById('dayOfYear');
+      if (el) { el.value = sliderVal; fireInput(el); }
+    },
+    read:  () => String(state.doy),
+  },
+  {
+    name: 't',
+    parse: s => { const v = parseFloat(s); return Number.isFinite(v) && v >= 1 && v <= 10 ? v : null; },
+    apply: v => {
+      const el = document.getElementById('turbidity');
+      if (el) { el.value = v; fireInput(el); }
+    },
+    read:  () => state.T.toFixed(1),
+  },
+  {
+    name: 'proj',
+    parse: s => ['sunfacing', 'equirect', 'fisheye'].includes(s) ? s : null,
+    apply: v => {
+      const btn = document.querySelector(`.proj-selector.global > .proj-btn[data-proj="${v}"]`);
+      if (btn) btn.click();
+    },
+    read:  () => state.projection,
+  },
+  {
+    name: 'layout',
+    parse: s => ['standard', 'detail'].includes(s) ? s : null,
+    apply: v => {
+      const btn = document.querySelector(`#layoutToggle .proj-btn[data-layout="${v}"]`);
+      if (btn) btn.click();
+    },
+    read:  () => document.body.dataset.layout || 'standard',
+  },
+  {
+    name: 'scale',
+    parse: s => ['visual', 'actual'].includes(s) ? s : null,
+    apply: v => {
+      const btn = document.querySelector(`#scaleToggle .proj-btn[data-scale="${v}"]`);
+      if (btn) btn.click();
+    },
+    read:  () => state.planetScale,
+  },
+];
+
+function applyParamsFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  for (const def of URL_PARAMS) {
+    const raw = params.get(def.name);
+    if (raw == null) continue;
+    const v = def.parse(raw);
+    if (v != null) def.apply(v);
+  }
+}
+function writeParamsToURL() {
+  const url = new URL(window.location);
+  for (const def of URL_PARAMS) {
+    const v = def.read?.();
+    if (v == null) url.searchParams.delete(def.name);
+    else url.searchParams.set(def.name, v);
+  }
+  history.replaceState(null, '', url);
+}
+
+// Initial state: local time as the default for `hour` (URL param overrides
+// later), then Earth as the default preset (URL param overrides later).
+{
+  const now = new Date();
+  const localH = now.getHours() + now.getMinutes() / 60;
+  state.hour = Math.max(3, Math.min(22, localH));
+  const hourSlider = document.getElementById('hour');
+  if (hourSlider) {
+    hourSlider.value = state.hour.toFixed(2);
+    fireInput(hourSlider);
+  }
+  applyPreset('earth');
+  // URL params win over defaults.
+  applyParamsFromURL();
+}
+
+// Keep the URL in sync with state changes. Debounce a bit so rapid slider
+// drags don't spam replaceState.
+let urlWriteTimer = null;
+function scheduleURLWrite() {
+  clearTimeout(urlWriteTimer);
+  urlWriteTimer = setTimeout(writeParamsToURL, 150);
+}
+window.addEventListener('preset-change', scheduleURLWrite);
+for (const id of ['hour', 'latitude', 'dayOfYear', 'turbidity']) {
+  document.getElementById(id)?.addEventListener('input', scheduleURLWrite);
+}
+// Toggle buttons (projection, layout, scale)
+for (const sel of ['.proj-selector.global > .proj-btn', '#layoutToggle .proj-btn', '#scaleToggle .proj-btn']) {
+  document.querySelectorAll(sel).forEach(b => b.addEventListener('click', scheduleURLWrite));
+}
