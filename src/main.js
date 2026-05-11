@@ -3,6 +3,7 @@ import { createGL, makeFullscreenTriangle, recomputeDerived } from './render/gl.
 import { buildPrograms } from './render/programs.js';
 import { setSharedUniforms } from './render/uniforms.js';
 import { wireControls } from './ui/controls.js';
+import { wireProjectionToggles } from './ui/projectionToggle.js';
 import './styles.css';
 
 const MODELS = ['rayleigh', 'preetham', 'nishita', 'hosek', 'ozone', 'cie'];
@@ -102,4 +103,5 @@ function render() {
 setRenderFn(render);
 
 wireControls();
+wireProjectionToggles();
 applyPreset('earth');  // Initial render trigger (via scheduleRender)
