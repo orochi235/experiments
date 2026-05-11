@@ -744,6 +744,22 @@ document.getElementById('resetView')?.addEventListener('click', () => {
   window.location.href = window.location.pathname;
 });
 
+// Tag the first `.control` on each wrapped row of the Display panel so its
+// border-left can be hidden — otherwise a stray separator floats at the
+// start of every wrapped row. Recompute on resize.
+function tagDisplayRowStarts() {
+  const items = document.querySelectorAll('.controls.display .control');
+  let prevTop = null;
+  items.forEach(el => {
+    const top = el.offsetTop;
+    el.classList.toggle('row-start', prevTop === null || top !== prevTop);
+    prevTop = top;
+  });
+}
+new ResizeObserver(tagDisplayRowStarts).observe(document.querySelector('.controls.display'));
+// Run once now (after the rest of init finishes)
+requestAnimationFrame(tagDisplayRowStarts);
+
 // White-balance toggle (Physical / Adapted)
 document.querySelectorAll('#wbToggle .proj-btn').forEach(btn => {
   btn.addEventListener('click', () => {

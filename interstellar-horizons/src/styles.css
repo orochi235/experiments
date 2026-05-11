@@ -493,6 +493,11 @@ body[data-layout="standard"] > .controls.display     { order: 15; }
 .controls.display .control + .control {
   border-left: 1px solid rgba(126, 200, 227, 0.18);
 }
+/* First control on each visual row (set by JS) has no separator. */
+.controls.display .control.row-start {
+  border-left: none;
+  padding-left: 0;
+}
 .controls.display .control:first-child { padding-left: 0; }
 .controls.display .control:last-child  { padding-right: 0; }
 .controls.display .control label {
