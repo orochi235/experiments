@@ -4,7 +4,18 @@
 <meta charset="UTF-8">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500;700&display=swap">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500;700&display=swap" rel="stylesheet">
+<script>
+  // Hide the page until web fonts are ready so we don't reflow once Oswald
+  // arrives. Fall back to revealing after 1.5s in case fonts time out.
+  document.documentElement.classList.add('fonts-loading');
+  const reveal = () => document.documentElement.classList.remove('fonts-loading');
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(reveal);
+  }
+  setTimeout(reveal, 1500);
+</script>
 <title>Interstellar Horizons</title>
 <link rel="stylesheet" href="/src/styles.css">
 </head>

@@ -1,4 +1,8 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  /* While Oswald is still loading, keep the body invisible so we don't
+     flash-of-fallback-then-reflow. A timeout in the inline script in
+     index.html removes this class after 1.5s as a safety net. */
+  html.fonts-loading body { visibility: hidden; }
   body {
     position: relative;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -522,12 +526,15 @@ body[data-layout="standard"] > .controls.display     { order: 15; }
 }
 .controls.display .reset-all {
   margin-left: auto;
-  border-color: rgba(227, 200, 126, 0.35);
-  color: #e3c87e;
+  background: rgba(227, 200, 126, 0.85);
+  border-color: rgba(227, 200, 126, 0.85);
+  color: #1a1a2e;
+  font-weight: 500;
 }
 .controls.display .reset-all:hover {
-  background: rgba(80, 60, 30, 0.55);
-  color: #fff;
+  background: rgba(240, 216, 138, 1);
+  border-color: rgba(240, 216, 138, 1);
+  color: #000;
 }
 body[data-layout="standard"] > .model-grid           { order: 20; }
 body[data-layout="standard"] > .controls.atmosphere  { order: 30; }
