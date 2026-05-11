@@ -1184,6 +1184,24 @@ function sunElevation(latDeg, doy, hour) {
   return Math.asin(Math.sin(latR) * Math.sin(declR) + Math.cos(latR) * Math.cos(declR) * Math.cos(ha));
 }
 
+// Sun [elevation, azimuth] in radians. Azimuth is south=0, west=+, east=−.
+// Used by the dome view to place secondary stars at their actual sky angles.
+function sunPos(latDeg, doy, hour) {
+  const declR = deg(23.4393 * Math.sin(TAU * (284 + doy) / 365));
+  const latR = deg(latDeg);
+  const ha = deg((hour - 12) * 15);
+  const sinAlt = Math.sin(latR) * Math.sin(declR) + Math.cos(latR) * Math.cos(declR) * Math.cos(ha);
+  const alt = Math.asin(clamp(sinAlt, -1, 1));
+  const az = Math.atan2(-Math.cos(declR) * Math.sin(ha),
+                        Math.sin(declR) * Math.cos(latR) - Math.cos(declR) * Math.sin(latR) * Math.cos(ha));
+  return [alt, az];
+}
+
+// Shortest signed difference between two angles in radians, result in (-π, π].
+function angleDiffRad(a, b) {
+  return ((a - b + PI) % TAU + TAU) % TAU - PI;
+}
+
 // CIE Yxy -> linear RGB
 function YxyToRGB(Y, x, y) {
   if (y < 1e-6) return [0, 0, 0];
@@ -2456,8 +2474,14 @@ function renderDome(name) {
 
   const nStars = activeStars.length;
   const primaryStar = activeStars[0];
-  const primarySunElev = sunElevation(lat, doy, selectedHour + primaryStar.hourOffset);
-  const starElevs = activeStars.map(s => sunElevation(lat, doy, selectedHour + s.hourOffset));
+  const primaryPos = sunPos(lat, doy, selectedHour + primaryStar.hourOffset);
+  const primarySunElev = primaryPos[0];
+  // Per-star position relative to primary: each star contributes scattering at
+  // its own (elev, viewAz-offset). The dome is oriented so the primary sits at viewAz=0.
+  const starGeom = activeStars.map(s => {
+    const p = sunPos(lat, doy, selectedHour + s.hourOffset);
+    return { elev: p[0], azOffsetDeg: angleDiffRad(p[1], primaryPos[1]) * 180 / PI };
+  });
 
   for (let py = 0; py < h; py += step) {
     for (let px = 0; px < w; px += step) {
@@ -2478,8 +2502,10 @@ function renderDome(name) {
       let rgb = [0, 0, 0];
       for (let si = 0; si < nStars; si++) {
         const star = activeStars[si];
-        const sElev = starElevs[si];
-        const contrib = modelCall(name, sElev, T, viewEl, viewAz, alt, alb, ozone);
+        const g = starGeom[si];
+        // viewAz is relative to the primary's meridian; subtract this star's offset
+        // so the model sees the pixel's view-direction relative to *this* star's sun.
+        const contrib = modelCall(name, g.elev, T, viewEl, viewAz - g.azOffsetDeg, alt, alb, ozone);
         rgb[0] += contrib[0] * star.color[0] * star.intensity;
         rgb[1] += contrib[1] * star.color[1] * star.intensity;
         rgb[2] += contrib[2] * star.color[2] * star.intensity;
@@ -2505,13 +2531,14 @@ function renderDome(name) {
   }
   ctx.putImageData(img, 0, 0);
 
-  // Sun disk pass — one per star, in its own color.
-  for (const star of activeStars) {
-    const sElev = sunElevation(lat, doy, selectedHour + star.hourOffset);
-    if (sElev <= 0) continue;
-    const sAz = 0; // sun lives at viewAz = 0 by convention
-    const sunElDeg = sElev * 180 / PI;
-    const [sx, sy, vis] = viewAzElToPixel(state.projection, sAz, sunElDeg, w, h);
+  // Sun disk pass — one per star, in its own color and at its actual sky position
+  // (relative to the primary, which sits at viewAz=0).
+  for (let si = 0; si < nStars; si++) {
+    const star = activeStars[si];
+    const g = starGeom[si];
+    if (g.elev <= 0) continue;
+    const sunElDeg = g.elev * 180 / PI;
+    const [sx, sy, vis] = viewAzElToPixel(state.projection, g.azOffsetDeg, sunElDeg, w, h);
     if (!vis) continue;
     const SUN_RADIUS_DEG = 1.0;   // ~2° diameter sun disk
     const GLOW_RATIO = 4;         // soft halo extends 4× disk radius
