@@ -288,6 +288,47 @@
     position: absolute; left: 138px; top: 70px; font: 700 0.85rem/1 'IBM Plex Mono', monospace; color: #3366FF;
   }
 
+  /* Top-right gamut selector: 4-cell horizontal row of mini CIE 1931
+     chromaticity diagrams, one per gamut. Click to select. */
+  .gamut-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    width: 50%;
+    flex-shrink: 0;
+    margin-left: 60px;
+  }
+  .gamut-cell {
+    position: relative;
+    appearance: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: opacity 120ms ease, filter 120ms ease;
+  }
+  .gamut-cell:disabled { cursor: not-allowed; opacity: 0.3; }
+  .gamut-cell-canvas {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);
+  }
+  .gamut-cell-label {
+    position: absolute;
+    top: 4px; left: 6px;
+    font: 600 0.55rem/1 'IBM Plex Mono', monospace;
+    color: #fff;
+    text-shadow: 0 0 3px rgba(0,0,0,0.85), 0 0 3px rgba(0,0,0,0.85);
+    pointer-events: none;
+    letter-spacing: 0.04em;
+  }
+  .gamut-cell.inactive { filter: saturate(0); opacity: 0.55; }
+  .gamut-cell.inactive:hover:not(:disabled) { opacity: 0.85; }
+  .gamut-cell.active { box-shadow: 0 0 0 2px #3366FF; border-radius: 4px; }
+
   /* Chroma curve diagram — triangle of (L, C) control points with
      barycentric-interpolated vertex colors. Lives to the right of the HCL
      grid in the same .panel-body flexbox. */
@@ -687,18 +728,31 @@
 <h1 style="font: 700 1.6rem/1.1 'Oswald', 'IBM Plex Mono', monospace; margin: 0 0 16px; color: var(--cs-fg);">Perceptually Uniform Color System</h1>
 
 <div class="panel">
-  <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 12px;">
-    <div style="flex: 1;">
+  <div style="display: flex; gap: 16px; align-items: stretch; margin-bottom: 12px;">
+    <div style="flex: 1; min-width: 0;">
       <h2 style="margin-bottom: 6px;">Shared scale parameters</h2>
       <div class="help" style="margin-bottom: 0;">
         All families share these. Lightness maps from index via a power curve. Chroma is a triangle that peaks at a configurable position along the L range and tapers to the two endpoints. Hue can shift linearly across the scale. Click any chip below to copy its hex.
       </div>
     </div>
-    <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex-shrink: 0; margin-left: auto;">
-      <canvas id="gamutDiagram" width="200" height="200"
-        style="width: 200px; height: 200px; border-radius: 4px; background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);"
-        title="CIE 1931 chromaticity — colors painted at each xy point, selected gamut outlined"></canvas>
-      <select id="gamut" style="width: 200px; font-size: 0.6rem;">
+    <div class="gamut-row" id="gamutRow">
+      <button class="gamut-cell active" type="button" data-gamut="srgb" title="sRGB">
+        <canvas class="gamut-cell-canvas" width="256" height="256" data-gamut="srgb"></canvas>
+        <span class="gamut-cell-label">sRGB</span>
+      </button>
+      <button class="gamut-cell" type="button" data-gamut="p3" title="Display P3">
+        <canvas class="gamut-cell-canvas" width="256" height="256" data-gamut="p3"></canvas>
+        <span class="gamut-cell-label">P3</span>
+      </button>
+      <button class="gamut-cell" type="button" data-gamut="adobe" title="Adobe RGB">
+        <canvas class="gamut-cell-canvas" width="256" height="256" data-gamut="adobe"></canvas>
+        <span class="gamut-cell-label">Adobe</span>
+      </button>
+      <button class="gamut-cell" type="button" data-gamut="rec2020" title="Rec. 2020">
+        <canvas class="gamut-cell-canvas" width="256" height="256" data-gamut="rec2020"></canvas>
+        <span class="gamut-cell-label">Rec.2020</span>
+      </button>
+      <select id="gamut" style="display: none;" aria-hidden="true">
         <option value="srgb" selected>sRGB</option>
         <option value="p3">P3</option>
         <option value="adobe">Adobe RGB</option>
@@ -2133,6 +2187,26 @@ document.getElementById('gamut').addEventListener('change', e => {
   drawGamutDiagram();
   pushHistory();
 });
+// Chip clicks: drive params.gamut via the hidden select so existing change
+// listeners (applyChromaBounds, redraw, pushHistory) all fire from one path.
+document.querySelectorAll('.gamut-cell').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.disabled) return;
+    const key = btn.dataset.gamut;
+    if (!key || key === params.gamut) return;
+    const sel = document.getElementById('gamut');
+    if (sel) {
+      sel.value = key;
+      sel.dispatchEvent(new Event('change'));
+    } else {
+      params.gamut = key;
+      applyChromaBounds();
+      redraw();
+      drawGamutDiagram();
+      pushHistory();
+    }
+  });
+});
 document.getElementById('condensedSliders').addEventListener('change', e => {
   applyChromaBounds();
   redraw();
@@ -2142,11 +2216,13 @@ document.getElementById('condensedSliders').addEventListener('change', e => {
 document.getElementById('gamutWarn').addEventListener('change', e => {
   params.gamutWarn = e.target.checked;
   document.getElementById('gamut').disabled = !e.target.checked;
+  document.querySelectorAll('.gamut-cell').forEach(b => b.disabled = !e.target.checked);
   redraw();
   drawGamutDiagram();
   pushHistory();
 });
 document.getElementById('gamut').disabled = !params.gamutWarn;
+document.querySelectorAll('.gamut-cell').forEach(b => b.disabled = !params.gamutWarn);
 indicesInput.addEventListener('input', () => {
   const parsed = indicesInput.value.split(',')
     .map(s => parseInt(s.trim(), 10))
@@ -2731,15 +2807,14 @@ const GAMUT_PRIMARIES = {
   adobe:   { R: [0.640, 0.330], G: [0.210, 0.710], B: [0.150, 0.060] },
   rec2020: { R: [0.708, 0.292], G: [0.170, 0.797], B: [0.131, 0.046] },
 };
-function drawGamutDiagram() {
-  const cnv = document.getElementById('gamutDiagram');
+function drawGamutChip(cnv, gamutKey) {
   if (!cnv || !cnv.getContext) return;
   const w = cnv.width, h = cnv.height;
   const ctx = cnv.getContext('2d');
   const img = ctx.createImageData(w, h);
   const data = img.data;
   // CIE xy ∈ [0, 0.85] mapped to canvas pixels (y axis flipped).
-  const sel = params.gamut === 'off' ? 'srgb' : params.gamut;
+  const sel = gamutKey === 'off' ? 'srgb' : gamutKey;
   const prim = GAMUT_PRIMARIES[sel];
   // Triangle test for "is this xy inside the selected gamut?"
   function inTriangle(px, py, A, B, C) {
@@ -2814,6 +2889,18 @@ function drawGamutDiagram() {
     outline(GAMUT_PRIMARIES.srgb, 'rgba(255,255,255,0.7)', 1);
     ctx.setLineDash([]);
   }
+}
+// Paints all four gamut chips. Each chip outlines its own gamut; CSS handles
+// the active/inactive (color vs grayscale) treatment based on params.gamut.
+function drawGamutDiagram() {
+  const cells = document.querySelectorAll('.gamut-cell');
+  cells.forEach(cell => {
+    const key = cell.dataset.gamut;
+    const cnv = cell.querySelector('.gamut-cell-canvas');
+    if (cnv) drawGamutChip(cnv, key);
+    cell.classList.toggle('active', key === params.gamut);
+    cell.classList.toggle('inactive', key !== params.gamut);
+  });
 }
 
 // Coalesce redraw calls fired in rapid succession (e.g. high-frequency
