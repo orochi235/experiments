@@ -62,9 +62,10 @@
     padding: 16px 20px 12px;
   }
   .strip-header {
-    display: flex; justify-content: space-between; align-items: baseline;
+    display: flex; align-items: baseline; gap: 10px;
     margin-bottom: 8px;
   }
+  .strip-header .strip-desc { margin-left: auto; }
   .strip-title { font-size: 1rem; font-weight: 600; }
   .strip-desc { font-size: 0.75rem; color: #888; }
   canvas.strip { width: 100%; height: 70px; border-radius: 6px; display: block; }
@@ -197,6 +198,33 @@
   .stellar-temp-slider::-moz-range-thumb {
     width: 18px; height: 18px; border-radius: 50%;
     background: var(--thumb-color, #fff); border: 2px solid #333; cursor: pointer;
+  }
+  .expand-caret {
+    background: none; border: none; color: #aaa; cursor: pointer;
+    font-size: 0.9rem; padding: 0 4px; line-height: 1;
+    transition: transform 0.15s; flex-shrink: 0;
+  }
+  .expand-caret.open { transform: rotate(90deg); }
+  .expanded-pane {
+    display: none; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid #2a3a5a;
+  }
+  .expanded-pane.open { display: block; }
+  .proj-selector { display: flex; gap: 4px; margin-bottom: 10px; }
+  .proj-btn {
+    background: #1a1a2e; border: 1px solid #2a3a5a; color: #aaa;
+    border-radius: 4px; padding: 4px 10px; cursor: pointer;
+    font-size: 0.75rem;
+  }
+  .proj-btn.active { background: #2a4a6a; border-color: #7ec8e3; color: #fff; }
+  .proj-btn:hover:not(.active) { background: #2a3a5a; color: #ddd; }
+  canvas.dome { display: block; background: #0a0a14; border-radius: 6px; }
+  .dome-caption {
+    font-size: 0.72rem; color: #888; margin-top: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .dome-wrap {
+    display: flex; flex-direction: column; align-items: center;
   }
 </style>
 </head>
@@ -382,6 +410,7 @@
 
 <div class="strip-container">
   <div class="strip-header">
+    <button class="expand-caret" data-model="rayleigh">▸</button>
     <span class="strip-title">Rayleigh Only</span>
     <span class="strip-desc">Nishita with Mie scattering disabled — pure molecular scattering baseline</span>
   </div>
@@ -424,10 +453,22 @@
       </math>
     </div>
   </div>
+  <div class="expanded-pane" data-model="rayleigh">
+    <div class="proj-selector">
+      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
+      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+    </div>
+    <div class="dome-wrap">
+      <canvas class="dome" data-model="rayleigh" width="480" height="480"></canvas>
+      <div class="dome-caption" data-model="rayleigh"></div>
+    </div>
+  </div>
 </div>
 
 <div class="strip-container">
   <div class="strip-header">
+    <button class="expand-caret" data-model="preetham">▸</button>
     <span class="strip-title">Preetham (1999)</span>
     <span class="strip-desc">Analytical — Perez sky luminance/chromaticity model</span>
   </div>
@@ -491,10 +532,22 @@
       </math>
     </div>
   </div>
+  <div class="expanded-pane" data-model="preetham">
+    <div class="proj-selector">
+      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
+      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+    </div>
+    <div class="dome-wrap">
+      <canvas class="dome" data-model="preetham" width="480" height="480"></canvas>
+      <div class="dome-caption" data-model="preetham"></div>
+    </div>
+  </div>
 </div>
 
 <div class="strip-container">
   <div class="strip-header">
+    <button class="expand-caret" data-model="nishita">▸</button>
     <span class="strip-title">Nishita (1993)</span>
     <span class="strip-desc">Ray-marching — single-scattering Rayleigh + Mie</span>
   </div>
@@ -574,10 +627,22 @@
       </math>
     </div>
   </div>
+  <div class="expanded-pane" data-model="nishita">
+    <div class="proj-selector">
+      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
+      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+    </div>
+    <div class="dome-wrap">
+      <canvas class="dome" data-model="nishita" width="480" height="480"></canvas>
+      <div class="dome-caption" data-model="nishita"></div>
+    </div>
+  </div>
 </div>
 
 <div class="strip-container">
   <div class="strip-header">
+    <button class="expand-caret" data-model="hosek">▸</button>
     <span class="strip-title">Hosek-Wilkie (2012)</span>
     <span class="strip-desc">Enhanced analytical — improved horizon, ground albedo feedback</span>
   </div>
@@ -646,10 +711,22 @@
       </math>
     </div>
   </div>
+  <div class="expanded-pane" data-model="hosek">
+    <div class="proj-selector">
+      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
+      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+    </div>
+    <div class="dome-wrap">
+      <canvas class="dome" data-model="hosek" width="480" height="480"></canvas>
+      <div class="dome-caption" data-model="hosek"></div>
+    </div>
+  </div>
 </div>
 
 <div class="strip-container">
   <div class="strip-header">
+    <button class="expand-caret" data-model="ozone">▸</button>
     <span class="strip-title">Nishita + Ozone</span>
     <span class="strip-desc">Adds Chappuis band absorption — deeper blues during twilight</span>
   </div>
@@ -701,10 +778,22 @@
       </math>
     </div>
   </div>
+  <div class="expanded-pane" data-model="ozone">
+    <div class="proj-selector">
+      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
+      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+    </div>
+    <div class="dome-wrap">
+      <canvas class="dome" data-model="ozone" width="480" height="480"></canvas>
+      <div class="dome-caption" data-model="ozone"></div>
+    </div>
+  </div>
 </div>
 
 <div class="strip-container">
   <div class="strip-header">
+    <button class="expand-caret" data-model="cie">▸</button>
     <span class="strip-title">CIE Standard Clear Sky (Type 12)</span>
     <span class="strip-desc">Empirical luminance model — ISO 15469 architectural standard</span>
   </div>
@@ -751,6 +840,17 @@
           <mo>+</mo><mi>e</mi><msup><mi>cos</mi><mn>2</mn></msup><mi>&gamma;</mi>
         </mrow>
       </math>
+    </div>
+  </div>
+  <div class="expanded-pane" data-model="cie">
+    <div class="proj-selector">
+      <button class="proj-btn active" data-proj="fisheye">Fisheye</button>
+      <button class="proj-btn" data-proj="equirect">Panorama 360°</button>
+      <button class="proj-btn" data-proj="sunfacing">Sun-facing</button>
+    </div>
+    <div class="dome-wrap">
+      <canvas class="dome" data-model="cie" width="480" height="480"></canvas>
+      <div class="dome-caption" data-model="cie"></div>
     </div>
   </div>
 </div>
@@ -2026,6 +2126,7 @@ function renderAll() {
     }
   }
   updateTimeCursors();
+  scheduleDomeRender();
 }
 
 // Debounced rendering
@@ -2204,8 +2305,280 @@ document.getElementById('iq').addEventListener('input', () => {
   }
 })();
 
-// Forward declaration — real implementation lands in Task 5.
-function scheduleDomeRender() { /* implemented in Task 5 */ }
+// =========================================================================
+// 2D Dome / skyscape rendering
+// =========================================================================
+
+const domeState = {
+  // model name -> { expanded: bool, projection: 'fisheye'|'equirect'|'sunfacing' }
+  rayleigh: { expanded: false, projection: 'fisheye' },
+  preetham: { expanded: false, projection: 'fisheye' },
+  nishita:  { expanded: false, projection: 'fisheye' },
+  hosek:    { expanded: false, projection: 'fisheye' },
+  ozone:    { expanded: false, projection: 'fisheye' },
+  cie:      { expanded: false, projection: 'fisheye' },
+};
+
+const DOME_STORAGE_KEY = 'sky-models-dome-state-v1';
+try {
+  const saved = JSON.parse(localStorage.getItem(DOME_STORAGE_KEY) || '{}');
+  for (const k of Object.keys(domeState)) {
+    if (saved[k]) Object.assign(domeState[k], saved[k]);
+  }
+} catch (_) { /* ignore */ }
+
+function persistDomeState() {
+  try { localStorage.setItem(DOME_STORAGE_KEY, JSON.stringify(domeState)); }
+  catch (_) { /* ignore */ }
+}
+
+// Call a model with full (sunElev, sunAz=0, viewEl, viewAz, ...)
+function modelCall(name, sElev, T, viewEl, viewAz, alt, alb, ozone) {
+  if (name === 'rayleigh') return nishitaColor(sElev, T, viewEl, viewAz, alt, 0);
+  if (name === 'preetham') return preethamColor(sElev, T, viewEl, viewAz);
+  if (name === 'nishita')  return nishitaColor(sElev, T, viewEl, viewAz, alt);
+  if (name === 'hosek')    return hosekColor(sElev, T, viewEl, viewAz, alt, alb);
+  if (name === 'ozone')    return nishitaOzoneColor(sElev, T, viewEl, viewAz, alt, ozone);
+  if (name === 'cie')      return cieClearColor(sElev, T, viewEl, viewAz);
+  return [0, 0, 0];
+}
+
+// Map pixel (px, py) in a canvas of (w, h) to (viewAz, viewEl) in degrees,
+// or null if pixel is outside the sky (below horizon / outside fisheye disk).
+function pixelToViewAzEl(projection, px, py, w, h) {
+  if (projection === 'fisheye') {
+    const cx = w / 2, cy = h / 2;
+    const dx = (px - cx) / cx;       // -1..1
+    const dy = (py - cy) / cy;       // -1..1
+    const r = Math.sqrt(dx * dx + dy * dy);
+    if (r > 1) return null;
+    const viewEl = (1 - r) * 90;
+    const viewAz = Math.atan2(dx, -dy) * 180 / PI;  // up on screen = away from sun
+    return [viewAz, viewEl];
+  }
+  if (projection === 'equirect') {
+    const viewAz = (px / w) * 360 - 180;
+    const viewEl = 90 - (py / h) * 100;             // last 10% is below horizon
+    if (viewEl < 0) return null;
+    return [viewAz, viewEl];
+  }
+  if (projection === 'sunfacing') {
+    const viewAz = (px / w) * 180 - 90;
+    const viewEl = 90 - (py / h) * 100;
+    if (viewEl < 0) return null;
+    return [viewAz, viewEl];
+  }
+  return null;
+}
+
+// Project a (viewAz, viewEl) in degrees back to pixel coords. Used for sun disk.
+// Returns [px, py, visible] where visible is false if the point is outside the canvas.
+function viewAzElToPixel(projection, viewAz, viewEl, w, h) {
+  if (viewEl < 0) return [0, 0, false];
+  if (projection === 'fisheye') {
+    const r = 1 - viewEl / 90;
+    const az = viewAz * PI / 180;
+    const dx = r * Math.sin(az);
+    const dy = -r * Math.cos(az);
+    return [w / 2 + dx * (w / 2), h / 2 + dy * (h / 2), true];
+  }
+  if (projection === 'equirect') {
+    // Wrap viewAz into -180..180
+    let a = ((viewAz + 180) % 360 + 360) % 360 - 180;
+    const px = (a + 180) / 360 * w;
+    const py = (90 - viewEl) / 100 * h;
+    return [px, py, true];
+  }
+  if (projection === 'sunfacing') {
+    if (viewAz < -90 || viewAz > 90) return [0, 0, false];
+    const px = (viewAz + 90) / 180 * w;
+    const py = (90 - viewEl) / 100 * h;
+    return [px, py, true];
+  }
+  return [0, 0, false];
+}
+
+const GROUND_COLOR = [26, 26, 31]; // dark ground, matches #1a1a1f-ish
+
+function renderDome(name) {
+  const state = domeState[name];
+  if (!state.expanded) return;
+  const canvas = document.querySelector(`canvas.dome[data-model="${name}"]`);
+  if (!canvas) return;
+  const caption = document.querySelector(`.dome-caption[data-model="${name}"]`);
+
+  // Read controls
+  const T = parseFloat(document.getElementById('turbidity').value);
+  const lat = parseFloat(document.getElementById('latitude').value);
+  const doySlider = parseInt(document.getElementById('dayOfYear').value);
+  const doy = ((doySlider - 1 + 354) % 365) + 1;
+  const alb = parseFloat(document.getElementById('albedo').value);
+  const ozone = parseFloat(document.getElementById('ozoneStrength').value);
+  const alt = 0;
+  const style = {
+    hueShift:     parseFloat(document.getElementById('hueShift').value),
+    saturation:   parseFloat(document.getElementById('saturation').value),
+    vibrance:     parseFloat(document.getElementById('vibrance').value),
+    exposure:     parseFloat(document.getElementById('exposure').value),
+    contrast:     parseFloat(document.getElementById('contrast').value),
+    warmth:       parseFloat(document.getElementById('warmth').value),
+    twilightGlow: parseFloat(document.getElementById('twilightGlow').value),
+    nightTint:    parseFloat(document.getElementById('nightTint').value),
+  };
+  const preset = PRESETS[activePreset];
+
+  // Adjust canvas size for projection
+  if (state.projection === 'fisheye') {
+    canvas.width = 480; canvas.height = 480;
+  } else {
+    canvas.width = 480; canvas.height = 240;
+  }
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const data = img.data;
+
+  const nStars = activeStars.length;
+  const primaryStar = activeStars[0];
+  const primarySunElev = sunElevation(lat, doy, selectedHour + primaryStar.hourOffset);
+
+  for (let py = 0; py < h; py++) {
+    for (let px = 0; px < w; px++) {
+      const idx = (py * w + px) * 4;
+      const ve = pixelToViewAzEl(state.projection, px, py, w, h);
+      if (!ve) {
+        data[idx]     = GROUND_COLOR[0];
+        data[idx + 1] = GROUND_COLOR[1];
+        data[idx + 2] = GROUND_COLOR[2];
+        data[idx + 3] = 255;
+        continue;
+      }
+      const [viewAz, viewEl] = ve;
+      let rgb = [0, 0, 0];
+      for (let si = 0; si < nStars; si++) {
+        const star = activeStars[si];
+        const sElev = sunElevation(lat, doy, selectedHour + star.hourOffset);
+        const contrib = modelCall(name, sElev, T, viewEl, viewAz, alt, alb, ozone);
+        rgb[0] += contrib[0] * star.color[0] * star.intensity;
+        rgb[1] += contrib[1] * star.color[1] * star.intensity;
+        rgb[2] += contrib[2] * star.color[2] * star.intensity;
+      }
+      if (preset.scatterTweak) {
+        let [hh, ss, ll] = rgbToHsl(clamp(rgb[0],0,255), clamp(rgb[1],0,255), clamp(rgb[2],0,255));
+        hh += preset.scatterTweak.hueShift / 360;
+        ss *= preset.scatterTweak.satBoost;
+        ss = clamp(ss, 0, 1);
+        rgb = hslToRgb(hh, ss, ll);
+      }
+      rgb = applyStyle(rgb, primarySunElev, style);
+      data[idx]     = clamp(Math.round(rgb[0]), 0, 255);
+      data[idx + 1] = clamp(Math.round(rgb[1]), 0, 255);
+      data[idx + 2] = clamp(Math.round(rgb[2]), 0, 255);
+      data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  // Sun disk pass — one per star, in its own color.
+  for (const star of activeStars) {
+    const sElev = sunElevation(lat, doy, selectedHour + star.hourOffset);
+    if (sElev <= 0) continue;
+    const sAz = 0; // sun lives at viewAz = 0 by convention
+    const sunElDeg = sElev * 180 / PI;
+    const [sx, sy, vis] = viewAzElToPixel(state.projection, sAz, sunElDeg, w, h);
+    if (!vis) continue;
+    const pxPerDeg = state.projection === 'fisheye'
+      ? (w / 2) / 90
+      : w / (state.projection === 'sunfacing' ? 180 : 360);
+    const rDisk = Math.max(2, pxPerDeg * 1.0);
+    const rGlow = rDisk * 4;
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, rGlow);
+    const [sr, sg, sb] = star.color;
+    grad.addColorStop(0, `rgba(${Math.round(sr*255)},${Math.round(sg*255)},${Math.round(sb*255)},1)`);
+    grad.addColorStop(rDisk / rGlow, `rgba(${Math.round(sr*255)},${Math.round(sg*255)},${Math.round(sb*255)},0.9)`);
+    grad.addColorStop(1, `rgba(${Math.round(sr*255)},${Math.round(sg*255)},${Math.round(sb*255)},0)`);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(sx, sy, rGlow, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  if (caption) {
+    const hr = Math.floor(selectedHour);
+    const mn = Math.round((selectedHour - hr) * 60);
+    const hhmm = `${String(hr).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;
+    const sunElDeg = (primarySunElev * 180 / PI).toFixed(0);
+    caption.textContent = `${hhmm} · sun elev ${sunElDeg}°`;
+  }
+}
+
+let domeRaf = null;
+let domeTimer = null;
+function scheduleDomeRender() {
+  if (domeTimer) clearTimeout(domeTimer);
+  domeTimer = setTimeout(() => {
+    if (domeRaf) cancelAnimationFrame(domeRaf);
+    domeRaf = requestAnimationFrame(() => {
+      for (const name of Object.keys(domeState)) {
+        if (domeState[name].expanded) renderDome(name);
+      }
+    });
+  }, 150);
+}
+
+function setExpanded(name, open) {
+  domeState[name].expanded = open;
+  const pane = document.querySelector(`.expanded-pane[data-model="${name}"]`);
+  const caret = document.querySelector(`.expand-caret[data-model="${name}"]`);
+  if (pane) pane.classList.toggle('open', open);
+  if (caret) caret.classList.toggle('open', open);
+  persistDomeState();
+  if (open) renderDome(name);
+}
+function setProjection(name, proj) {
+  domeState[name].projection = proj;
+  const pane = document.querySelector(`.expanded-pane[data-model="${name}"]`);
+  if (pane) {
+    pane.querySelectorAll('.proj-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.proj === proj);
+    });
+  }
+  persistDomeState();
+  renderDome(name);
+}
+
+document.querySelectorAll('.expand-caret').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const name = btn.dataset.model;
+    setExpanded(name, !domeState[name].expanded);
+  });
+});
+document.querySelectorAll('.expanded-pane .proj-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const pane = btn.closest('.expanded-pane');
+    const name = pane.dataset.model;
+    setProjection(name, btn.dataset.proj);
+  });
+});
+
+// Restore expanded state and active projection from storage on load
+for (const name of Object.keys(domeState)) {
+  const s = domeState[name];
+  if (s.expanded) {
+    const pane = document.querySelector(`.expanded-pane[data-model="${name}"]`);
+    const caret = document.querySelector(`.expand-caret[data-model="${name}"]`);
+    if (pane) pane.classList.add('open');
+    if (caret) caret.classList.add('open');
+  }
+  const pane = document.querySelector(`.expanded-pane[data-model="${name}"]`);
+  if (pane) {
+    pane.querySelectorAll('.proj-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.proj === s.projection);
+    });
+  }
+}
+scheduleDomeRender();
 
 function hourFromEvent(canvas, ev) {
   const rect = canvas.getBoundingClientRect();
