@@ -1412,7 +1412,7 @@ function raySphereIntersect(ro, rd, r) {
   return (-b + Math.sqrt(disc)) / 2;
 }
 
-function nishitaColor(sunElev, turbidity, viewElevDeg, altitude, mieScale) {
+function nishitaColor(sunElev, turbidity, viewElevDeg, viewAzDeg, altitude, mieScale) {
   if (mieScale === undefined) mieScale = 1;
   if (sunElev < deg(-8)) return [0, 0, 0];
 
@@ -1425,9 +1425,8 @@ function nishitaColor(sunElev, turbidity, viewElevDeg, altitude, mieScale) {
   const observerH = EARTH_R + altitude;
   const ro = [0, observerH, 0];
 
-  // View direction (in sun's plane: x=toward sun horizontal, y=up)
-  const ve = deg(viewElevDeg);
-  const viewDir = [0, Math.sin(ve), Math.cos(ve)]; // looking south-ish at given elevation
+  // View direction from caller-specified (azimuth, elevation)
+  const viewDir = viewDirFromAzEl(viewAzDeg || 0, viewElevDeg);
 
   // Sun direction
   const sunDir = [0, Math.sin(sunElev), Math.cos(sunElev)];
@@ -1666,7 +1665,7 @@ const OZONE_BETA = [3.426e-7, 8.298e-7, 0.356e-7];
 const OZONE_PEAK = 25000; // peak altitude (m)
 const OZONE_SCALE = 15000; // scale width (m)
 
-function nishitaOzoneColor(sunElev, turbidity, viewElevDeg, altitude, ozoneStrength) {
+function nishitaOzoneColor(sunElev, turbidity, viewElevDeg, viewAzDeg, altitude, ozoneStrength) {
   if (ozoneStrength === undefined) ozoneStrength = 1;
   if (sunElev < deg(-8)) return [0, 0, 0];
 
@@ -1674,8 +1673,7 @@ function nishitaOzoneColor(sunElev, turbidity, viewElevDeg, altitude, ozoneStren
   const mieCoeff = BETA_M * (turbidity / 3);
   const observerH = EARTH_R + altitude;
   const ro = [0, observerH, 0];
-  const ve = deg(viewElevDeg);
-  const viewDir = [0, Math.sin(ve), Math.cos(ve)];
+  const viewDir = viewDirFromAzEl(viewAzDeg || 0, viewElevDeg);
   const sunDir = [0, Math.sin(sunElev), Math.cos(sunElev)];
   const cosViewSun = viewDir[0]*sunDir[0] + viewDir[1]*sunDir[1] + viewDir[2]*sunDir[2];
 
@@ -1906,13 +1904,13 @@ function renderAll() {
 
         let contrib;
         if (name === 'rayleigh') {
-          contrib = nishitaColor(sElev, T, ve, alt, 0);
+          contrib = nishitaColor(sElev, T, ve, 0, alt, 0);
         } else if (name === 'preetham') {
           contrib = preethamColor(sElev, T, ve, 0);
         } else if (name === 'nishita') {
-          contrib = nishitaColor(sElev, T, ve, alt);
+          contrib = nishitaColor(sElev, T, ve, 0, alt);
         } else if (name === 'ozone') {
-          contrib = nishitaOzoneColor(sElev, T, ve, alt, ozone);
+          contrib = nishitaOzoneColor(sElev, T, ve, 0, alt, ozone);
         } else if (name === 'cie') {
           contrib = cieClearColor(sElev, T, ve, 0);
         } else {
