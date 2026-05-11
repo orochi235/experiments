@@ -739,6 +739,11 @@ document.querySelectorAll('#scaleToggle .proj-btn').forEach(btn => {
   });
 });
 
+// Drop every query param + reload, which restores all defaults.
+document.getElementById('resetView')?.addEventListener('click', () => {
+  window.location.href = window.location.pathname;
+});
+
 // White-balance toggle (Physical / Adapted)
 document.querySelectorAll('#wbToggle .proj-btn').forEach(btn => {
   btn.addEventListener('click', () => {

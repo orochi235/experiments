@@ -515,6 +515,15 @@ body[data-layout="standard"] > .controls.display     { order: 15; }
   margin: 0;
   gap: 6px;
 }
+.controls.display .reset-all {
+  margin-left: auto;
+  border-color: rgba(227, 200, 126, 0.35);
+  color: #e3c87e;
+}
+.controls.display .reset-all:hover {
+  background: rgba(80, 60, 30, 0.55);
+  color: #fff;
+}
 body[data-layout="standard"] > .model-grid           { order: 20; }
 body[data-layout="standard"] > .controls.atmosphere  { order: 30; }
 body[data-layout="standard"] > .controls.style       { order: 31; }
