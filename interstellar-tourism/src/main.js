@@ -528,6 +528,16 @@ document.getElementById('doyBtn')?.addEventListener('click', e => {
   fireInput(slider);
 });
 
+document.getElementById('hourBtn')?.addEventListener('click', e => {
+  e.preventDefault();
+  const now = new Date();
+  const h = Math.max(3, Math.min(22,
+    now.getHours() + now.getMinutes() / 60 + now.getSeconds() / 3600));
+  const slider = document.getElementById('hour');
+  slider.value = h.toFixed(2);
+  fireInput(slider);
+});
+
 document.getElementById('turbBtn')?.addEventListener('click', async e => {
   e.preventDefault();
   if (!navigator.geolocation) return;

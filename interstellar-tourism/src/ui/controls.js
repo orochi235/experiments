@@ -31,10 +31,18 @@ const SLIDERS = [
   { id: 'sunDistance',   path: 'sunDist',            label: 'vSunDist',   fmt: v => v.toFixed(2) + ' AU' },
   { id: 'stellarTemp',   path: 'stellarTemp',        label: 'vStellarTemp', fmt: v => Math.round(v) + ' K' },
   { id: 'hour',          path: 'hour',               label: 'vHour',
-    fmt: v => {
-      const h = Math.floor(v), m = Math.round((v - h) * 60);
-      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-    } },
+    fmt: (() => {
+      // Format the time using whatever the user's locale prefers
+      // (en-US: "12:00 PM"; en-GB: "12:00"; ja-JP: "12:00"; etc.)
+      const tf = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit' });
+      return v => {
+        const h24 = Math.floor(v);
+        const m = Math.round((v - h24) * 60);
+        const d = new Date();
+        d.setHours(h24, m, 0, 0);
+        return tf.format(d);
+      };
+    })() },
 ];
 
 export function wireControls() {
