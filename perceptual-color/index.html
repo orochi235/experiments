@@ -333,7 +333,7 @@
      barycentric-interpolated vertex colors. Lives to the right of the HCL
      grid in the same .panel-body flexbox. */
   .chroma-curve-diagram {
-    flex: 0 0 240px;
+    flex: 0 0 312px;
     align-self: flex-start;
     border-left: 1px solid var(--cs-border);
     padding-left: 14px;
@@ -346,11 +346,11 @@
     margin-bottom: 6px;
   }
   .ccd-figure {
-    position: relative; width: 240px; height: 200px;
+    position: relative; width: 312px; height: 200px;
     background: color-mix(in srgb, var(--cs-fg, #161921) 6%, transparent);
     border-radius: 4px;
   }
-  .ccd-canvas { position: absolute; inset: 0; display: block; width: 240px; height: 200px; }
+  .ccd-canvas { position: absolute; inset: 0; display: block; width: 312px; height: 200px; }
   .ccd-overlay { position: absolute; inset: 0; pointer-events: none; }
   .ccd-hue {
     display: flex; align-items: center; gap: 8px; margin-top: 10px;
@@ -370,6 +370,15 @@
     font: 400 0.6rem/1.4 'IBM Plex Sans', sans-serif;
     color: var(--cs-fg-faint);
     margin-top: 8px;
+  }
+  /* Vertex letters inherit their swatch color via inline style updated each
+     redraw. A thin contrast halo keeps very light/dark colors readable
+     against the page bg without overpowering the letter itself. */
+  .ccd-caption .ccd-vert {
+    color: var(--cs-fg);
+    text-shadow:
+      0 0 1px var(--cs-bg, #fff),
+      0 0 2px var(--cs-bg, #fff);
   }
   [data-theme="dark"] .chroma-curve-diagram { border-left-color: #2A2D35; }
 
@@ -891,8 +900,8 @@
     <div class="chroma-curve-diagram">
       <div class="caption"><i>C</i>(<i>L</i>)</div>
       <div class="ccd-figure">
-        <canvas class="ccd-canvas" width="240" height="200"></canvas>
-        <svg class="ccd-overlay" width="240" height="200"></svg>
+        <canvas class="ccd-canvas" width="312" height="200"></canvas>
+        <svg class="ccd-overlay" width="312" height="200"></svg>
         <button class="ccd-expand" id="ccdExpand" type="button" aria-label="Open larger triangle diagram" title="Expand">
           <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1,5 1,1 5,1"/>
@@ -908,7 +917,7 @@
         <span class="val" id="ccdHueVal">200°</span>
       </label>
       <div class="ccd-caption">
-        Triangle vertices are <b>B</b>(L<sub>min</sub>, c<sub>bot</sub>), <b>P</b>(L<sub>peak</sub>, c<sub>peak</sub>), <b>T</b>(L<sub>max</sub>, c<sub>top</sub>). Interior is a linear-RGB barycentric blend of the three corner colors at the reference hue. The reference hue also drives the L and C slider tracks above. Dashed tracks show each thumb's bounded slide range. Small squares on the curve mark each palette index from the <b>Indices</b> control below at its (L, C) sample — their spacing along the envelope follows the L curve gamma.
+        Triangle vertices are <b class="ccd-vert" data-vert="B">B</b>(L<sub>min</sub>, c<sub>bot</sub>), <b class="ccd-vert" data-vert="P">P</b>(L<sub>peak</sub>, c<sub>peak</sub>), <b class="ccd-vert" data-vert="T">T</b>(L<sub>max</sub>, c<sub>top</sub>). Interior is a linear-RGB barycentric blend of the three corner colors at the <b>Reference&nbsp;hue</b>, which also drives the <b>L</b> and <b>C</b> slider tracks above. Dashed tracks show each thumb's bounded slide range. Small squares on the curve mark each palette index from the <b>Indices</b> control below at its (L, C) sample — their spacing along the envelope follows the <b>L&nbsp;curve&nbsp;gamma</b>.
       </div>
     </div>
   </div>
@@ -2935,7 +2944,7 @@ function redraw() {
 // Two rendering targets share the same logic: the small inline figure and
 // the expanded lightbox modal. The modal target is only included when open.
 const CCD_TARGETS = [
-  { selector: '.chroma-curve-diagram .ccd-figure', W: 240, H: 200, PAD: { l: 28, r: 12, t: 20, b: 28 } },
+  { selector: '.chroma-curve-diagram .ccd-figure', W: 312, H: 200, PAD: { l: 28, r: 12, t: 20, b: 28 } },
 ];
 const CCD_MODAL_TARGET = {
   selector: '.ccd-modal .ccd-modal-figure', W: 640, H: 520, PAD: { l: 56, r: 24, t: 36, b: 44 },
@@ -3131,6 +3140,14 @@ function renderChromaCurveDiagram(target) {
   parts.push(`<text x="8" y="${cMidY}" font-size="10" font-family="ui-monospace, monospace" fill="${axisFaint}" transform="rotate(-90 8 ${cMidY})" text-anchor="middle">C</text>`);
 
   overlay.innerHTML = parts.join('');
+
+  // Match the inline B / P / T references in the caption to the diagram's
+  // vertex swatch colors so the cross-reference stays visually consistent
+  // as the reference hue, L, and C settings change.
+  document.querySelectorAll('.ccd-caption .ccd-vert').forEach(el => {
+    const v = verts.find(x => x.label === el.dataset.vert);
+    if (v) el.style.color = v.hex;
+  });
 }
 
 //// ---------- light/dark theme ----------
