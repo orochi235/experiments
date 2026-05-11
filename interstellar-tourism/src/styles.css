@@ -211,7 +211,7 @@
   .controls.planet .slider-reset:hover { background: #f0d88a; border-color: #f0d88a; }
   .controls-label {
     font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px;
-    color: #555; margin-bottom: 6px; width: 100%;
+    color: #555; margin-bottom: -12px; width: 100%;
   }
   .controls.style { background: rgba(26, 22, 48, 0.6); border: 1px solid #2a2445; }
   .controls.style .control .val { color: #c8a2e3; }

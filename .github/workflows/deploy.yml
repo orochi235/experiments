@@ -22,9 +22,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: interstellar-tourism/package-lock.json
+
+      # Build the Vite-based experiment. NODE_ENV=production triggers the
+      # base-path branch in vite.config.js.
+      - name: Build interstellar-tourism
+        working-directory: interstellar-tourism
+        env:
+          NODE_ENV: production
+        run: |
+          npm ci
+          npm run build
+
+      # Assemble the Pages artifact: everything in the repo root EXCEPT the
+      # vite source dir, with the built dist/ mapped to interstellar-tourism/.
+      - name: Assemble artifact
+        run: |
+          mkdir -p _site
+          rsync -a --exclude='_site' --exclude='.git' --exclude='.github' \
+                --exclude='interstellar-tourism' --exclude='sky-color-gl' \
+                ./ _site/
+          mkdir -p _site/interstellar-tourism
+          cp -r interstellar-tourism/dist/. _site/interstellar-tourism/
+
       - uses: actions/configure-pages@v5
+
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
+
       - id: deployment
         uses: actions/deploy-pages@v4
