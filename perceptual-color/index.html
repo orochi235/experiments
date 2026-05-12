@@ -1265,6 +1265,23 @@ const families = [
   { name: 'Success',    hue: 150 },
   { name: 'Gray',       hue: 270, saturation: 0.05 },
 ];
+// Persist families across reloads. Falls back to defaults if storage is
+// empty or unparseable.
+const FAMILIES_KEY = 'pc-families';
+function persistFamilies() {
+  try { localStorage.setItem(FAMILIES_KEY, JSON.stringify(families)); } catch {}
+}
+(function loadStoredFamilies() {
+  try {
+    const raw = localStorage.getItem(FAMILIES_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    if (!arr.every(f => f && typeof f.name === 'string' && Number.isFinite(f.hue))) return;
+    families.length = 0;
+    arr.forEach(f => families.push({ ...f }));
+  } catch {}
+})();
 // Categorical / chart colors — separate from families. Just an array of hue values.
 const cats = [170, 5, 215, 135, 35, 285, 25, 320, 50, 190];
 
@@ -1295,6 +1312,7 @@ function applySnapshot(s) {
   syncIndicesText();
   redraw();
   drawGamutDiagram();
+  persistFamilies();
 }
 function pushHistory() {
   if (!lastSnap) { lastSnap = snapshot(); return; }
@@ -1305,6 +1323,7 @@ function pushHistory() {
   if (history.length > 200) history.shift();
   lastSnap = cur;
   updateUndoButtons();
+  persistFamilies();
 }
 function undo() {
   if (!history.length) return;
