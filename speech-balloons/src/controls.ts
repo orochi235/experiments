@@ -20,50 +20,46 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
 
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   fill: [
-    { key: 'mode', label: 'Mode', kind: 'select', options: ['solid', 'radial', 'puffy', 'raised', 'sculpted', 'aqua', 'beveled'], default: 'radial' },
+    { key: 'mode', label: 'Mode', kind: 'select',
+      options: ['bevel-rings', 'bevel-blur', 'bevel-dt'],
+      default: 'bevel-rings' },
     { key: 'base', label: 'Base color', kind: 'color', default: '#ffffff' },
-    { kind: 'header', label: 'Contour (highlight → rim)', hideWhen: (p) => p.mode === 'solid' || p.mode === 'puffy' || p.mode === 'aqua' },
+
+    { kind: 'header', label: 'Contour (rim → center)' },
     {
       key: 'contour',
       kind: 'curve',
       length: 5,
-      labels: ['Highlight', 'Inner', 'Mid', 'Outer', 'Rim'],
+      labels: ['Rim', 'Outer', 'Mid', 'Inner', 'Center'],
       min: -1,
       max: 1,
       step: 0.02,
-      // Interleaved [x, y, x, y, …] — 5 points at evenly-spaced X with default Y deltas.
-      defaults: [0, 0.55, 0.25, 0.32, 0.5, 0, 0.75, -0.12, 1, -0.32],
-      hideWhen: (p) => p.mode === 'solid' || p.mode === 'puffy' || p.mode === 'aqua',
+      // X=0 = rim (alpha 0 in heightmap), X=1 = center (alpha 1, deepest interior).
+      // Default = smooth outset dome: flat at the rim, climbing to a peak at center.
+      defaults: [0, -0.05, 0.25, 0.4, 0.5, 0.78, 0.75, 0.95, 1, 1],
     },
-    { kind: 'header', label: 'Beveled', hideWhen: (p) => p.mode !== 'beveled' },
-    { key: 'borderColor', label: 'Border color', kind: 'color', default: '#161921', hideWhen: (p) => p.mode !== 'beveled' },
-    { key: 'borderWidth', label: 'Border width', kind: 'range', min: 0, max: 20, step: 0.5, default: 2, hideWhen: (p) => p.mode !== 'beveled' },
-    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 1, max: 50, step: 0.5, default: 14, hideWhen: (p) => p.mode !== 'beveled' },
-    { key: 'bevelSoftness', label: 'Bevel softness', kind: 'range', min: 0.1, max: 1, step: 0.02, default: 0.4, hideWhen: (p) => p.mode !== 'beveled' },
-    { kind: 'header', label: 'Aqua', hideWhen: (p) => p.mode !== 'aqua' },
-    { key: 'splitY', label: 'Gloss height', kind: 'range', min: 0.05, max: 0.95, step: 0.01, default: 0.5, hideWhen: (p) => p.mode !== 'aqua' },
-    { key: 'glossStrength', label: 'Gloss strength', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.7, hideWhen: (p) => p.mode !== 'aqua' },
-    { key: 'glossFade', label: 'Gloss fade', kind: 'range', min: 0, max: 0.4, step: 0.005, default: 0.02, hideWhen: (p) => p.mode !== 'aqua' },
-    { key: 'bottomGlow', label: 'Bottom glow', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.25, hideWhen: (p) => p.mode !== 'aqua' },
-    { kind: 'header', label: 'Tints' },
-    { key: 'highlightTint', label: 'Highlight tint', kind: 'color', default: '#ffffff' },
-    { key: 'shadowTint', label: 'Shadow tint', kind: 'color', default: '#000000' },
-    { kind: 'header', label: 'Gradient', hideWhen: (p) => p.mode !== 'radial' && p.mode !== 'raised' },
-    { key: 'hx', label: 'Highlight X', kind: 'range', min: 0, max: 1, step: 0.01, default: 0.3, hideWhen: (p) => p.mode !== 'radial' && p.mode !== 'raised' },
-    { key: 'hy', label: 'Highlight Y', kind: 'range', min: 0, max: 1, step: 0.01, default: 0.22, hideWhen: (p) => p.mode !== 'radial' && p.mode !== 'raised' },
-    { key: 'spread', label: 'Spread', kind: 'range', min: 0.2, max: 1.8, step: 0.02, default: 0.95, hideWhen: (p) => p.mode !== 'radial' && p.mode !== 'raised' },
-    { kind: 'header', label: 'Light', hideWhen: (p) => p.mode !== 'puffy' && p.mode !== 'sculpted' },
-    // Angle: where the highlight LANDS on the body, 0 = right, 90 = bottom (SVG y-down, CW).
-    { key: 'angle', label: 'Light angle (°)', kind: 'range', min: 0, max: 359, step: 1, default: 230, hideWhen: (p) => p.mode !== 'puffy' && p.mode !== 'sculpted' },
-    { key: 'distance', label: 'Light distance', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'puffy' && p.mode !== 'sculpted' },
-    { kind: 'header', label: 'Depth', hideWhen: (p) => p.mode !== 'puffy' && p.mode !== 'sculpted' },
-    { key: 'depth', label: 'Spread', kind: 'range', min: 0.05, max: 1, step: 0.02, default: 0.45, hideWhen: (p) => p.mode !== 'puffy' && p.mode !== 'sculpted' },
-    { key: 'highlight', label: 'Highlight (diffuse)', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.55, hideWhen: (p) => p.mode !== 'puffy' },
-    { key: 'specular', label: 'Specular catch', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'puffy' },
-    { key: 'shadow', label: 'Shadow', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.45, hideWhen: (p) => p.mode !== 'puffy' },
-    { kind: 'header', label: 'Volume' },
-    { key: 'innerShadow', label: 'Inner shadow', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5 },
-    { key: 'innerHighlight', label: 'Top highlight', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.4 },
+
+    { kind: 'header', label: 'Light' },
+    { key: 'lightAzimuth', label: 'Azimuth (°)', kind: 'range', min: 0, max: 359, step: 1, default: 135 },
+    { key: 'lightElevation', label: 'Elevation (°)', kind: 'range', min: 0, max: 90, step: 1, default: 55 },
+    { key: 'lightColor', label: 'Light color', kind: 'color', default: '#ffffff' },
+
+    { kind: 'header', label: 'Material' },
+    { key: 'surfaceScale', label: 'Surface scale', kind: 'range', min: 0, max: 30, step: 0.5, default: 8 },
+    { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0 },
+    { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6 },
+    { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30 },
+    { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff' },
+
+    { kind: 'header', label: 'Rings (bevel-rings)', hideWhen: (p) => p.mode !== 'bevel-rings' },
+    { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 48, step: 1, default: 20, hideWhen: (p) => p.mode !== 'bevel-rings' },
+    { key: 'smoothing', label: 'Smoothing (px)', kind: 'range', min: 0, max: 4, step: 0.1, default: 1.2, hideWhen: (p) => p.mode !== 'bevel-rings' },
+
+    { kind: 'header', label: 'Blur (bevel-blur)', hideWhen: (p) => p.mode !== 'bevel-blur' },
+    { key: 'blur', label: 'Blur (σ)', kind: 'range', min: 1, max: 60, step: 0.5, default: 14, hideWhen: (p) => p.mode !== 'bevel-blur' },
+
+    { kind: 'header', label: 'Distance transform (bevel-dt)', hideWhen: (p) => p.mode !== 'bevel-dt' },
+    { key: 'dtResolution', label: 'Resolution (px)', kind: 'range', min: 64, max: 512, step: 16, default: 256, hideWhen: (p) => p.mode !== 'bevel-dt' },
   ],
 
   tail: [
