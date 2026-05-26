@@ -13,6 +13,7 @@ import {
 import {
   unionPolygons,
   inflateOpenPolyline,
+  offsetClosedPolygons,
   polygonsToSvgPath,
   circleToPolygon,
   type Polygon,
@@ -70,6 +71,21 @@ function interpolateCurveY(points: CurvePoint[], x: number): number {
   const t2 = t * t;
   const t3 = t2 * t;
   return (2 * t3 - 3 * t2 + 1) * p0.y + (t3 - 2 * t2 + t) * h * m0 + (-2 * t3 + 3 * t2) * p1.y + (t3 - t2) * h * m1;
+}
+
+// Axis-aligned bounding box of one or more polygons.
+function polysBBox(polys: Polygon[]): { x: number; y: number; w: number; h: number } {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const poly of polys) {
+    for (const pt of poly) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+  }
+  if (!isFinite(minX)) return { x: 0, y: 0, w: 1, h: 1 };
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
 // --- Component -----------------------------------------------------------
@@ -261,6 +277,36 @@ export function SpeechBalloon({ design, runtime }: Props) {
     };
   }, [fillEffect]);
 
+  const ringsHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(() => {
+    if (fillRender.mode !== 'bevel-rings') return null;
+    const bb = polysBBox(bodyAndBubblesPolys);
+    if (bb.w <= 0 || bb.h <= 0) return null;
+
+    const rings = fillRender.rings;
+    // Inset step: cap at half the shorter bbox dimension so the deepest inset
+    // doesn't always collapse to empty. Each ring covers (i*step, (i+1)*step).
+    const maxInset = Math.min(bb.w, bb.h) / 2;
+    const step = maxInset / rings;
+
+    // Painter's algorithm: draw outer-first, inner-last. The deepest ring's
+    // brightness (closest to 255) wins where it overlaps. Grayscale = distance.
+    const paths: string[] = [];
+    for (let i = 0; i < rings; i++) {
+      const inset = offsetClosedPolygons(bodyAndBubblesPolys, -i * step);
+      if (inset.length === 0) break;
+      const d = polygonsToSvgPath(inset);
+      const v = Math.round(255 * (i / (rings - 1)));
+      paths.push(`<path d="${d}" fill="rgb(${v},${v},${v})" transform="translate(${-bb.x},${-bb.y})" />`);
+    }
+
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${bb.w}" height="${bb.h}" viewBox="0 0 ${bb.w} ${bb.h}">` +
+      paths.join('') +
+      `</svg>`;
+    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    return { dataUrl, ...bb };
+  }, [fillRender.mode, fillRender.rings, bodyAndBubblesPolys]);
+
   const baseColor = fillRender.base;
 
   return (
@@ -294,7 +340,32 @@ export function SpeechBalloon({ design, runtime }: Props) {
           {fillRender.mode === 'bevel-blur' && (
             <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.blur} result="heightmap" />
           )}
-          {/* (bevel-rings and bevel-dt heightmap inputs added in later tasks.) */}
+          {fillRender.mode === 'bevel-rings' && ringsHeightmap && (
+            <>
+              <feImage
+                href={ringsHeightmap.dataUrl}
+                x={ringsHeightmap.x}
+                y={ringsHeightmap.y}
+                width={ringsHeightmap.w}
+                height={ringsHeightmap.h}
+                preserveAspectRatio="none"
+                result="ringsImage"
+              />
+              {/* Luminance → alpha: rings paint opaque grayscale, but feDiffuseLighting
+                  reads alpha. Copy the average of RGB into A. */}
+              <feColorMatrix
+                in="ringsImage"
+                type="matrix"
+                values="0 0 0 0 0
+                        0 0 0 0 0
+                        0 0 0 0 0
+                        0.333 0.333 0.333 0 0"
+                result="ringsAlpha"
+              />
+              <feGaussianBlur in="ringsAlpha" stdDeviation={fillRender.smoothing} result="heightmap" />
+            </>
+          )}
+          {/* (bevel-dt heightmap input added in a later task.) */}
 
           {/* Step 2: remap heightmap alpha through the contour curve. */}
           <feComponentTransfer in="heightmap" result="profiled">
