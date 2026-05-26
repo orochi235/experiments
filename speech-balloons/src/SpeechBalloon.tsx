@@ -18,6 +18,7 @@ import {
   circleToPolygon,
   type Polygon,
 } from './clipping';
+import { buildDistanceFieldImage } from './distanceTransform';
 
 interface Props {
   design: DesignState;
@@ -307,6 +308,15 @@ export function SpeechBalloon({ design, runtime }: Props) {
     return { dataUrl, ...bb };
   }, [fillRender.mode, fillRender.rings, bodyAndBubblesPolys]);
 
+  const dtHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(() => {
+    if (fillRender.mode !== 'bevel-dt') return null;
+    const bb = polysBBox(bodyAndBubblesPolys);
+    if (bb.w <= 0 || bb.h <= 0) return null;
+    const img = buildDistanceFieldImage(bodyPath, bb, fillRender.dtResolution);
+    if (!img) return null;
+    return { dataUrl: img.dataUrl, x: bb.x, y: bb.y, w: bb.w, h: bb.h };
+  }, [fillRender.mode, fillRender.dtResolution, bodyPath, bodyAndBubblesPolys]);
+
   const baseColor = fillRender.base;
 
   return (
@@ -365,7 +375,17 @@ export function SpeechBalloon({ design, runtime }: Props) {
               <feGaussianBlur in="ringsAlpha" stdDeviation={fillRender.smoothing} result="heightmap" />
             </>
           )}
-          {/* (bevel-dt heightmap input added in a later task.) */}
+          {fillRender.mode === 'bevel-dt' && dtHeightmap && (
+            <feImage
+              href={dtHeightmap.dataUrl}
+              x={dtHeightmap.x}
+              y={dtHeightmap.y}
+              width={dtHeightmap.w}
+              height={dtHeightmap.h}
+              preserveAspectRatio="none"
+              result="heightmap"
+            />
+          )}
 
           {/* Step 2: remap heightmap alpha through the contour curve. */}
           <feComponentTransfer in="heightmap" result="profiled">
