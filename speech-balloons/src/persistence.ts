@@ -2,7 +2,7 @@ import type { LabSnapshot } from './types';
 import { BASE_CONTROLS, EFFECT_CONTROLS, defaultParams } from './controls';
 
 // Bump on schema changes — stale entries get dropped silently.
-export const LAB_STORAGE_KEY = 'speech-balloon-lab-v5';
+export const LAB_STORAGE_KEY = 'speech-balloon-lab-v6';
 
 export function initialSnapshot(): LabSnapshot {
   return {
@@ -40,17 +40,8 @@ export function loadSnapshot(): LabSnapshot {
     if (!raw) return initialSnapshot();
     const parsed = JSON.parse(raw) as LabSnapshot;
     if (!parsed.runtime || !parsed.design) return initialSnapshot();
-    // Forward-compat: contour was Y-only `number[5]`; migrate to interleaved [x, y, …].
-    for (const eff of parsed.design.effects ?? []) {
-      if (eff.kind === 'fill' && Array.isArray(eff.params?.contour)) {
-        const arr = eff.params.contour as number[];
-        if (arr.length === 5) {
-          const out: number[] = [];
-          for (let i = 0; i < arr.length; i++) out.push(i / (arr.length - 1), arr[i]);
-          eff.params.contour = out;
-        }
-      }
-    }
+    // No legacy migration: schema bumped to v6 because both the fill-mode
+    // union and the contour X-axis orientation changed incompatibly.
     return parsed;
   } catch {
     return initialSnapshot();
