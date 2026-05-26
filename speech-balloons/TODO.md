@@ -34,8 +34,6 @@
 
 ## Open lab features
 
-- [ ] **Light direction** for the puffy filter — currently hard-coded "from above".
-  Expose `lightAngle` so the inset shadow rotates with it.
 - [ ] **Lightning `taper`** currently does nothing. Could narrow the bolt toward the
   tip (vary `inflatePathsD` width along the polyline — needs segment-by-segment
   inflate + union, or a custom ribbon builder).
