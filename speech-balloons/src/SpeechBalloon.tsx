@@ -37,6 +37,25 @@ function measureTextWidth(text: string, fontPx: number, fontFamily: string): num
   return ctx.measureText(text).width;
 }
 
+// --- Color mixing (used by the aqua paint-server mode) ------------------
+
+type RGB = [number, number, number];
+function parseHex(hex: string): RGB {
+  const h = (hex || '#000000').replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  return [
+    parseInt(full.slice(0, 2), 16) || 0,
+    parseInt(full.slice(2, 4), 16) || 0,
+    parseInt(full.slice(4, 6), 16) || 0,
+  ];
+}
+function mixCss(a: RGB, b: RGB, t: number): string {
+  const r = Math.round(a[0] + (b[0] - a[0]) * t);
+  const g = Math.round(a[1] + (b[1] - a[1]) * t);
+  const bl = Math.round(a[2] + (b[2] - a[2]) * t);
+  return `rgb(${r} ${g} ${bl})`;
+}
+
 // --- Contour curve helpers -----------------------------------------------
 
 // Contour is stored as interleaved [x, y, x, y, …] points.
@@ -202,6 +221,29 @@ export function SpeechBalloon({ design, runtime }: Props) {
 
   const bodyPath = useMemo(() => polygonsToSvgPath(bodyAndBubblesPolys), [bodyAndBubblesPolys]);
 
+  // Body silhouette only (no bubbles unioned in). Used by aqua mode so each
+  // bubble gets its own bbox-anchored gradient instead of inheriting the body's.
+  const bodyOnlyPath = useMemo(() => polygonsToSvgPath([bodyPolygon]), [bodyPolygon]);
+
+  // Flat list of bubbles from every bubble-shaped tail.
+  const allBubbles = useMemo(() => {
+    const out: Array<{ cx: number; cy: number; r: number }> = [];
+    for (const rt of resolvedTails) {
+      if (rt.shape !== 'bubbles') continue;
+      const bubbles = buildBubbles(
+        rt.attach,
+        (rt.params.count as number) ?? 3,
+        (rt.params.baseWidth as number) ?? 16,
+        (rt.params.taper as number) ?? 0.7,
+        (rt.params.gap as number) ?? 0.15,
+        (rt.params.length as number) ?? 70,
+        (rt.params.arc as number) ?? 0,
+      );
+      out.push(...bubbles);
+    }
+    return out;
+  }, [resolvedTails]);
+
   // Lightning tails: inflate the open polyline by baseWidth/2 to get a filled
   // ribbon (rounded ends). Each becomes its own path with the same fill paint.
   const lightningPaths = useMemo(() => {
@@ -240,6 +282,8 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const idPrefix = `sb-${uid}`;
   const shadowId = `${idPrefix}-shadow`;
   const fillFilterId = `${idPrefix}-fill`;
+  const aquaBodyId = `${idPrefix}-aqua-body`;
+  const aquaGlossId = `${idPrefix}-aqua-gloss`;
 
   // Resolve fill params + sampled contour table for the lighting filter.
   const fillRender = useMemo(() => {
@@ -275,8 +319,44 @@ export function SpeechBalloon({ design, runtime }: Props) {
       smoothing: (p.smoothing as number) ?? 1.2,
       blur: (p.blur as number) ?? 14,
       dtResolution: Math.max(16, Math.round((p.dtResolution as number) ?? 256)),
+      // Aqua-only params
+      lightAngle: (p.lightAngle as number) ?? 270,
+      glossStrength: (p.glossStrength as number) ?? 0.55,
+      rimContrast: (p.rimContrast as number) ?? 0.4,
+      highlightTint: (p.highlightTint as string) ?? '#ffffff',
+      shadowTint: (p.shadowTint as string) ?? '#0a1020',
     };
   }, [fillEffect]);
+
+  // Pre-compute the aqua paint-server geometry: gradient direction in
+  // objectBoundingBox coordinates + the five color stops mixed from base/tints.
+  const aquaPaint = useMemo(() => {
+    if (fillRender.mode !== 'aqua') return null;
+    const rad = (fillRender.lightAngle * Math.PI) / 180;
+    const dx = Math.cos(rad);
+    const dy = Math.sin(rad);
+    // (x1, y1) at the highlight side; (x2, y2) at the shadow side. Both in
+    // bbox-relative 0..1 coords so each shape rotates its own gradient identically.
+    const x1 = 0.5 + 0.5 * dx;
+    const y1 = 0.5 + 0.5 * dy;
+    const x2 = 0.5 - 0.5 * dx;
+    const y2 = 0.5 - 0.5 * dy;
+
+    const base = parseHex(fillRender.base);
+    const hi = parseHex(fillRender.highlightTint);
+    const sh = parseHex(fillRender.shadowTint);
+    const rim = fillRender.rimContrast;
+    // 5-stop body gradient: bright on the light side → base in the middle →
+    // shadow on the dark side. Stop positions tuned for the aqua look.
+    const bodyStops: Array<[number, string]> = [
+      [0.0, mixCss(base, hi, 0.7)],
+      [0.3, mixCss(base, hi, 0.18)],
+      [0.55, mixCss(base, base, 0)], // pure base
+      [0.85, mixCss(base, sh, rim * 0.7)],
+      [1.0, mixCss(base, sh, rim)],
+    ];
+    return { x1, y1, x2, y2, bodyStops };
+  }, [fillRender.mode, fillRender.lightAngle, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
 
   const ringsHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(() => {
     if (fillRender.mode !== 'bevel-rings') return null;
@@ -427,26 +507,89 @@ export function SpeechBalloon({ design, runtime }: Props) {
           {/* Step 7: final clip to silhouette. */}
           <feComposite in="lit" in2="SourceAlpha" operator="in" />
         </filter>
+
+        {/* Aqua paint servers: a 5-stop body linear gradient + a soft gloss
+            overlay, both anchored per-shape via objectBoundingBox so each
+            bubble gets its own dome-ish look without filter machinery. */}
+        {aquaPaint && (
+          <>
+            <linearGradient
+              id={aquaBodyId}
+              gradientUnits="objectBoundingBox"
+              x1={aquaPaint.x1}
+              y1={aquaPaint.y1}
+              x2={aquaPaint.x2}
+              y2={aquaPaint.y2}
+            >
+              {aquaPaint.bodyStops.map(([offset, color]) => (
+                <stop key={offset} offset={offset} stopColor={color} />
+              ))}
+            </linearGradient>
+            <linearGradient
+              id={aquaGlossId}
+              gradientUnits="objectBoundingBox"
+              x1={aquaPaint.x1}
+              y1={aquaPaint.y1}
+              x2={aquaPaint.x2}
+              y2={aquaPaint.y2}
+            >
+              <stop offset="0" stopColor={fillRender.highlightTint} stopOpacity={fillRender.glossStrength} />
+              <stop offset="0.35" stopColor={fillRender.highlightTint} stopOpacity={fillRender.glossStrength * 0.35} />
+              <stop offset="0.55" stopColor={fillRender.highlightTint} stopOpacity="0" />
+            </linearGradient>
+          </>
+        )}
       </defs>
 
       {/* Body group — silhouette + bubble/lightning tails share the same fill,
           stroke, and drop-shadow filter. */}
       <g filter={hasShadow ? `url(#${shadowId})` : undefined}>
-        <path d={bodyPath} fill={baseColor} filter={`url(#${fillFilterId})`} />
+        {fillRender.mode === 'aqua' ? (
+          // Aqua: per-shape paint servers, no filter. Body and each bubble get
+          // their own bbox-anchored gradient + gloss so the "centroid" of each
+          // sub-shape's highlight lands inside it instead of being averaged
+          // across the unioned silhouette.
+          <>
+            <path d={bodyOnlyPath} fill={`url(#${aquaBodyId})`} />
+            {fillRender.glossStrength > 0 && <path d={bodyOnlyPath} fill={`url(#${aquaGlossId})`} />}
+            {allBubbles.map((b, i) => (
+              <g key={i}>
+                <circle cx={b.cx} cy={b.cy} r={b.r} fill={`url(#${aquaBodyId})`} />
+                {fillRender.glossStrength > 0 && (
+                  <circle cx={b.cx} cy={b.cy} r={b.r} fill={`url(#${aquaGlossId})`} />
+                )}
+              </g>
+            ))}
+            {lightningPaths.map((d, i) => (
+              <path
+                key={`lt-${i}`}
+                d={d}
+                fill={`url(#${aquaBodyId})`}
+                stroke={strokeW > 0 ? strokeColor : 'none'}
+                strokeWidth={strokeW || 0}
+                strokeLinejoin="round"
+              />
+            ))}
+          </>
+        ) : (
+          <>
+            <path d={bodyPath} fill={baseColor} filter={`url(#${fillFilterId})`} />
 
-        {/* Lightning tails — filled ribbons (clipper-inflated polylines) with
-            the same fill and stroke as the body. */}
-        {lightningPaths.map((d, i) => (
-          <path
-            key={i}
-            d={d}
-            fill={baseColor}
-            filter={`url(#${fillFilterId})`}
-            stroke={strokeW > 0 ? strokeColor : 'none'}
-            strokeWidth={strokeW || 0}
-            strokeLinejoin="round"
-          />
-        ))}
+            {/* Lightning tails — filled ribbons (clipper-inflated polylines) with
+                the same fill and stroke as the body. */}
+            {lightningPaths.map((d, i) => (
+              <path
+                key={i}
+                d={d}
+                fill={baseColor}
+                filter={`url(#${fillFilterId})`}
+                stroke={strokeW > 0 ? strokeColor : 'none'}
+                strokeWidth={strokeW || 0}
+                strokeLinejoin="round"
+              />
+            ))}
+          </>
+        )}
 
         {/* Outline last so it sits on top of the lit fill. */}
         {strokeW > 0 && (

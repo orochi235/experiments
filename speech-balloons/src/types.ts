@@ -3,7 +3,7 @@ export type EffectKind = 'fill' | 'tail' | 'stroke' | 'shadow';
 export type TailSide = 'bottom' | 'top' | 'left' | 'right';
 export type TailProjection = 'radial' | 'side';
 export type TailShape = 'classic' | 'bubbles' | 'lightning';
-export type FillMode = 'bevel-rings' | 'bevel-blur' | 'bevel-dt';
+export type FillMode = 'aqua' | 'bevel-rings' | 'bevel-blur' | 'bevel-dt';
 
 // Lab params: numbers, strings (color/select), booleans (toggles), and number arrays (curves).
 export type ParamValue = number | string | boolean | number[];

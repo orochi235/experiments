@@ -21,11 +21,18 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   fill: [
     { key: 'mode', label: 'Mode', kind: 'select',
-      options: ['bevel-rings', 'bevel-blur', 'bevel-dt'],
-      default: 'bevel-rings' },
-    { key: 'base', label: 'Base color', kind: 'color', default: '#ffffff' },
+      options: ['aqua', 'bevel-rings', 'bevel-blur', 'bevel-dt'],
+      default: 'aqua' },
+    { key: 'base', label: 'Base color', kind: 'color', default: '#3b82f6' },
 
-    { kind: 'header', label: 'Contour (rim → center)' },
+    { kind: 'header', label: 'Aqua', hideWhen: (p) => p.mode !== 'aqua' },
+    { key: 'lightAngle', label: 'Light angle (°)', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'aqua' },
+    { key: 'glossStrength', label: 'Gloss strength', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.55, hideWhen: (p) => p.mode !== 'aqua' },
+    { key: 'rimContrast', label: 'Rim contrast', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.4, hideWhen: (p) => p.mode !== 'aqua' },
+    { key: 'highlightTint', label: 'Highlight tint', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'aqua' },
+    { key: 'shadowTint', label: 'Shadow tint', kind: 'color', default: '#0a1020', hideWhen: (p) => p.mode !== 'aqua' },
+
+    { kind: 'header', label: 'Contour (rim → center)', hideWhen: (p) => p.mode === 'aqua' },
     {
       key: 'contour',
       kind: 'curve',
@@ -37,19 +44,20 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
       // X=0 = rim (alpha 0 in heightmap), X=1 = center (alpha 1, deepest interior).
       // Default = smooth outset dome: flat at the rim, climbing to a peak at center.
       defaults: [0, -0.05, 0.25, 0.4, 0.5, 0.78, 0.75, 0.95, 1, 1],
+      hideWhen: (p) => p.mode === 'aqua',
     },
 
-    { kind: 'header', label: 'Light' },
-    { key: 'lightAzimuth', label: 'Azimuth (°)', kind: 'range', min: 0, max: 359, step: 1, default: 135 },
-    { key: 'lightElevation', label: 'Elevation (°)', kind: 'range', min: 0, max: 90, step: 1, default: 55 },
-    { key: 'lightColor', label: 'Light color', kind: 'color', default: '#ffffff' },
+    { kind: 'header', label: 'Light', hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'lightAzimuth', label: 'Azimuth (°)', kind: 'range', min: 0, max: 359, step: 1, default: 135, hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'lightElevation', label: 'Elevation (°)', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'lightColor', label: 'Light color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode === 'aqua' },
 
-    { kind: 'header', label: 'Material' },
-    { key: 'surfaceScale', label: 'Surface scale', kind: 'range', min: 0, max: 30, step: 0.5, default: 8 },
-    { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0 },
-    { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6 },
-    { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30 },
-    { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff' },
+    { kind: 'header', label: 'Material', hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'surfaceScale', label: 'Surface scale', kind: 'range', min: 0, max: 30, step: 0.5, default: 8, hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0, hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6, hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30, hideWhen: (p) => p.mode === 'aqua' },
+    { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode === 'aqua' },
 
     { kind: 'header', label: 'Rings (bevel-rings)', hideWhen: (p) => p.mode !== 'bevel-rings' },
     { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 48, step: 1, default: 20, hideWhen: (p) => p.mode !== 'bevel-rings' },
