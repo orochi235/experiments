@@ -300,10 +300,34 @@ export function Lab() {
               </>
             ) : (
               <>
-                <SliderField label="Width" value={design.width} min={80} max={500} step={2} fixed={0}
-                  onChange={(v) => setDesign((d) => ({ ...d, width: v }))} />
-                <SliderField label="Height" value={design.height} min={50} max={400} step={2} fixed={0}
-                  onChange={(v) => setDesign((d) => ({ ...d, height: v }))} />
+                <SliderField
+                  label="Size"
+                  value={Math.max(design.width, design.height)}
+                  min={60}
+                  max={500}
+                  step={2}
+                  fixed={0}
+                  onChange={(v) => setDesign((d) => {
+                    const ar = d.width / d.height;
+                    return ar >= 1
+                      ? { ...d, width: v, height: Math.round(v / ar) }
+                      : { ...d, width: Math.round(v * ar), height: v };
+                  })}
+                />
+                <SliderField
+                  label="Aspect ratio"
+                  value={design.width / design.height}
+                  min={0.3}
+                  max={3.5}
+                  step={0.05}
+                  fixed={2}
+                  onChange={(ar) => setDesign((d) => {
+                    const size = Math.max(d.width, d.height);
+                    return ar >= 1
+                      ? { ...d, width: size, height: Math.round(size / ar) }
+                      : { ...d, width: Math.round(size * ar), height: size };
+                  })}
+                />
               </>
             )}
             <SliderField label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} fixed={1}

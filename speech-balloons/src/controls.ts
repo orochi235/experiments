@@ -13,9 +13,7 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
   rectangle: [
     { key: 'radius', label: 'Corner radius', kind: 'range', min: 0, max: 80, step: 1, default: 28 },
   ],
-  oval: [
-    { key: 'eccentricity', label: 'Eccentricity', kind: 'range', min: 0.4, max: 2.5, step: 0.05, default: 1.4 },
-  ],
+  oval: [],
 };
 
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {

@@ -102,15 +102,11 @@ export function buildRoundedRect(boxW: number, boxH: number, radius: number): Ba
 
 // --- Ellipse / Oval -------------------------------------------------------
 
-export function buildEllipse(boxW: number, boxH: number, eccentricity: number): BaseSampler {
-  const ecc = Math.max(0.1, Math.min(eccentricity, 10));
-  let rx = (boxW / 2) * Math.sqrt(ecc);
-  let ry = (boxH / 2) / Math.sqrt(ecc);
-  const sx = Math.min(1, (boxW / 2) / rx);
-  const sy = Math.min(1, (boxH / 2) / ry);
-  const s = Math.min(sx, sy);
-  rx *= s;
-  ry *= s;
+export function buildEllipse(boxW: number, boxH: number): BaseSampler {
+  // Inscribe the ellipse in the box; oval-ness comes from the body's aspect
+  // ratio, not a separate eccentricity param.
+  const rx = boxW / 2;
+  const ry = boxH / 2;
   const cx = boxW / 2;
   const cy = boxH / 2;
 
@@ -160,8 +156,8 @@ export function buildBaseSampler(base: BalloonBase, params: ParamBag, boxW: numb
     const r = (params.radius as number) ?? 24;
     return buildRoundedRect(boxW, boxH, r);
   }
-  const ecc = (params.eccentricity as number) ?? 1.4;
-  return buildEllipse(boxW, boxH, ecc);
+  void params;
+  return buildEllipse(boxW, boxH);
 }
 
 // --- Tail attachment: angle / side+position → arc length s ----------------
