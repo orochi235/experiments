@@ -79,8 +79,11 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'offset', label: 'Offset along perimeter', kind: 'range', min: -1, max: 1, step: 0.01, default: 0 },
     { key: 'radial', label: 'Radial offset (in/out)', kind: 'range', min: -40, max: 60, step: 0.5, default: 0 },
     { kind: 'header', label: 'Shape' },
-    { key: 'length', label: 'Length', kind: 'range', min: 6, max: 200, step: 0.5, default: 50 },
-    { key: 'baseWidth', label: 'Base width', kind: 'range', min: 2, max: 160, step: 0.5, default: 40 },
+    // Single magnitude. Each shape applies its own natural width factor (classic
+    // 0.8, bubbles 0.23, lightning 0.06) so size+weight=1 looks sensible across all.
+    { key: 'size', label: 'Size', kind: 'range', min: 8, max: 220, step: 0.5, default: 60 },
+    // Width multiplier on the shape's natural width factor. 1 = natural, <1 thinner, >1 fatter.
+    { key: 'weight', label: 'Weight', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
     { key: 'taper', label: 'Taper', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
     { key: 'arc', label: 'Arc (lateral bend)', kind: 'range', min: -1, max: 1, step: 0.02, default: 0 },
     { kind: 'header', label: 'Bubbles', hideWhen: (p) => p.shape !== 'bubbles' },

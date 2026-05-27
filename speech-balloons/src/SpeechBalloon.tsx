@@ -37,6 +37,30 @@ function measureTextWidth(text: string, fontPx: number, fontFamily: string): num
   return ctx.measureText(text).width;
 }
 
+// Natural width-to-length factor per tail shape. Multiplied by `weight` and
+// `size` to derive the absolute `baseWidth` that the geometry helpers consume.
+const TAIL_WIDTH_FACTOR: Record<TailShape, number> = {
+  classic: 0.8,
+  bubbles: 0.23,
+  lightning: 0.06,
+};
+
+// Resolve a tail effect's params into the (length, baseWidth) the geometry
+// layer wants. Reads `size` and `weight` from params; falls back to the legacy
+// `length`/`baseWidth` shape so older snapshots still render.
+function tailDims(params: ParamBag, shape: TailShape): { length: number; baseWidth: number } {
+  const size = (params.size as number) ?? (params.length as number) ?? 60;
+  const weight = (params.weight as number) ?? 1;
+  const naturalFactor = TAIL_WIDTH_FACTOR[shape];
+  const derivedWidth = size * naturalFactor * weight;
+  // If a legacy `baseWidth` is present and no `weight` was provided, prefer the
+  // legacy value to preserve old-snapshot appearance.
+  const baseWidth = params.weight === undefined && typeof params.baseWidth === 'number'
+    ? (params.baseWidth as number)
+    : derivedWidth;
+  return { length: size, baseWidth };
+}
+
 // --- Color mixing (used by the aqua paint-server mode) ------------------
 
 type RGB = [number, number, number];
@@ -185,10 +209,11 @@ export function SpeechBalloon({ design, runtime }: Props) {
       const projection = ((eff.params.projection as TailProjection) ?? 'radial') as TailProjection;
       const angle = (eff.params.angle as number) ?? 115;
       const sc = attachmentS(projection, angle, sampler, W, H, eff.params);
+      const dims = tailDims(eff.params, 'classic');
       const cfg = {
         sc,
-        halfBase: ((eff.params.baseWidth as number) ?? 40) / 2,
-        length: (eff.params.length as number) ?? 50,
+        halfBase: dims.baseWidth / 2,
+        length: dims.length,
         taper: (eff.params.taper as number) ?? 1,
         arc: (eff.params.arc as number) ?? 0,
         radial: (eff.params.radial as number) ?? 0,
@@ -205,13 +230,14 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const polys: Polygon[] = [bodyPolygon];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'bubbles') continue;
+      const dims = tailDims(rt.params, 'bubbles');
       const bubbles = buildBubbles(
         rt.attach,
         (rt.params.count as number) ?? 3,
-        (rt.params.baseWidth as number) ?? 16,
+        dims.baseWidth,
         (rt.params.taper as number) ?? 0.7,
         (rt.params.gap as number) ?? 0.15,
-        (rt.params.length as number) ?? 70,
+        dims.length,
         (rt.params.arc as number) ?? 0,
       );
       for (const b of bubbles) polys.push(circleToPolygon(b.cx, b.cy, b.r));
@@ -230,13 +256,14 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const out: Array<{ cx: number; cy: number; r: number }> = [];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'bubbles') continue;
+      const dims = tailDims(rt.params, 'bubbles');
       const bubbles = buildBubbles(
         rt.attach,
         (rt.params.count as number) ?? 3,
-        (rt.params.baseWidth as number) ?? 16,
+        dims.baseWidth,
         (rt.params.taper as number) ?? 0.7,
         (rt.params.gap as number) ?? 0.15,
-        (rt.params.length as number) ?? 70,
+        dims.length,
         (rt.params.arc as number) ?? 0,
       );
       out.push(...bubbles);
@@ -250,15 +277,16 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const out: string[] = [];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'lightning') continue;
+      const dims = tailDims(rt.params, 'lightning');
       const pts = buildLightning(
         rt.attach,
-        (rt.params.length as number) ?? 80,
+        dims.length,
         (rt.params.segments as number) ?? 5,
         (rt.params.jaggedness as number) ?? 0.45,
         (rt.params.seed as number) ?? 7,
         (rt.params.arc as number) ?? 0,
       );
-      const halfW = Math.max(0.5, ((rt.params.baseWidth as number) ?? 4) / 2);
+      const halfW = Math.max(0.5, dims.baseWidth / 2);
       const ribbon = inflateOpenPolyline(pts, halfW, 'round', 'round');
       out.push(polygonsToSvgPath(ribbon));
     }
@@ -273,7 +301,8 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const reach = useMemo(() => {
     let max = 60;
     for (const eff of tailEffects) {
-      max = Math.max(max, (eff.params.length as number) ?? 50);
+      const size = (eff.params.size as number) ?? (eff.params.length as number) ?? 50;
+      max = Math.max(max, size);
     }
     return max + 30;
   }, [tailEffects]);
