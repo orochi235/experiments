@@ -153,7 +153,10 @@ export function buildEllipse(boxW: number, boxH: number): BaseSampler {
 
 export function buildBaseSampler(base: BalloonBase, params: ParamBag, boxW: number, boxH: number): BaseSampler {
   if (base === 'rectangle') {
-    const r = (params.radius as number) ?? 24;
+    // `roundness` is a fraction (0..1) of half the shorter edge so the corner
+    // shape stays consistent across body sizes and aspect ratios.
+    const roundness = Math.max(0, Math.min(1, (params.roundness as number) ?? 0.5));
+    const r = (Math.min(boxW, boxH) / 2) * roundness;
     return buildRoundedRect(boxW, boxH, r);
   }
   void params;

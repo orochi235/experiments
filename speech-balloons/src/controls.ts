@@ -11,7 +11,8 @@ export type LabControl =
 
 export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
   rectangle: [
-    { key: 'radius', label: 'Corner radius', kind: 'range', min: 0, max: 80, step: 1, default: 28 },
+    // Fraction of half the shorter edge: 0 = sharp corners, 1 = pill shape.
+    { key: 'roundness', label: 'Roundness', kind: 'range', min: 0, max: 1, step: 0.01, default: 0.5 },
   ],
   oval: [],
 };
