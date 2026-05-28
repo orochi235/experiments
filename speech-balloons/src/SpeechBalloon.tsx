@@ -387,7 +387,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
     return { x1, y1, x2, y2, bodyStops };
   }, [fillRender.mode, fillRender.lightAngle, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
 
-  const ringsHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(() => {
+  const ringsHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number; blurSigma: number } | null>(() => {
     if (fillRender.mode !== 'bevel-rings') return null;
     const bb = polysBBox(bodyAndBubblesPolys);
     if (bb.w <= 0 || bb.h <= 0) return null;
@@ -397,6 +397,9 @@ export function SpeechBalloon({ design, runtime }: Props) {
     // doesn't always collapse to empty. Each ring covers (i*step, (i+1)*step).
     const maxInset = Math.min(bb.w, bb.h) / 2;
     const step = maxInset / rings;
+    // Smoothing is a fraction of the step distance, so the blur always covers
+    // ~N rings regardless of body size or ring count.
+    const blurSigma = Math.max(0.01, fillRender.smoothing * step);
 
     // Painter's algorithm: draw outer-first, inner-last. The deepest ring's
     // brightness (closest to 255) wins where it overlaps. Grayscale = distance.
@@ -414,8 +417,8 @@ export function SpeechBalloon({ design, runtime }: Props) {
       paths.join('') +
       `</svg>`;
     const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-    return { dataUrl, ...bb };
-  }, [fillRender.mode, fillRender.rings, bodyAndBubblesPolys]);
+    return { dataUrl, ...bb, blurSigma };
+  }, [fillRender.mode, fillRender.rings, fillRender.smoothing, bodyAndBubblesPolys]);
 
   const dtHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(() => {
     if (fillRender.mode !== 'bevel-dt') return null;
@@ -481,7 +484,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
                         0.333 0.333 0.333 0 0"
                 result="ringsAlpha"
               />
-              <feGaussianBlur in="ringsAlpha" stdDeviation={fillRender.smoothing} result="heightmap" />
+              <feGaussianBlur in="ringsAlpha" stdDeviation={ringsHeightmap.blurSigma} result="heightmap" />
             </>
           )}
           {fillRender.mode === 'bevel-dt' && dtHeightmap && (

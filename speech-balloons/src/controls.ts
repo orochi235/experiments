@@ -59,8 +59,10 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode === 'aqua' },
 
     { kind: 'header', label: 'Rings (bevel-rings)', hideWhen: (p) => p.mode !== 'bevel-rings' },
-    { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 48, step: 1, default: 20, hideWhen: (p) => p.mode !== 'bevel-rings' },
-    { key: 'smoothing', label: 'Smoothing (px)', kind: 'range', min: 0, max: 4, step: 0.1, default: 1.2, hideWhen: (p) => p.mode !== 'bevel-rings' },
+    { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 64, step: 1, default: 28, hideWhen: (p) => p.mode !== 'bevel-rings' },
+    // Fraction of one ring's step distance. 0 = no blur (visible bands).
+    // 1 ≈ adjacent rings merge. 3+ = soft. Auto-scales with body size and ring count.
+    { key: 'smoothing', label: 'Smoothing (×step)', kind: 'range', min: 0, max: 5, step: 0.05, default: 1.6, hideWhen: (p) => p.mode !== 'bevel-rings' },
 
     { kind: 'header', label: 'Blur (bevel-blur)', hideWhen: (p) => p.mode !== 'bevel-blur' },
     { key: 'blur', label: 'Blur (σ)', kind: 'range', min: 1, max: 60, step: 0.5, default: 14, hideWhen: (p) => p.mode !== 'bevel-blur' },
