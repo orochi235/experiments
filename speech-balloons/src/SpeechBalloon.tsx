@@ -499,17 +499,25 @@ export function SpeechBalloon({ design, runtime }: Props) {
             />
           )}
 
+          {/* Step 1b: smooth 8-bit alpha quantization in the heightmap. Without
+              this, adjacent alpha levels (1/255 apart) show as visible contour
+              bands once the lighting takes spatial derivatives. */}
+          <feGaussianBlur in="heightmap" stdDeviation="1.2" result="heightmapSmooth" />
+
           {/* Step 2: remap heightmap alpha through the contour curve. */}
-          <feComponentTransfer in="heightmap" result="profiled">
+          <feComponentTransfer in="heightmapSmooth" result="profiled">
             <feFuncA type="table" tableValues={fillRender.contourTable} />
           </feComponentTransfer>
 
-          {/* Step 3: diffuse lighting from a distant light. */}
+          {/* Step 3: diffuse lighting from a distant light. kernelUnitLength
+              locks the surface-normal derivative to user-space units so zooming
+              the SVG doesn't change perceived specular intensity. */}
           <feDiffuseLighting
             in="profiled"
             surfaceScale={fillRender.surfaceScale}
             diffuseConstant={fillRender.diffuse}
             lightingColor={fillRender.lightColor}
+            kernelUnitLength="1 1"
             result="diffuse"
           >
             <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
@@ -527,6 +535,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
             specularConstant={fillRender.specular}
             specularExponent={fillRender.shininess}
             lightingColor={fillRender.specularColor}
+            kernelUnitLength="1 1"
             result="specular"
           >
             <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
