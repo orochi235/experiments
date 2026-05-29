@@ -27,7 +27,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: interstellar-horizons/package-lock.json
+          cache-dependency-path: |
+            interstellar-horizons/package-lock.json
+            speech-balloons/package-lock.json
 
       # Install: keep NODE_ENV unset here so devDependencies (vite, etc.) are
       # actually installed. npm ci with NODE_ENV=production silently skips them.
@@ -35,37 +37,48 @@ jobs:
         working-directory: interstellar-horizons
         run: npm ci
 
+      - name: Install speech-balloons deps
+        working-directory: speech-balloons
+        run: npm ci
+
       # Build: NODE_ENV=production triggers the base-path branch in
-      # vite.config.js.
+      # each experiment's vite.config.
       - name: Build interstellar-horizons
         working-directory: interstellar-horizons
         env:
           NODE_ENV: production
         run: npm run build
 
+      - name: Build speech-balloons
+        working-directory: speech-balloons
+        env:
+          NODE_ENV: production
+        run: npm run build
+
       # Assemble the Pages artifact: every top-level entry EXCEPT the vite
-      # source dir, the legacy sky-color-gl dir, and the usual git/CI dirs;
-      # then drop the built dist into _site/interstellar-horizons/.
-      # Explicit shell loop (avoids the rsync --exclude pattern matching
-      # ambiguity that ate the previous attempt).
+      # source dirs, the legacy sky-color-gl dir, and the usual git/CI dirs;
+      # then drop each experiment's built dist into the corresponding
+      # _site/<experiment>/ folder.
       - name: Assemble artifact
         run: |
           mkdir -p _site
           shopt -s dotglob
           for item in *; do
             case "$item" in
-              _site|interstellar-horizons|sky-color-gl) continue ;;
+              _site|interstellar-horizons|speech-balloons|sky-color-gl) continue ;;
             esac
             cp -r "$item" _site/
           done
           mkdir -p _site/interstellar-horizons
           cp -rT interstellar-horizons/dist _site/interstellar-horizons
+          mkdir -p _site/speech-balloons
+          cp -rT speech-balloons/dist _site/speech-balloons
           echo "--- assembled _site ---"
           find _site -maxdepth 3 -type d | sort
-          echo "--- _site/interstellar-horizons ---"
-          ls -la _site/interstellar-horizons
-          echo "--- head of deployed index.html ---"
-          head -12 _site/interstellar-horizons/index.html
+          echo "--- _site/speech-balloons ---"
+          ls -la _site/speech-balloons
+          echo "--- head of deployed speech-balloons index.html ---"
+          head -12 _site/speech-balloons/index.html
 
       - uses: actions/configure-pages@v5
 

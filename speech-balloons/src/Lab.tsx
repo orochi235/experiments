@@ -189,7 +189,7 @@ export function Lab() {
     <div className="lab">
       <header className="toolbar">
         <div className="brand">
-          <h1>Speech Balloon Lab</h1>
+          <h1>{`I'll take "Balloons" for $600, Alex`}</h1>
         </div>
         <div className="toolbar-group">
           <label className="field">
