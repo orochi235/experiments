@@ -23,8 +23,20 @@ export type Polygon = Point[];
 /** Boolean union of multiple polygons → one or more output polygons. */
 export function unionPolygons(polys: Polygon[]): Polygon[] {
   if (polys.length === 0) return [];
-  if (polys.length === 1) return [polys[0]];
-  const result: PathsD = unionD(polys as PathD[], [], FillRule.NonZero, PRECISION);
+  // Drop any polygon containing non-finite coords — clipper2 multiplies
+  // every coord by 10^PRECISION and throws if the result exceeds
+  // Number.MAX_SAFE_INTEGER. A single NaN/Infinity slipping in from a
+  // caller would crash the whole render; better to silently skip it.
+  const safe = polys.filter((poly) => {
+    if (poly.length < 3) return false;
+    for (const p of poly) {
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return false;
+    }
+    return true;
+  });
+  if (safe.length === 0) return [];
+  if (safe.length === 1) return [safe[0]];
+  const result: PathsD = unionD(safe as PathD[], [], FillRule.NonZero, PRECISION);
   return result.filter((p) => p.length >= 3).map((p) => p.map((pt) => ({ x: pt.x, y: pt.y })));
 }
 

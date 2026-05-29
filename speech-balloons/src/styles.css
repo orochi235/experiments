@@ -50,9 +50,9 @@ body {
   font-family: var(--font-sans);
   color: var(--fg);
   background:
-    radial-gradient(ellipse 60% 80% at 18% 30%, rgba(150, 80, 200, 0.22), transparent 70%),
-    radial-gradient(ellipse 55% 90% at 78% 70%, rgba(220, 100, 140, 0.16), transparent 65%),
-    radial-gradient(ellipse 50% 70% at 50% 50%, rgba(60, 110, 200, 0.18), transparent 75%),
+    radial-gradient(ellipse 45% 55% at 34% 22%, rgba(255, 230, 80, 0.20), transparent 70%),
+    radial-gradient(ellipse 45% 55% at 30% 84%, rgba(60, 220, 230, 0.20), transparent 70%),
+    radial-gradient(ellipse 45% 55% at 89% 50%, rgba(255, 60, 200, 0.20), transparent 70%),
     radial-gradient(ellipse at center, var(--bg-1) 0%, var(--bg-0) 100%);
   background-attachment: fixed;
   overflow: hidden;
@@ -441,13 +441,10 @@ input[type=range]::-moz-range-thumb {
   border-radius: var(--radius-sm);
   padding: 8px 10px;
 }
-.curve-editor {
+.curve-editor-host {
   width: 100%;
-  height: 110px;
   border-radius: 4px;
-  display: block;
-  user-select: none;
-  touch-action: none;
+  overflow: hidden;
 }
 .curve-readouts {
   display: grid;
@@ -477,4 +474,23 @@ input[type=range]::-moz-range-thumb {
   font-weight: 500;
   font-size: 0.78rem;
   line-height: 1;
+}
+.curve-flip-btn {
+  display: block;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font: 400 0.72rem/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+.curve-flip-btn:hover {
+  background: rgba(126, 200, 227, 0.08);
+  color: var(--accent);
+  border-color: var(--accent);
 }

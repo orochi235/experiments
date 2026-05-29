@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SpeechBalloon } from './SpeechBalloon';
+import { CurveEditor, type ControlPoint } from './CurveEditor';
 import {
   BASE_CONTROLS,
   EFFECT_CONTROLS,
@@ -235,11 +236,11 @@ export function Lab() {
           </label>
         </div>
         <div className="toolbar-group right">
-          <button className="icon-btn" onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
-            <UndoIcon />
+          <button onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
+            Undo
           </button>
-          <button className="icon-btn" onClick={redo} title="Redo (⌘⇧Z)" aria-label="Redo">
-            <RedoIcon />
+          <button onClick={redo} title="Redo (⌘⇧Z)" aria-label="Redo">
+            Redo
           </button>
           <button onClick={exportSnapshot} title="Copy snapshot JSON to clipboard">
             Export
@@ -265,6 +266,8 @@ export function Lab() {
             onChange={updateEffectParam}
             onDragStart={setDraggingId}
             onDragEnd={() => setDraggingId(null)}
+            bodyW={design.width}
+            bodyH={design.height}
           />
         </aside>
 
@@ -379,6 +382,8 @@ interface LayerStackProps {
   onChange: (id: number, key: string, value: ParamValue) => void;
   onDragStart: (id: number | null) => void;
   onDragEnd: () => void;
+  bodyW?: number;
+  bodyH?: number;
 }
 function LayerStack({
   title,
@@ -393,6 +398,8 @@ function LayerStack({
   onChange,
   onDragStart,
   onDragEnd,
+  bodyW,
+  bodyH,
 }: LayerStackProps) {
   // dropIndicator: { id, position } where `id` is the effect being hovered over
   const [dropHint, setDropHint] = useState<{ id: number; position: 'before' | 'after' } | null>(null);
@@ -449,6 +456,8 @@ function LayerStack({
                 onReorder(draggingId, eff.id, position);
                 setDropHint(null);
               }}
+              bodyW={bodyW}
+              bodyH={bodyH}
             />
             {showHintAfter && <div className="drop-hint" />}
           </div>
@@ -471,6 +480,8 @@ interface EffectCardProps {
   onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
+  bodyW?: number;
+  bodyH?: number;
 }
 function EffectCard({
   effect,
@@ -484,6 +495,8 @@ function EffectCard({
   onDragOver,
   onDragLeave,
   onDrop,
+  bodyW,
+  bodyH,
 }: EffectCardProps) {
   // Drag is opt-in: the card is only `draggable` while the user is pressing the
   // ⋮⋮ handle. Without this, the whole card swallows pointer events to inner
@@ -534,7 +547,7 @@ function EffectCard({
       </div>
       {expanded && (
         <div className="effect-body">
-          <ControlList controls={EFFECT_CONTROLS[effect.kind]} params={effect.params} onChange={onChange} />
+          <ControlList controls={EFFECT_CONTROLS[effect.kind]} params={effect.params} onChange={onChange} bodyW={bodyW} bodyH={bodyH} />
         </div>
       )}
     </div>
@@ -574,177 +587,88 @@ function SliderField({ label, value, min, max, step, fixed, onChange }: SliderFi
 
 interface CurveFieldProps {
   values: number[];
-  labels: string[];
   min: number;
   max: number;
   step: number;
   onChange: (values: number[]) => void;
 }
-function CurveField({ values, labels, min, max, step, onChange }: CurveFieldProps) {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
+function CurveField({ values, min, max, step, onChange }: CurveFieldProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
 
-  // values is interleaved [x0, y0, x1, y1, ...]; pair count = values.length / 2.
-  const points = useMemo(() => {
-    const out: Array<{ x: number; y: number }> = [];
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const obs = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? el.clientWidth;
+      setWidth(w);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const points: ControlPoint[] = useMemo(() => {
+    const out: ControlPoint[] = [];
     for (let i = 0; i + 1 < values.length; i += 2) out.push({ x: values[i], y: values[i + 1] });
     return out;
   }, [values]);
-  const N = points.length;
 
-  const VBW = 100;
-  const VBH = 80;
-  const padX = 4;
-  const padTop = 4;
-  const padBot = 4;
-  const innerW = VBW - 2 * padX;
-  const innerH = VBH - padTop - padBot;
-
-  const toCoord = (x: number, y: number) => ({
-    x: padX + x * innerW,
-    y: padTop + (1 - (y - min) / (max - min)) * innerH,
-  });
-
-  const fromClient = (clientX: number, clientY: number) => {
-    const svg = svgRef.current;
-    if (!svg) return { x: 0, y: 0 };
-    const rect = svg.getBoundingClientRect();
-    const svgX = ((clientX - rect.left) / rect.width) * VBW;
-    const svgY = ((clientY - rect.top) / rect.height) * VBH;
-    const xNorm = Math.max(0, Math.min(1, (svgX - padX) / innerW));
-    const yNorm = Math.max(0, Math.min(1, 1 - (svgY - padTop) / innerH));
-    const y = min + yNorm * (max - min);
-    const ySnap = Math.round(y / step) * step;
-    return { x: xNorm, y: Math.max(min, Math.min(max, ySnap)) };
-  };
-
-  const handlePointerDown = (i: number) => (e: React.PointerEvent<SVGCircleElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    (e.target as SVGCircleElement).setPointerCapture(e.pointerId);
-    setDragIdx(i);
-  };
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (dragIdx === null) return;
-    const { x: rawX, y } = fromClient(e.clientX, e.clientY);
-    // Constrain X to stay strictly between neighbors (monotone order).
-    const eps = 0.001;
-    const leftBound = dragIdx === 0 ? 0 : points[dragIdx - 1].x + eps;
-    const rightBound = dragIdx === N - 1 ? 1 : points[dragIdx + 1].x - eps;
-    const x = Math.max(leftBound, Math.min(rightBound, rawX));
-    if (points[dragIdx].x === x && points[dragIdx].y === y) return;
-    const next = values.slice();
-    next[dragIdx * 2] = x;
-    next[dragIdx * 2 + 1] = y;
-    onChange(next);
-  };
-  const handlePointerEnd = () => setDragIdx(null);
-  const handleDoubleClick = (i: number) => () => {
-    const next = values.slice();
-    next[i * 2] = N > 1 ? i / (N - 1) : 0;
-    next[i * 2 + 1] = 0;
-    onChange(next);
-  };
-
-  // Smooth cubic-Bezier path through the points, using Hermite tangents
-  // computed by finite differences. Matches the interpolation used downstream
-  // for the SVG gradient, so the editor preview is honest.
-  const smoothPath = (() => {
-    if (N < 2) return '';
-    const tangents = points.map((p, i) => {
-      if (i === 0) return (points[1].y - p.y) / Math.max(1e-3, points[1].x - p.x);
-      if (i === N - 1) return (p.y - points[N - 2].y) / Math.max(1e-3, p.x - points[N - 2].x);
-      return (points[i + 1].y - points[i - 1].y) / Math.max(1e-3, points[i + 1].x - points[i - 1].x);
-    });
-    let d = '';
-    for (let i = 0; i < N - 1; i++) {
-      const p0 = points[i];
-      const p1 = points[i + 1];
-      const h = p1.x - p0.x;
-      const c1 = toCoord(p0.x + h / 3, p0.y + (h * tangents[i]) / 3);
-      const c2 = toCoord(p1.x - h / 3, p1.y - (h * tangents[i + 1]) / 3);
-      const end = toCoord(p1.x, p1.y);
-      if (i === 0) {
-        const start = toCoord(p0.x, p0.y);
-        d += `M ${start.x} ${start.y} `;
-      }
-      d += `C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${end.x} ${end.y} `;
+  const handleChange = useCallback((next: ControlPoint[]) => {
+    const flat: number[] = new Array(next.length * 2);
+    for (let i = 0; i < next.length; i++) {
+      const ySnap = Math.round(next[i].y / step) * step;
+      const y = Math.max(min, Math.min(max, ySnap));
+      flat[i * 2] = next[i].x;
+      flat[i * 2 + 1] = y;
     }
-    return d.trim();
-  })();
+    onChange(flat);
+  }, [onChange, min, max, step]);
 
-  const zeroNorm = (0 - min) / (max - min);
-  const zeroY = padTop + (1 - zeroNorm) * innerH;
+  // Flip the curve left-to-right: each point at (x, y) becomes (1 - x, y);
+  // then resort so x is monotonic. Pairs swap rim ↔ center semantics.
+  const handleFlip = useCallback(() => {
+    const flipped: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i + 1 < values.length; i += 2) {
+      flipped.push({ x: 1 - values[i], y: values[i + 1] });
+    }
+    flipped.sort((a, b) => a.x - b.x);
+    const out: number[] = [];
+    for (const p of flipped) out.push(p.x, p.y);
+    onChange(out);
+  }, [values, onChange]);
 
+  const HEIGHT = 110;
   return (
     <div className="curve-field">
-      <svg
-        ref={svgRef}
-        className="curve-editor"
-        viewBox={`0 0 ${VBW} ${VBH}`}
-        preserveAspectRatio="none"
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
-      >
-        <rect x="0" y="0" width={VBW} height={VBH} fill="rgba(0,0,0,0.35)" />
-        {zeroNorm > 0 && zeroNorm < 1 && (
-          <line
-            x1={padX}
-            y1={zeroY}
-            x2={VBW - padX}
-            y2={zeroY}
-            stroke="rgba(255,255,255,0.18)"
-            strokeDasharray="2 2"
-            strokeWidth="1"
-            vectorEffect="non-scaling-stroke"
+      <div ref={wrapRef} className="curve-editor-host">
+        {width > 0 && (
+          <CurveEditor
+            value={points}
+            onChange={handleChange}
+            domain="1d"
+            constrain="function"
+            xRange={[0, 1]}
+            yRange={[min, max]}
+            width={width}
+            height={HEIGHT}
+            endpoints="pinned-x"
+            addPointMode="click-curve"
+            minPoints={2}
+            grid={{}}
           />
         )}
-        <path
-          d={smoothPath}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-        {points.map((p, i) => {
-          const c = toCoord(p.x, p.y);
-          const isActive = dragIdx === i;
-          return (
-            <g key={i}>
-              <circle
-                cx={c.x}
-                cy={c.y}
-                r="6"
-                fill="transparent"
-                style={{ cursor: 'move', touchAction: 'none' }}
-                onPointerDown={handlePointerDown(i)}
-                onDoubleClick={handleDoubleClick(i)}
-              />
-              <circle
-                cx={c.x}
-                cy={c.y}
-                r={isActive ? 3.5 : 3}
-                fill={isActive ? 'var(--accent)' : '#fff'}
-                stroke="var(--accent)"
-                strokeWidth="1.5"
-                vectorEffect="non-scaling-stroke"
-                pointerEvents="none"
-              />
-            </g>
-          );
-        })}
-      </svg>
+      </div>
       <div className="curve-readouts">
         {points.map((p, i) => (
-          <div key={i} className={`curve-stop-readout${dragIdx === i ? ' is-active' : ''}`}>
-            <span>{labels[i] ?? `Stop ${i}`}</span>
+          <div key={i} className="curve-stop-readout">
             <em>{p.y.toFixed(step < 1 ? 2 : 0)}</em>
           </div>
         ))}
       </div>
+      <button type="button" className="curve-flip-btn" onClick={handleFlip}>
+        Flip horizontally
+      </button>
     </div>
   );
 }
@@ -753,8 +677,10 @@ interface ControlListProps {
   controls: LabControl[];
   params: ParamBag;
   onChange: (key: string, value: ParamValue) => void;
+  bodyW?: number;
+  bodyH?: number;
 }
-function ControlList({ controls, params, onChange }: ControlListProps) {
+function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListProps) {
   return (
     <>
       {controls.map((c, idx) => {
@@ -766,13 +692,17 @@ function ControlList({ controls, params, onChange }: ControlListProps) {
         const label = c.label ?? c.key;
         const value = params[c.key];
         if (c.kind === 'range') {
+          const dynMax = c.maxFn && bodyW !== undefined && bodyH !== undefined
+            ? c.maxFn({ W: bodyW, H: bodyH })
+            : c.max;
+          const clampedValue = Math.min(Number(value ?? c.default), dynMax);
           return (
             <SliderField
               key={c.key}
               label={label}
-              value={Number(value ?? c.default)}
+              value={clampedValue}
               min={c.min}
-              max={c.max}
+              max={dynMax}
               step={c.step}
               fixed={c.step < 1 ? 2 : 0}
               onChange={(v) => onChange(c.key, v)}
@@ -810,15 +740,16 @@ function ControlList({ controls, params, onChange }: ControlListProps) {
         if (c.kind === 'curve') {
           const arr = Array.isArray(value) ? (value as number[]) : c.defaults;
           return (
-            <CurveField
-              key={c.key}
-              values={arr}
-              labels={c.labels}
-              min={c.min}
-              max={c.max}
-              step={c.step}
-              onChange={(vals) => onChange(c.key, vals)}
-            />
+            <div key={c.key} className="curve-block">
+              {c.label && <h3 className="curve-label">{c.label}</h3>}
+              <CurveField
+                values={arr}
+                min={c.min}
+                max={c.max}
+                step={c.step}
+                onChange={(vals) => onChange(c.key, vals)}
+              />
+            </div>
           );
         }
         return (
@@ -832,22 +763,6 @@ function ControlList({ controls, params, onChange }: ControlListProps) {
   );
 }
 
-function UndoIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 7v6h6" />
-      <path d="M3 13a9 9 0 1 0 3-7.7L3 8" />
-    </svg>
-  );
-}
-function RedoIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 7v6h-6" />
-      <path d="M21 13a9 9 0 1 1-3-7.7L21 8" />
-    </svg>
-  );
-}
 function DragHandleIcon() {
   return (
     <svg width="12" height="16" viewBox="0 0 8 16" fill="currentColor" aria-hidden="true">

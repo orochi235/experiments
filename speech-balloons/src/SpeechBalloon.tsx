@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react';
-import type { DesignState, FillMode, ParamBag, RuntimeState, TailProjection, TailShape } from './types';
+import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingMode, TailShape } from './types';
 import {
   buildBaseSampler,
   composeBodyPoints,
@@ -18,8 +18,7 @@ import {
   circleToPolygon,
   type Polygon,
 } from './clipping';
-import { buildDistanceFieldImage } from './distanceTransform';
-
+import { computeMatPlateau } from './plateauMat';
 interface Props {
   design: DesignState;
   runtime: RuntimeState;
@@ -79,6 +78,89 @@ function mixCss(a: RGB, b: RGB, t: number): string {
   const bl = Math.round(a[2] + (b[2] - a[2]) * t);
   return `rgb(${r} ${g} ${bl})`;
 }
+function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
+function rgbCss(rgb: RGB): string {
+  return `rgb(${Math.round(rgb[0])} ${Math.round(rgb[1])} ${Math.round(rgb[2])})`;
+}
+type HSL = [number, number, number]; // h ∈ [0,1), s ∈ [0,1], l ∈ [0,1]
+function rgbToHsl([r, g, b]: RGB): HSL {
+  const rf = r / 255, gf = g / 255, bf = b / 255;
+  const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === rf) h = (gf - bf) / d + (gf < bf ? 6 : 0);
+  else if (max === gf) h = (bf - rf) / d + 2;
+  else h = (rf - gf) / d + 4;
+  return [h / 6, s, l];
+}
+function hueToRgb(p: number, q: number, t: number): number {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1 / 6) return p + (q - p) * 6 * t;
+  if (t < 1 / 2) return q;
+  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+  return p;
+}
+function hslToRgb([h, s, l]: HSL): RGB {
+  if (s === 0) {
+    const v = l * 255;
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [
+    hueToRgb(p, q, h + 1 / 3) * 255,
+    hueToRgb(p, q, h) * 255,
+    hueToRgb(p, q, h - 1 / 3) * 255,
+  ];
+}
+
+// y ∈ [-1, +1] from the contour curve at ring position t (rim → center).
+// Three shading modes produce concrete fill colors for that ring:
+//
+// - 'multiply' : base × (1 + amount*y), clamped per channel.
+// - 'mix'      : lerp(base, lerp(shadow, highlight, (y+1)/2), amount).
+// - 'lightness': base in HSL with L shifted by amount*y (clamped).
+function shadeColor(
+  baseHex: string,
+  shadowHex: string,
+  highlightHex: string,
+  shading: ShadingMode,
+  amount: number,
+  y: number,
+): string {
+  const base = parseHex(baseHex);
+  if (shading === 'multiply') {
+    const k = 1 + amount * y;
+    return rgbCss([
+      Math.max(0, Math.min(255, base[0] * k)),
+      Math.max(0, Math.min(255, base[1] * k)),
+      Math.max(0, Math.min(255, base[2] * k)),
+    ]);
+  }
+  if (shading === 'mix') {
+    const sh = parseHex(shadowHex);
+    const hi = parseHex(highlightHex);
+    const t = (y + 1) / 2;
+    const target: RGB = [
+      sh[0] + (hi[0] - sh[0]) * t,
+      sh[1] + (hi[1] - sh[1]) * t,
+      sh[2] + (hi[2] - sh[2]) * t,
+    ];
+    return rgbCss([
+      base[0] + (target[0] - base[0]) * amount,
+      base[1] + (target[1] - base[1]) * amount,
+      base[2] + (target[2] - base[2]) * amount,
+    ]);
+  }
+  // 'lightness'
+  const hsl = rgbToHsl(base);
+  hsl[2] = clamp01(hsl[2] + amount * y);
+  return rgbCss(hslToRgb(hsl));
+}
 
 // --- Contour curve helpers -----------------------------------------------
 
@@ -132,6 +214,60 @@ function polysBBox(polys: Polygon[]): { x: number; y: number; w: number; h: numb
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
+// Auto outer-corner roundness so the corner-ray (centroid → bbox corner
+// direction) distance from centroid to the OUTER rounded-rect boundary
+// equals the corresponding distance to the INNER rounded-rect boundary
+// plus bevelWidth. The inner shape is the rectangle inset by bw on each
+// edge with the body's base roundness. Binary search numerically (no
+// closed form because both r and the direction interact through the
+// corner-arc circle equation).
+function autoOuterRoundness(W: number, H: number, baseR: number, bw: number): number {
+  const W_in = W - 2 * bw;
+  const H_in = H - 2 * bw;
+  if (W_in <= 0 || H_in <= 0) return baseR;
+  // Use the outer's corner-ray direction (toward the geometric corner of
+  // the outer bbox), shared by both shapes for the ray-cast.
+  const D = Math.sqrt(W * W + H * H);
+  const dx = W / D;
+  const dy = H / D;
+  // Inner corner-arc exit distance along d.
+  const r_in = (Math.min(W_in, H_in) / 2) * baseR;
+  const cx_in = W_in / 2 - r_in;
+  const cy_in = H_in / 2 - r_in;
+  const B_in = -2 * (dx * cx_in + dy * cy_in);
+  const C_in = cx_in * cx_in + cy_in * cy_in - r_in * r_in;
+  const disc_in = B_in * B_in - 4 * C_in;
+  if (disc_in < 0) return baseR;
+  const t_inner = (-B_in + Math.sqrt(disc_in)) / 2;
+  const t_target = t_inner + bw;
+  // Binary search r_o ∈ [0, min(W,H)/2]. Larger r_o → more rounded outer
+  // corner → smaller t_outer. So if computed t > target, r_o needs to
+  // grow.
+  let lo = 0;
+  let hi = Math.min(W, H) / 2;
+  for (let i = 0; i < 60; i++) {
+    const r_o = (lo + hi) / 2;
+    const cx_out = W / 2 - r_o;
+    const cy_out = H / 2 - r_o;
+    const B_out = -2 * (dx * cx_out + dy * cy_out);
+    const C_out = cx_out * cx_out + cy_out * cy_out - r_o * r_o;
+    const disc_out = B_out * B_out - 4 * C_out;
+    if (disc_out < 0) {
+      // ray misses the arc → r_o too small (ray exits via a straight
+      // edge before reaching the corner curve). Need larger r_o.
+      lo = r_o;
+      continue;
+    }
+    const t_outer = (-B_out + Math.sqrt(disc_out)) / 2;
+    if (t_outer > t_target) lo = r_o;
+    else hi = r_o;
+  }
+  const r_o = (lo + hi) / 2;
+  const halfShort = Math.min(W, H) / 2;
+  if (halfShort <= 0) return baseR;
+  return Math.max(0, Math.min(1, r_o / halfShort));
+}
+
 // --- Component -----------------------------------------------------------
 
 export function SpeechBalloon({ design, runtime }: Props) {
@@ -145,16 +281,36 @@ export function SpeechBalloon({ design, runtime }: Props) {
     };
   }, [runtime.fitToContent, runtime.text, runtime.fontFamily, runtime.fontSize, design.width, design.height, design.padX, design.padY]);
 
-  const sampler: BaseSampler = useMemo(
-    () => buildBaseSampler(design.base, design.baseParams, W, H),
-    [design.base, design.baseParams, W, H],
-  );
-
   // Split effects by kind. Multiple tails allowed.
   const fillEffect = design.effects.find((e) => e.kind === 'fill');
   const tailEffects = design.effects.filter((e) => e.kind === 'tail');
   const strokeEffect = design.effects.find((e) => e.kind === 'stroke');
   const shadowEffect = design.effects.find((e) => e.kind === 'shadow');
+
+  // Outer body's effective sampler params. In dome mode on a rectangle
+  // body, the outer corner roundness is AUTO-COMPUTED so the corner-ray
+  // distance from centroid to the outer boundary exceeds the distance
+  // to the inner boundary by exactly bevelWidth (matching the uniform
+  // bw inset that already holds at edge midpoints). The
+  // `outerCornerOffset` slider then adds an additional manual nudge on
+  // top of that auto value.
+  const effectiveBaseParams = useMemo<ParamBag>(() => {
+    if (design.base !== 'rectangle') return design.baseParams;
+    const mode = (fillEffect?.params.mode as string) ?? 'bevel';
+    if (mode !== 'dome') return design.baseParams;
+    const baseR = (design.baseParams.roundness as number) ?? 0.5;
+    const bw = (fillEffect?.params.bevelWidth as number) ?? 22;
+    const manualOffset = (fillEffect?.params.outerCornerOffset as number) ?? 0;
+    const autoR = autoOuterRoundness(W, H, baseR, bw);
+    const final = Math.max(0, Math.min(1, autoR + manualOffset));
+    if (final === baseR) return design.baseParams;
+    return { ...design.baseParams, roundness: final };
+  }, [design.base, design.baseParams, fillEffect, W, H]);
+
+  const sampler: BaseSampler = useMemo(
+    () => buildBaseSampler(design.base, effectiveBaseParams, W, H),
+    [design.base, effectiveBaseParams, W, H],
+  );
 
   // Italic lean: skew about the body's x-center, baked into the body samples
   // before the (classic) tail offset, so the body leans but tails don't.
@@ -174,9 +330,8 @@ export function SpeechBalloon({ design, runtime }: Props) {
   }
   const resolvedTails: ResolvedTail[] = useMemo(() => {
     return tailEffects.map((eff) => {
-      const projection = ((eff.params.projection as TailProjection) ?? 'radial') as TailProjection;
       const angle = (eff.params.angle as number) ?? 115;
-      const sc = attachmentS(projection, angle, sampler, W, H, eff.params);
+      const sc = attachmentS(angle, sampler, W, H);
       const attach = sampler.perimeterAt(sc);
       // Translate the tail along the outward normal so bubbles / lightning can
       // start with a visible gap from the body (or root inside it for radial < 0).
@@ -206,15 +361,14 @@ export function SpeechBalloon({ design, runtime }: Props) {
     for (const eff of tailEffects) {
       const shape = ((eff.params.shape as TailShape) ?? 'classic') as TailShape;
       if (shape !== 'classic') continue;
-      const projection = ((eff.params.projection as TailProjection) ?? 'radial') as TailProjection;
       const angle = (eff.params.angle as number) ?? 115;
-      const sc = attachmentS(projection, angle, sampler, W, H, eff.params);
+      const sc = attachmentS(angle, sampler, W, H);
       const dims = tailDims(eff.params, 'classic');
       const cfg = {
         sc,
         halfBase: dims.baseWidth / 2,
         length: dims.length,
-        taper: (eff.params.taper as number) ?? 1,
+        fillet: (eff.params.fillet as number) ?? 0.5,
         arc: (eff.params.arc as number) ?? 0,
         radial: (eff.params.radial as number) ?? 0,
         totalLen: sampler.totalLen,
@@ -272,9 +426,11 @@ export function SpeechBalloon({ design, runtime }: Props) {
   }, [resolvedTails]);
 
   // Lightning tails: inflate the open polyline by baseWidth/2 to get a filled
-  // ribbon (rounded ends). Each becomes its own path with the same fill paint.
-  const lightningPaths = useMemo(() => {
-    const out: string[] = [];
+  // ribbon (rounded ends). Each becomes its own polygon-set whose SVG path is
+  // derived once; the polygons are kept around so bevel-mode rendering can
+  // build nested insets per ribbon.
+  const lightningRibbons = useMemo(() => {
+    const out: Array<{ polys: Polygon[]; d: string }> = [];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'lightning') continue;
       const dims = tailDims(rt.params, 'lightning');
@@ -288,7 +444,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
       );
       const halfW = Math.max(0.5, dims.baseWidth / 2);
       const ribbon = inflateOpenPolyline(pts, halfW, 'round', 'round');
-      out.push(polygonsToSvgPath(ribbon));
+      out.push({ polys: ribbon, d: polygonsToSvgPath(ribbon) });
     }
     return out;
   }, [resolvedTails]);
@@ -310,44 +466,33 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const uid = useId().replace(/:/g, '');
   const idPrefix = `sb-${uid}`;
   const shadowId = `${idPrefix}-shadow`;
-  const fillFilterId = `${idPrefix}-fill`;
   const aquaBodyId = `${idPrefix}-aqua-body`;
   const aquaGlossId = `${idPrefix}-aqua-gloss`;
 
-  // Resolve fill params + sampled contour table for the lighting filter.
+  // Resolve fill params from the effect's ParamBag, with sensible defaults
+  // for missing keys (e.g. legacy snapshots saved before bevel landed).
   const fillRender = useMemo(() => {
     const p = fillEffect?.params ?? {};
-    const mode = (p.mode as FillMode) ?? 'bevel-rings';
+    const rawMode = (p.mode as string) ?? 'dome';
+    const mode: FillMode = rawMode === 'aqua' ? 'aqua' : rawMode === 'dome' ? 'dome' : 'bevel';
     const base = (p.base as string) ?? '#ffffff';
-    const contour = (p.contour as number[]) ?? [0, -0.05, 0.25, 0.4, 0.5, 0.78, 0.75, 0.95, 1, 1];
-    const cPoints = contourToPoints(contour);
-
-    // Sample the smooth Hermite curve at 33 evenly-spaced X positions; remap
-    // signed Y in [-1, 1] to [0, 1] so feFuncA can use the result as a table.
-    const N = 33;
-    const table: string[] = [];
-    for (let i = 0; i < N; i++) {
-      const t = i / (N - 1);
-      const y = Math.max(-1, Math.min(1, interpolateCurveY(cPoints, t)));
-      table.push(((y + 1) / 2).toFixed(4));
-    }
-
+    const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, -0.5, 0.5, 0, 1, 0.5];
     return {
       mode,
       base,
-      contourTable: table.join(' '),
-      lightAzimuth: (p.lightAzimuth as number) ?? 135,
+      contour,
+      rings: Math.max(2, Math.round((p.rings as number) ?? 32)),
+      shading: ((p.shading as ShadingMode) ?? 'multiply') as ShadingMode,
+      amount: (p.amount as number) ?? 0.6,
+      shadowColor: (p.shadowColor as string) ?? '#000000',
+      highlightColor: (p.highlightColor as string) ?? '#ffffff',
+      lightAzimuth: (p.lightAzimuth as number) ?? 270,
       lightElevation: (p.lightElevation as number) ?? 55,
-      lightColor: (p.lightColor as string) ?? '#ffffff',
-      surfaceScale: (p.surfaceScale as number) ?? 8,
-      diffuse: (p.diffuse as number) ?? 1.0,
-      specular: (p.specular as number) ?? 0.6,
-      shininess: (p.shininess as number) ?? 30,
-      specularColor: (p.specularColor as string) ?? '#ffffff',
-      rings: Math.max(2, Math.round((p.rings as number) ?? 20)),
-      smoothing: (p.smoothing as number) ?? 1.2,
-      blur: (p.blur as number) ?? 14,
-      dtResolution: Math.max(16, Math.round((p.dtResolution as number) ?? 256)),
+      bevelWidth: (p.bevelWidth as number) ?? 22,
+      outerCornerOffset: (p.outerCornerOffset as number) ?? 0,
+      domeGloss: (p.domeGloss as number) ?? 0.35,
+      specStrength: (p.specStrength as number) ?? 0.5,
+      specSize: (p.specSize as number) ?? 18,
       // Aqua-only params
       lightAngle: (p.lightAngle as number) ?? 270,
       glossStrength: (p.glossStrength as number) ?? 0.55,
@@ -387,49 +532,258 @@ export function SpeechBalloon({ design, runtime }: Props) {
     return { x1, y1, x2, y2, bodyStops };
   }, [fillRender.mode, fillRender.lightAngle, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
 
-  const ringsHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number; blurSigma: number } | null>(() => {
-    if (fillRender.mode !== 'bevel-rings') return null;
-    const bb = polysBBox(bodyAndBubblesPolys);
-    if (bb.w <= 0 || bb.h <= 0) return null;
-
+  // Build a stack of nested inset polygons for a polygon set. Each ring is
+  // painter's-algorithm: outer drawn first, inner over the top. Ring colors
+  // come from sampling the contour curve at t = ringIndex / (rings - 1)
+  // (t=0 = rim, t=1 = center) and feeding y(t) ∈ [-1,+1] into the chosen
+  // shading mode against the base color.
+  const buildBevelRings = (polys: Polygon[]): Array<{ d: string; fill: string }> => {
+    if (polys.length === 0) return [];
+    const bb = polysBBox(polys);
+    if (bb.w <= 0 || bb.h <= 0) return [];
     const rings = fillRender.rings;
-    // Inset step: cap at half the shorter bbox dimension so the deepest inset
-    // doesn't always collapse to empty. Each ring covers (i*step, (i+1)*step).
     const maxInset = Math.min(bb.w, bb.h) / 2;
     const step = maxInset / rings;
-    // Smoothing is a fraction of the step distance, so the blur always covers
-    // ~N rings regardless of body size or ring count.
-    const blurSigma = Math.max(0.01, fillRender.smoothing * step);
-
-    // Painter's algorithm: draw outer-first, inner-last. The deepest ring's
-    // brightness (closest to 255) wins where it overlaps. Grayscale = distance.
-    const paths: string[] = [];
+    const cPoints = contourToPoints(fillRender.contour);
+    const out: Array<{ d: string; fill: string }> = [];
     for (let i = 0; i < rings; i++) {
-      const inset = offsetClosedPolygons(bodyAndBubblesPolys, -i * step);
+      const inset = i === 0 ? polys : offsetClosedPolygons(polys, -i * step);
       if (inset.length === 0) break;
       const d = polygonsToSvgPath(inset);
-      const v = Math.round(255 * (i / (rings - 1)));
-      paths.push(`<path d="${d}" fill="rgb(${v},${v},${v})" transform="translate(${-bb.x},${-bb.y})" />`);
+      const t = rings === 1 ? 0 : i / (rings - 1);
+      const y = Math.max(-1, Math.min(1, interpolateCurveY(cPoints, t)));
+      const fill = shadeColor(
+        fillRender.base,
+        fillRender.shadowColor,
+        fillRender.highlightColor,
+        fillRender.shading,
+        fillRender.amount,
+        y,
+      );
+      out.push({ d, fill });
+    }
+    return out;
+  };
+
+  const bodyBevelRings = useMemo(() => {
+    if (fillRender.mode !== 'bevel') return null;
+    return buildBevelRings(bodyAndBubblesPolys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fillRender.mode, fillRender.rings, fillRender.contour, fillRender.shading,
+    fillRender.amount, fillRender.base, fillRender.shadowColor, fillRender.highlightColor,
+    bodyAndBubblesPolys,
+  ]);
+
+  const lightningBevelRings = useMemo(() => {
+    if (fillRender.mode !== 'bevel') return [];
+    return lightningRibbons.map((r) => buildBevelRings(r.polys));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fillRender.mode, fillRender.rings, fillRender.contour, fillRender.shading,
+    fillRender.amount, fillRender.base, fillRender.shadowColor, fillRender.highlightColor,
+    lightningRibbons,
+  ]);
+
+  // Dome mode: a single linear gradient overlay applied to the silhouette,
+  // with stops computed by sampling the cross-section profile across one pass
+  // along the light azimuth. No clipper insets, no rings, no bands. The
+  // gradient axis crosses the silhouette's bbox along the azimuth direction;
+  // bevelWidth (in user units) decides how much of that axis is rim ramp
+  // (sampling the contour curve from t=0..1) vs flat plateau (constant t=1).
+  // Stops are semi-transparent tints in lightColor / shadowColor so the base
+  // color underneath shows through.
+
+  const buildDomeOverlay = (polys: Polygon[], innerPolys: Polygon[]): {
+    basePath: string;
+    overlayPath: string;
+    // MAT-eroded plateau region (silhouette inset by bevelWidth).
+    plateauPath: string;
+    // Uniform fill color for the plateau interior. The plateau's surface
+    // normal is straight up, so N·L = sin(elevation) regardless of
+    // azimuth — sampled into a single fill color so the plateau reads as
+    // a true flat top against the directional rim.
+    plateauColor: string;
+    stops: Array<{ offset: number; color: string; alpha: number }>;
+    gradX1: number; gradY1: number; gradX2: number; gradY2: number;
+    glossStops: Array<{ offset: number; alpha: number }>;
+    specCx: number; specCy: number; specR: number; specAlpha: number;
+  } | null => {
+    if (polys.length === 0) return null;
+    const bb = polysBBox(polys);
+    if (bb.w <= 0 || bb.h <= 0) return null;
+    const cPoints = contourToPoints(fillRender.contour);
+
+    // Azimuth in math convention; SVG y is flipped so 90° = visual up.
+    const az = (fillRender.lightAzimuth * Math.PI) / 180;
+    const el = (fillRender.lightElevation * Math.PI) / 180;
+    const dx = Math.cos(az);
+    const dy = -Math.sin(az);
+
+    // Project the silhouette's bbox corners onto the azimuth axis to find
+    // the lit-most and shadow-most extent (rather than using the bbox
+    // diagonal, which would over-extend the gradient on rotated lights).
+    const cx = bb.x + bb.w / 2;
+    const cy = bb.y + bb.h / 2;
+    const corners: Array<[number, number]> = [
+      [bb.x, bb.y], [bb.x + bb.w, bb.y],
+      [bb.x, bb.y + bb.h], [bb.x + bb.w, bb.y + bb.h],
+    ];
+    let minProj = Infinity, maxProj = -Infinity;
+    for (const [x, y] of corners) {
+      const proj = (x - cx) * dx + (y - cy) * dy;
+      if (proj < minProj) minProj = proj;
+      if (proj > maxProj) maxProj = proj;
+    }
+    // Lit side at maxProj end of axis, shadow at minProj.
+    const litX = cx + dx * maxProj;
+    const litY = cy + dy * maxProj;
+    const shaX = cx + dx * minProj;
+    const shaY = cy + dy * minProj;
+
+    // bevelWidth in user units mapped to a fraction of the gradient axis.
+    // Capped at 0.49 so we always have a sliver of plateau in the middle.
+    const totalExtent = maxProj - minProj;
+    const bevelFrac = totalExtent > 0
+      ? Math.max(0.005, Math.min(0.49, fillRender.bevelWidth / totalExtent))
+      : 0.25;
+
+    const cosEl = Math.cos(el);
+    const sinEl = Math.sin(el);
+    const amount = fillRender.amount;
+
+    const stopColor = (b: number) => (b >= 0 ? fillRender.highlightColor : fillRender.shadowColor);
+    const stopAlpha = (b: number) => Math.max(0, Math.min(1, Math.abs(b) * amount));
+
+    // Sample N+1 stops across the gradient. Each stop's (t, sign) is mapped
+    // from s by bevelFrac: rim bands at the ends ramp t from 0→1; the
+    // plateau in the middle holds t=1.
+    const N = 32;
+    const stops: Array<{ offset: number; color: string; alpha: number }> = [];
+    for (let i = 0; i <= N; i++) {
+      const s = i / N;
+      let t: number;
+      let sign: number;
+      if (s < bevelFrac) {
+        t = s / bevelFrac;       // 0 at lit edge → 1 at end of lit rim
+        sign = 1;
+      } else if (s > 1 - bevelFrac) {
+        t = (1 - s) / bevelFrac; // 1 at start of shadow rim → 0 at shadow edge
+        sign = -1;
+      } else {
+        // Plateau: t pinned at 1. Sign transitions smoothly across the
+        // plateau so the directional component fades through zero.
+        t = 1;
+        const plateauHalfSpan = 0.5 - bevelFrac;
+        sign = plateauHalfSpan > 0 ? (0.5 - s) / plateauHalfSpan : 0;
+      }
+      const eps = 0.02;
+      const tA = Math.max(0, t - eps);
+      const tB = Math.min(1, t + eps);
+      const slope = (interpolateCurveY(cPoints, tB) - interpolateCurveY(cPoints, tA)) / Math.max(1e-3, tB - tA);
+      const norm = Math.sqrt(1 + slope * slope);
+      // Outward normal in (radial-out, vert) = (slope, 1)/norm. Project light
+      // onto the same plane: horizontal = sign × cosEl, vert = sinEl.
+      const b = (sign * slope * cosEl + sinEl) / norm;
+      stops.push({ offset: s, color: stopColor(b), alpha: stopAlpha(b) });
     }
 
-    const svg =
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${bb.w}" height="${bb.h}" viewBox="0 0 ${bb.w} ${bb.h}">` +
-      paths.join('') +
-      `</svg>`;
-    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-    return { dataUrl, ...bb, blurSigma };
-  }, [fillRender.mode, fillRender.rings, fillRender.smoothing, bodyAndBubblesPolys]);
+    // ── Gloss overlay ───────────────────────────────────────────────────
+    // A soft light-tint gradient biased to the lit half. Conceptually a
+    // diffuse Lambert wash from the same 3D light, but rendered as a single
+    // linear gradient with peak alpha tied to domeGloss and falloff biased
+    // toward the shadow side. Width scales with elevation: at el=90° the
+    // gloss spreads broadly (top-down lit cap); at el=0° it concentrates on
+    // the lit rim.
+    const glossPeak = fillRender.domeGloss;
+    // Gloss reach: a fraction of the axis from the lit end that the gloss
+    // covers. Wider for high elevation (broad top-lit cap), narrower for
+    // grazing light (concentrated lit-side highlight).
+    const glossReach = 0.25 + 0.4 * sinEl;
+    const glossStops: Array<{ offset: number; alpha: number }> = [
+      { offset: 0, alpha: glossPeak },
+      { offset: glossReach * 0.6, alpha: glossPeak * 0.35 },
+      { offset: glossReach, alpha: 0 },
+      { offset: 1, alpha: 0 },
+    ];
 
-  const dtHeightmap = useMemo<{ dataUrl: string; x: number; y: number; w: number; h: number } | null>(() => {
-    if (fillRender.mode !== 'bevel-dt') return null;
-    const bb = polysBBox(bodyAndBubblesPolys);
-    if (bb.w <= 0 || bb.h <= 0) return null;
-    const img = buildDistanceFieldImage(bodyPath, bb, fillRender.dtResolution);
-    if (!img) return null;
-    return { dataUrl: img.dataUrl, x: bb.x, y: bb.y, w: bb.w, h: bb.h };
-  }, [fillRender.mode, fillRender.dtResolution, bodyPath, bodyAndBubblesPolys]);
+    // ── Specular spot ───────────────────────────────────────────────────
+    // Phong-style narrow highlight at the reflection point. For an
+    // orthographic view V=(0,0,1), the half-angle vector H lies in the
+    // plane of L and V. Its horizontal projection along azimuth has
+    // magnitude cosEl / |L + V|; its vertical component is (sinEl + 1) /
+    // |L + V|. The dome surface position whose normal best matches H is
+    // where slope_normalized's horizontal component equals H_horiz. We
+    // approximate by placing the spot a fraction of bevelWidth in from the
+    // lit edge along the azimuth axis, modulated by sinEl so high light
+    // raises the spot toward the plateau center.
+    const specT = bevelFrac * 0.6 + (0.5 - bevelFrac * 0.6) * sinEl;
+    const specAxisFrac = specT; // s along gradient axis (0 = lit, 1 = shadow)
+    const specCx = litX + (shaX - litX) * specAxisFrac;
+    const specCy = litY + (shaY - litY) * specAxisFrac;
+    // Brightness at the spec point, used to dim/intensify it depending on
+    // how aligned the surface there is with H. At specT we're at t≈1
+    // (plateau), slope≈0, so the highlight relies almost entirely on
+    // ambient + the cosEl-modulated horizontal of L.
+    const specBrightness = sinEl + (1 - sinEl) * Math.max(0, cosEl);
+    const specAlpha = Math.max(0, Math.min(1, specBrightness * fillRender.specStrength));
+    const specR = Math.max(2, fillRender.specSize);
 
-  const baseColor = fillRender.base;
+    const plateauPath = innerPolys.length > 0 ? polygonsToSvgPath(innerPolys) : '';
+
+    // Plateau lit color: flat top has surface normal straight up, so
+    // N·L = sin(elevation) for any azimuth. The contour curve at t=1
+    // adds a baseline brightness modifier on top. Combined, the plateau
+    // reads as a uniform color slightly lighter or darker than base.
+    const profilePeak = Math.max(-1, Math.min(1, interpolateCurveY(cPoints, 1)));
+    const plateauB = Math.max(-1, Math.min(1, sinEl + profilePeak * 0.5));
+    const baseRgb = parseHex(fillRender.base);
+    const tintRgb = parseHex(plateauB >= 0 ? fillRender.highlightColor : fillRender.shadowColor);
+    const plateauAlpha = Math.max(0, Math.min(1, Math.abs(plateauB) * amount));
+    const plateauColor = `rgb(${Math.round(baseRgb[0] + (tintRgb[0] - baseRgb[0]) * plateauAlpha)} ${Math.round(baseRgb[1] + (tintRgb[1] - baseRgb[1]) * plateauAlpha)} ${Math.round(baseRgb[2] + (tintRgb[2] - baseRgb[2]) * plateauAlpha)})`;
+
+    return {
+      basePath: polygonsToSvgPath(polys),
+      overlayPath: polygonsToSvgPath(polys),
+      plateauPath,
+      plateauColor,
+      stops,
+      gradX1: litX, gradY1: litY, gradX2: shaX, gradY2: shaY,
+      glossStops,
+      specCx, specCy, specR, specAlpha,
+    };
+  };
+
+  const bodyDome = useMemo(() => {
+    if (fillRender.mode !== 'dome') return null;
+    // Plateau computed by clipper polygon erosion (MAT-equivalent for
+    // polygons): every plateau point is at distance ≥ bevelWidth from
+    // the outer silhouette boundary. Convex source corners become arcs
+    // of radius bevelWidth; concave corners stay sharp; regions thinner
+    // than 2·bevelWidth vanish.
+    const inner = computeMatPlateau(bodyAndBubblesPolys, fillRender.bevelWidth);
+    return buildDomeOverlay(bodyAndBubblesPolys, inner);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fillRender.mode, fillRender.contour, fillRender.amount, fillRender.bevelWidth,
+    fillRender.lightAzimuth, fillRender.lightElevation, fillRender.highlightColor, fillRender.shadowColor,
+    fillRender.domeGloss, fillRender.specStrength, fillRender.specSize,
+    bodyAndBubblesPolys,
+  ]);
+
+  const lightningDomes = useMemo(() => {
+    if (fillRender.mode !== 'dome') return [];
+    return lightningRibbons.map((r) => {
+      const inner = computeMatPlateau(r.polys, fillRender.bevelWidth);
+      return buildDomeOverlay(r.polys, inner);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    fillRender.mode, fillRender.contour, fillRender.amount, fillRender.bevelWidth,
+    fillRender.lightAzimuth, fillRender.lightElevation, fillRender.highlightColor, fillRender.shadowColor,
+    fillRender.domeGloss, fillRender.specStrength, fillRender.specSize,
+    lightningRibbons,
+  ]);
 
   return (
     <svg
@@ -437,7 +791,16 @@ export function SpeechBalloon({ design, runtime }: Props) {
       width="100%"
       height="100%"
       preserveAspectRatio="xMidYMid meet"
-      style={{ background: design.bg, borderRadius: 8 }}
+      style={{
+        // Canvas fill behind the balloon at 70% alpha so the CMY nebula
+        // bleeds through. Re-parsed from the hex `design.bg` on every
+        // render — cheap.
+        background: (() => {
+          const rgb = parseHex(design.bg);
+          return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.7)`;
+        })(),
+        borderRadius: 8,
+      }}
     >
       <defs>
         {hasShadow && (
@@ -457,98 +820,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
             </feMerge>
           </filter>
         )}
-        <filter id={fillFilterId} x="-25%" y="-25%" width="150%" height="150%">
-          {/* Step 1: heightmap source. bevel-blur = SourceAlpha blurred. */}
-          {fillRender.mode === 'bevel-blur' && (
-            <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.blur} result="heightmap" />
-          )}
-          {fillRender.mode === 'bevel-rings' && ringsHeightmap && (
-            <>
-              <feImage
-                href={ringsHeightmap.dataUrl}
-                x={ringsHeightmap.x}
-                y={ringsHeightmap.y}
-                width={ringsHeightmap.w}
-                height={ringsHeightmap.h}
-                preserveAspectRatio="none"
-                result="ringsImage"
-              />
-              {/* Luminance → alpha: rings paint opaque grayscale, but feDiffuseLighting
-                  reads alpha. Copy the average of RGB into A. */}
-              <feColorMatrix
-                in="ringsImage"
-                type="matrix"
-                values="0 0 0 0 0
-                        0 0 0 0 0
-                        0 0 0 0 0
-                        0.333 0.333 0.333 0 0"
-                result="ringsAlpha"
-              />
-              <feGaussianBlur in="ringsAlpha" stdDeviation={ringsHeightmap.blurSigma} result="heightmap" />
-            </>
-          )}
-          {fillRender.mode === 'bevel-dt' && dtHeightmap && (
-            <feImage
-              href={dtHeightmap.dataUrl}
-              x={dtHeightmap.x}
-              y={dtHeightmap.y}
-              width={dtHeightmap.w}
-              height={dtHeightmap.h}
-              preserveAspectRatio="none"
-              result="heightmap"
-            />
-          )}
-
-          {/* Step 1b: smooth 8-bit alpha quantization in the heightmap. Without
-              this, adjacent alpha levels (1/255 apart) show as visible contour
-              bands once the lighting takes spatial derivatives. */}
-          <feGaussianBlur in="heightmap" stdDeviation="1.2" result="heightmapSmooth" />
-
-          {/* Step 2: remap heightmap alpha through the contour curve. */}
-          <feComponentTransfer in="heightmapSmooth" result="profiled">
-            <feFuncA type="table" tableValues={fillRender.contourTable} />
-          </feComponentTransfer>
-
-          {/* Step 3: diffuse lighting from a distant light. kernelUnitLength
-              locks the surface-normal derivative to user-space units so zooming
-              the SVG doesn't change perceived specular intensity. */}
-          <feDiffuseLighting
-            in="profiled"
-            surfaceScale={fillRender.surfaceScale}
-            diffuseConstant={fillRender.diffuse}
-            lightingColor={fillRender.lightColor}
-            kernelUnitLength="1 1"
-            result="diffuse"
-          >
-            <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
-          </feDiffuseLighting>
-
-          {/* Step 4: multiply diffuse light by the base color. */}
-          <feFlood floodColor={fillRender.base} result="baseFlood" />
-          <feComposite in="baseFlood" in2="SourceAlpha" operator="in" result="baseClipped" />
-          <feBlend in="diffuse" in2="baseClipped" mode="multiply" result="litBase" />
-
-          {/* Step 5: specular catch-light. */}
-          <feSpecularLighting
-            in="profiled"
-            surfaceScale={fillRender.surfaceScale}
-            specularConstant={fillRender.specular}
-            specularExponent={fillRender.shininess}
-            lightingColor={fillRender.specularColor}
-            kernelUnitLength="1 1"
-            result="specular"
-          >
-            <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
-          </feSpecularLighting>
-          <feComposite in="specular" in2="SourceAlpha" operator="in" result="specularClipped" />
-
-          {/* Step 6: additive composite — diffuse-tinted base + specular highlight. */}
-          <feComposite in="specularClipped" in2="litBase" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="lit" />
-
-          {/* Step 7: final clip to silhouette. */}
-          <feComposite in="lit" in2="SourceAlpha" operator="in" />
-        </filter>
-
         {/* Aqua paint servers: a 5-stop body linear gradient + a soft gloss
             overlay, both anchored per-shape via objectBoundingBox so each
             bubble gets its own dome-ish look without filter machinery. */}
@@ -601,10 +872,10 @@ export function SpeechBalloon({ design, runtime }: Props) {
                 )}
               </g>
             ))}
-            {lightningPaths.map((d, i) => (
+            {lightningRibbons.map((r, i) => (
               <path
                 key={`lt-${i}`}
-                d={d}
+                d={r.d}
                 fill={`url(#${aquaBodyId})`}
                 stroke={strokeW > 0 ? strokeColor : 'none'}
                 strokeWidth={strokeW || 0}
@@ -612,22 +883,156 @@ export function SpeechBalloon({ design, runtime }: Props) {
               />
             ))}
           </>
-        ) : (
+        ) : fillRender.mode === 'bevel' ? (
+          // Bevel: paint nested inset polygons in painter's-algorithm order.
+          // Each ring's color is shadeColor(base, shadow, highlight, mode,
+          // amount, contour(t)) where t = ringIdx / (rings-1).
           <>
-            <path d={bodyPath} fill={baseColor} filter={`url(#${fillFilterId})`} />
+            {bodyBevelRings && bodyBevelRings.map((r, i) => (
+              <path key={`body-r${i}`} d={r.d} fill={r.fill} />
+            ))}
 
-            {/* Lightning tails — filled ribbons (clipper-inflated polylines) with
-                the same fill and stroke as the body. */}
-            {lightningPaths.map((d, i) => (
-              <path
-                key={i}
-                d={d}
-                fill={baseColor}
-                filter={`url(#${fillFilterId})`}
-                stroke={strokeW > 0 ? strokeColor : 'none'}
-                strokeWidth={strokeW || 0}
-                strokeLinejoin="round"
-              />
+            {/* Each lightning ribbon gets its own nested-inset stack. */}
+            {lightningBevelRings.map((rings, li) => (
+              <g key={`lt-${li}`}>
+                {rings.map((r, i) => (
+                  <path key={`lt${li}-r${i}`} d={r.d} fill={r.fill} />
+                ))}
+                {strokeW > 0 && (
+                  <path
+                    d={lightningRibbons[li].d}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth={strokeW}
+                    strokeLinejoin="round"
+                  />
+                )}
+              </g>
+            ))}
+          </>
+        ) : (
+          // Dome: solid base color + one partially-transparent linear gradient
+          // overlay across the silhouette. Stops are computed from the profile
+          // curve and bevelWidth; gradient axis runs along the light azimuth.
+          // No clipper insets, no rings.
+          <>
+            {bodyDome && (
+              <>
+                <defs>
+                  <linearGradient
+                    id={`${idPrefix}-dome-body`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={bodyDome.gradX1} y1={bodyDome.gradY1}
+                    x2={bodyDome.gradX2} y2={bodyDome.gradY2}
+                  >
+                    {bodyDome.stops.map((s, j) => (
+                      <stop key={j} offset={s.offset} stopColor={s.color} stopOpacity={s.alpha} />
+                    ))}
+                  </linearGradient>
+                  <linearGradient
+                    id={`${idPrefix}-dome-gloss`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={bodyDome.gradX1} y1={bodyDome.gradY1}
+                    x2={bodyDome.gradX2} y2={bodyDome.gradY2}
+                  >
+                    {bodyDome.glossStops.map((s, j) => (
+                      <stop key={j} offset={s.offset} stopColor={fillRender.highlightColor} stopOpacity={s.alpha} />
+                    ))}
+                  </linearGradient>
+                  <radialGradient
+                    id={`${idPrefix}-dome-spec`}
+                    gradientUnits="userSpaceOnUse"
+                    cx={bodyDome.specCx} cy={bodyDome.specCy}
+                    r={bodyDome.specR}
+                    fx={bodyDome.specCx} fy={bodyDome.specCy}
+                  >
+                    <stop offset="0" stopColor={fillRender.highlightColor} stopOpacity={bodyDome.specAlpha} />
+                    <stop offset="0.5" stopColor={fillRender.highlightColor} stopOpacity={bodyDome.specAlpha * 0.4} />
+                    <stop offset="1" stopColor={fillRender.highlightColor} stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <path d={bodyDome.basePath} fill={fillRender.base} />
+                <path d={bodyDome.overlayPath} fill={`url(#${idPrefix}-dome-body)`} />
+                {fillRender.domeGloss > 0 && (
+                  <path d={bodyDome.overlayPath} fill={`url(#${idPrefix}-dome-gloss)`} />
+                )}
+                {fillRender.specStrength > 0 && (
+                  <path d={bodyDome.overlayPath} fill={`url(#${idPrefix}-dome-spec)`} />
+                )}
+                {/* Debug: filled plateau region with translucent yellow so
+                    the shape pops against the blue dome — easy to spot
+                    shape mismatches while iterating. */}
+                {bodyDome.plateauPath && (
+                  <path
+                    d={bodyDome.plateauPath}
+                    fill={bodyDome.plateauColor}
+                    pointerEvents="none"
+                  />
+                )}
+              </>
+            )}
+
+            {lightningDomes.map((dome, li) => dome && (
+              <g key={`lt-${li}`}>
+                <defs>
+                  <linearGradient
+                    id={`${idPrefix}-dome-lt${li}`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={dome.gradX1} y1={dome.gradY1}
+                    x2={dome.gradX2} y2={dome.gradY2}
+                  >
+                    {dome.stops.map((s, j) => (
+                      <stop key={j} offset={s.offset} stopColor={s.color} stopOpacity={s.alpha} />
+                    ))}
+                  </linearGradient>
+                  <linearGradient
+                    id={`${idPrefix}-dome-lt${li}-gloss`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={dome.gradX1} y1={dome.gradY1}
+                    x2={dome.gradX2} y2={dome.gradY2}
+                  >
+                    {dome.glossStops.map((s, j) => (
+                      <stop key={j} offset={s.offset} stopColor={fillRender.highlightColor} stopOpacity={s.alpha} />
+                    ))}
+                  </linearGradient>
+                  <radialGradient
+                    id={`${idPrefix}-dome-lt${li}-spec`}
+                    gradientUnits="userSpaceOnUse"
+                    cx={dome.specCx} cy={dome.specCy} r={dome.specR}
+                    fx={dome.specCx} fy={dome.specCy}
+                  >
+                    <stop offset="0" stopColor={fillRender.highlightColor} stopOpacity={dome.specAlpha} />
+                    <stop offset="0.5" stopColor={fillRender.highlightColor} stopOpacity={dome.specAlpha * 0.4} />
+                    <stop offset="1" stopColor={fillRender.highlightColor} stopOpacity="0" />
+                  </radialGradient>
+                </defs>
+                <path d={dome.basePath} fill={fillRender.base} />
+                <path d={dome.overlayPath} fill={`url(#${idPrefix}-dome-lt${li})`} />
+                {fillRender.domeGloss > 0 && (
+                  <path d={dome.overlayPath} fill={`url(#${idPrefix}-dome-lt${li}-gloss)`} />
+                )}
+                {fillRender.specStrength > 0 && (
+                  <path d={dome.overlayPath} fill={`url(#${idPrefix}-dome-lt${li}-spec)`} />
+                )}
+                {dome.plateauPath && (
+                  <path
+                    d={dome.plateauPath}
+                    fill="rgba(255, 235, 0, 0.55)"
+                    stroke="rgba(255, 200, 0, 0.95)"
+                    strokeWidth={1}
+                    pointerEvents="none"
+                  />
+                )}
+                {strokeW > 0 && (
+                  <path
+                    d={lightningRibbons[li].d}
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth={strokeW}
+                    strokeLinejoin="round"
+                  />
+                )}
+              </g>
             ))}
           </>
         )}

@@ -1,12 +1,12 @@
 import type { BalloonBase, EffectKind, ParamBag } from './types';
 
 export type LabControl =
-  | { key: string; label?: string; kind: 'range'; min: number; max: number; step: number; default: number; hideWhen?: (params: ParamBag) => boolean }
+  | { key: string; label?: string; kind: 'range'; min: number; max: number; step: number; default: number; hideWhen?: (params: ParamBag) => boolean; maxFn?: (ctx: { W: number; H: number }) => number }
   | { key: string; label?: string; kind: 'select'; options: string[]; default: string; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'color'; default: string; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'text'; default: string; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'toggle'; default: boolean; hideWhen?: (params: ParamBag) => boolean }
-  | { key: string; label?: string; kind: 'curve'; length: number; labels: string[]; min: number; max: number; step: number; defaults: number[]; hideWhen?: (params: ParamBag) => boolean }
+  | { key: string; label?: string; kind: 'curve'; min: number; max: number; step: number; defaults: number[]; hideWhen?: (params: ParamBag) => boolean }
   | { kind: 'header'; label: string; hideWhen?: (params: ParamBag) => boolean };
 
 export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
@@ -20,8 +20,8 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   fill: [
     { key: 'mode', label: 'Mode', kind: 'select',
-      options: ['aqua', 'bevel-rings', 'bevel-blur', 'bevel-dt'],
-      default: 'aqua' },
+      options: ['aqua', 'bevel', 'dome'],
+      default: 'dome' },
     { key: 'base', label: 'Base color', kind: 'color', default: '#3b82f6' },
 
     { kind: 'header', label: 'Aqua', hideWhen: (p) => p.mode !== 'aqua' },
@@ -31,54 +31,41 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'highlightTint', label: 'Highlight tint', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'aqua' },
     { key: 'shadowTint', label: 'Shadow tint', kind: 'color', default: '#0a1020', hideWhen: (p) => p.mode !== 'aqua' },
 
-    { kind: 'header', label: 'Contour (rim → center)', hideWhen: (p) => p.mode === 'aqua' },
+    { kind: 'header', label: 'Bevel', hideWhen: (p) => p.mode !== 'bevel' },
+    { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 96, step: 1, default: 32, hideWhen: (p) => p.mode !== 'bevel' },
+    { key: 'shading', label: 'Shading', kind: 'select', options: ['multiply', 'mix', 'lightness'], default: 'multiply', hideWhen: (p) => p.mode !== 'bevel' },
+    { key: 'amount', label: 'Amount', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'bevel' && p.mode !== 'dome' },
+    { key: 'shadowColor', label: 'Shadow color', kind: 'color', default: '#000000', hideWhen: (p) => (p.mode !== 'bevel' || p.shading !== 'mix') && p.mode !== 'dome' },
+    { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => (p.mode !== 'bevel' || p.shading !== 'mix') && p.mode !== 'dome' },
+
+    { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'bevelWidth', label: 'Bevel width (px)', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H }) => Math.floor(Math.min(W, H) / 3) },
+    { key: 'outerCornerOffset', label: 'Outer corner offset', kind: 'range', min: -1, max: 1, step: 0.02, default: 0, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'lightAzimuth', label: 'Azimuth (°)', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'lightElevation', label: 'Elevation (°)', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'domeGloss', label: 'Gloss', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.35, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'specStrength', label: 'Specular', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'specSize', label: 'Specular size (px)', kind: 'range', min: 2, max: 80, step: 0.5, default: 18, hideWhen: (p) => p.mode !== 'dome' },
+
     {
       key: 'contour',
+      label: 'Contour (rim → center)',
       kind: 'curve',
-      length: 5,
-      labels: ['Rim', 'Outer', 'Mid', 'Inner', 'Center'],
       min: -1,
       max: 1,
       step: 0.02,
-      // X=0 = rim (alpha 0 in heightmap), X=1 = center (alpha 1, deepest interior).
-      // Default = smooth outset dome: flat at the rim, climbing to a peak at center.
-      defaults: [0, -0.05, 0.25, 0.4, 0.5, 0.78, 0.75, 0.95, 1, 1],
-      hideWhen: (p) => p.mode === 'aqua',
+      // 3 default anchors: a dome cross-section — steep wall at the rim
+      // (dark, profile_y rising fast) flattening toward the center
+      // (bright top, slope ≈ 0). Interleaved [x0,y0,x1,y1,x2,y2].
+      defaults: [0, -1, 0.5, 0.5, 1, 0.7],
+      hideWhen: (p) => p.mode !== 'bevel' && p.mode !== 'dome',
     },
-
-    { kind: 'header', label: 'Light', hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'lightAzimuth', label: 'Azimuth (°)', kind: 'range', min: 0, max: 359, step: 1, default: 135, hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'lightElevation', label: 'Elevation (°)', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'lightColor', label: 'Light color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode === 'aqua' },
-
-    { kind: 'header', label: 'Material', hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'surfaceScale', label: 'Surface scale', kind: 'range', min: 0, max: 30, step: 0.5, default: 8, hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0, hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6, hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30, hideWhen: (p) => p.mode === 'aqua' },
-    { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode === 'aqua' },
-
-    { kind: 'header', label: 'Rings (bevel-rings)', hideWhen: (p) => p.mode !== 'bevel-rings' },
-    { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 64, step: 1, default: 28, hideWhen: (p) => p.mode !== 'bevel-rings' },
-    // Fraction of one ring's step distance. 0 = no blur (visible bands).
-    // 1 ≈ adjacent rings merge. 3+ = soft. Auto-scales with body size and ring count.
-    { key: 'smoothing', label: 'Smoothing (×step)', kind: 'range', min: 0, max: 5, step: 0.05, default: 1.6, hideWhen: (p) => p.mode !== 'bevel-rings' },
-
-    { kind: 'header', label: 'Blur (bevel-blur)', hideWhen: (p) => p.mode !== 'bevel-blur' },
-    { key: 'blur', label: 'Blur (σ)', kind: 'range', min: 1, max: 60, step: 0.5, default: 14, hideWhen: (p) => p.mode !== 'bevel-blur' },
-
-    { kind: 'header', label: 'Distance transform (bevel-dt)', hideWhen: (p) => p.mode !== 'bevel-dt' },
-    { key: 'dtResolution', label: 'Resolution (px)', kind: 'range', min: 64, max: 512, step: 16, default: 256, hideWhen: (p) => p.mode !== 'bevel-dt' },
   ],
 
   tail: [
     { key: 'shape', label: 'Shape', kind: 'select', options: ['classic', 'bubbles', 'lightning'], default: 'classic' },
     { kind: 'header', label: 'Attachment' },
     { key: 'angle', label: 'Angle', kind: 'range', min: 0, max: 359, step: 1, default: 115 },
-    { key: 'projection', label: 'Projection', kind: 'select', options: ['radial', 'side'], default: 'radial' },
-    { key: 'side', label: 'Side', kind: 'select', options: ['bottom', 'top', 'left', 'right'], default: 'bottom', hideWhen: (p) => p.projection !== 'side' },
-    { key: 'position', label: 'Position along side', kind: 'range', min: 0.05, max: 0.95, step: 0.01, default: 0.3, hideWhen: (p) => p.projection !== 'side' },
-    { key: 'offset', label: 'Offset along perimeter', kind: 'range', min: -1, max: 1, step: 0.01, default: 0 },
     { key: 'radial', label: 'Radial offset (in/out)', kind: 'range', min: -40, max: 60, step: 0.5, default: 0 },
     { kind: 'header', label: 'Shape' },
     // Single magnitude. Each shape applies its own natural width factor (classic
@@ -86,7 +73,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'size', label: 'Size', kind: 'range', min: 8, max: 220, step: 0.5, default: 60 },
     // Width multiplier on the shape's natural width factor. 1 = natural, <1 thinner, >1 fatter.
     { key: 'weight', label: 'Weight', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
-    { key: 'taper', label: 'Taper', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
+    { key: 'fillet', label: 'Fillet', kind: 'range', min: 0, max: 8, step: 0.05, default: 1 },
     { key: 'arc', label: 'Arc (lateral bend)', kind: 'range', min: -1, max: 1, step: 0.02, default: 0 },
     { kind: 'header', label: 'Bubbles', hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'count', label: 'Count', kind: 'range', min: 1, max: 8, step: 1, default: 3, hideWhen: (p) => p.shape !== 'bubbles' },

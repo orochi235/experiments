@@ -2,7 +2,7 @@ import type { LabSnapshot } from './types';
 import { BASE_CONTROLS, EFFECT_CONTROLS, defaultParams } from './controls';
 
 // Bump on schema changes — stale entries get dropped silently.
-export const LAB_STORAGE_KEY = 'speech-balloon-lab-v6';
+export const LAB_STORAGE_KEY = 'speech-balloon-lab-v11';
 
 export function initialSnapshot(): LabSnapshot {
   return {
@@ -40,8 +40,9 @@ export function loadSnapshot(): LabSnapshot {
     if (!raw) return initialSnapshot();
     const parsed = JSON.parse(raw) as LabSnapshot;
     if (!parsed.runtime || !parsed.design) return initialSnapshot();
-    // No legacy migration: schema bumped to v6 because both the fill-mode
-    // union and the contour X-axis orientation changed incompatibly.
+    // No legacy migration: schema bumped to v7 because the fill modes
+    // collapsed (bevel-blur/bevel-dt retired into a single bevel mode) and
+    // the contour curve dropped its fixed-length / labeled-stops shape.
     return parsed;
   } catch {
     return initialSnapshot();

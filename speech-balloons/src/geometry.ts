@@ -9,7 +9,7 @@
 // a single shape. Bubbles and lightning are rendered as separate decorations
 // that attach at the same perimeter point but don't deform the body silhouette.
 
-import type { BalloonBase, ParamBag, TailProjection, TailSide } from './types';
+import type { BalloonBase, ParamBag } from './types';
 
 export interface PerimeterPoint {
   x: number;
@@ -187,59 +187,13 @@ export function angleToS(angleDeg: number, sampler: BaseSampler, cx: number, cy:
   return bestS;
 }
 
-export function sideAndPositionToS(
-  side: TailSide,
-  position: number,
-  sampler: BaseSampler,
-  boxW: number,
-  boxH: number,
-): number {
-  let ax = 0;
-  let ay = 0;
-  switch (side) {
-    case 'top':    ax = boxW * position; ay = -boxH;       break;
-    case 'bottom': ax = boxW * position; ay = boxH * 2;    break;
-    case 'left':   ax = -boxW;           ay = boxH * position; break;
-    case 'right':  ax = boxW * 2;        ay = boxH * position; break;
-  }
-  const K = 720;
-  let bestS = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < K; i++) {
-    const s = (i / K) * sampler.totalLen;
-    const p = sampler.perimeterAt(s);
-    const d = Math.hypot(p.x - ax, p.y - ay);
-    if (d < bestD) {
-      bestD = d;
-      bestS = s;
-    }
-  }
-  return bestS;
-}
-
 export function attachmentS(
-  projection: TailProjection,
   angleDeg: number,
   sampler: BaseSampler,
   boxW: number,
   boxH: number,
-  tailParams: ParamBag,
 ): number {
-  const baseSc =
-    projection === 'side'
-      ? sideAndPositionToS(
-          (tailParams.side as TailSide) ?? 'bottom',
-          (tailParams.position as number) ?? 0.3,
-          sampler,
-          boxW,
-          boxH,
-        )
-      : angleToS(angleDeg, sampler, boxW / 2, boxH / 2);
-  // Common-param: shift the attachment along the perimeter by `offset`.
-  // ±1 corresponds to roughly 10% of the perimeter so values feel responsive
-  // on small balloons without saturating on large ones.
-  const offset = (tailParams.offset as number) ?? 0;
-  return baseSc + offset * sampler.totalLen * 0.1;
+  return angleToS(angleDeg, sampler, boxW / 2, boxH / 2);
 }
 
 // --- Classic (triangular) tail as a perimeter offset ----------------------
@@ -248,7 +202,7 @@ export interface ClassicTailConfig {
   sc: number;
   halfBase: number;
   length: number;
-  taper: number;
+  fillet: number; // 0 = sharp triangular tail; 1 = full tangent fillet at base
   arc: number;    // lateral bend of the tail spine, -1..1
   radial: number; // outward translation of the bump along the normal (px)
   totalLen: number;
@@ -261,15 +215,32 @@ export function classicTailOffsetAt(s: number, cfg: ClassicTailConfig): { dx: nu
   if (ds < -cfg.totalLen / 2) ds += cfg.totalLen;
   if (Math.abs(ds) > cfg.halfBase) return { dx: 0, dy: 0 };
   const u = Math.abs(ds) / cfg.halfBase;
-  const t = Math.max(0, 1 - Math.pow(u, cfg.taper));
+  // fillet rounds the concave (negative-space) corners where the tail
+  // base meets the body. Piecewise: linear t = 1 − u over the central
+  // bump region (which keeps the tip shape unaffected), then a cubic
+  // Hermite fillet over the last `w` of the bump that approaches the
+  // body tangentially. `w = f/(f+1)` maps the slider to a 0..1 fillet
+  // zone width (so the slider can extend arbitrarily — w → 1 as f → ∞,
+  // covering more of the bump with the fillet).
+  const f = Math.max(0, cfg.fillet);
+  const w = f / (f + 1);
+  let t: number;
+  if (u <= 1 - w || w <= 0) {
+    t = 1 - u;
+  } else {
+    const tau = (u - (1 - w)) / w;
+    t = w * (tau * tau * tau - tau * tau - tau + 1);
+  }
+  t = Math.max(0, t);
   const p = cfg.perimeterAt(cfg.sc);
   const perpX = -p.ny;
   const perpY = p.nx;
   const arcShift = cfg.arc * cfg.length * t * t;
-  // Outward magnitude: bump (length*t) + a constant radial lift that pushes the
-  // whole tail away from the body. For radial > 0 this creates a "pedestal"
-  // between body and tail tip; for radial < 0 the tail roots inside the body.
-  const outward = cfg.length * t + cfg.radial;
+  // Outward magnitude: the bump amplitude scales with t. `radial` extends
+  // the TIP vertex outward (or pulls it inward) without affecting the rest
+  // of the bump shape — i.e. radial scales with t so it vanishes at the
+  // base (no pedestal) and is fully applied at the tip.
+  const outward = (cfg.length + cfg.radial) * t;
   return {
     dx: p.nx * outward + perpX * arcShift,
     dy: p.ny * outward + perpY * arcShift,
