@@ -40,7 +40,6 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
 
     { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' },
     { key: 'bevelWidth', label: 'Bevel width (px)', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H }) => Math.floor(Math.min(W, H) / 3) },
-    { key: 'outerCornerOffset', label: 'Outer corner offset', kind: 'range', min: -1, max: 1, step: 0.02, default: 0, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'lightAzimuth', label: 'Azimuth (°)', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'lightElevation', label: 'Elevation (°)', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'domeGloss', label: 'Gloss', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.35, hideWhen: (p) => p.mode !== 'dome' },
@@ -70,18 +69,22 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { kind: 'header', label: 'Shape' },
     // Single magnitude. Each shape applies its own natural width factor (classic
     // 0.8, bubbles 0.23, lightning 0.06) so size+weight=1 looks sensible across all.
-    { key: 'size', label: 'Size', kind: 'range', min: 8, max: 220, step: 0.5, default: 60 },
+    { key: 'size', label: 'Length', kind: 'range', min: 8, max: 220, step: 0.5, default: 60 },
     // Width multiplier on the shape's natural width factor. 1 = natural, <1 thinner, >1 fatter.
-    { key: 'weight', label: 'Weight', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
+    { key: 'weight', label: 'Base width', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
     { key: 'fillet', label: 'Fillet', kind: 'range', min: 0, max: 8, step: 0.05, default: 1 },
     { key: 'arc', label: 'Arc (lateral bend)', kind: 'range', min: -1, max: 1, step: 0.02, default: 0 },
     { kind: 'header', label: 'Bubbles', hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'count', label: 'Count', kind: 'range', min: 1, max: 8, step: 1, default: 3, hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'gap', label: 'Gap (fraction of size)', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.15, hideWhen: (p) => p.shape !== 'bubbles' },
     { kind: 'header', label: 'Lightning', hideWhen: (p) => p.shape !== 'lightning' },
-    { key: 'segments', label: 'Segments', kind: 'range', min: 2, max: 12, step: 1, default: 5, hideWhen: (p) => p.shape !== 'lightning' },
+    { key: 'lightningStyle', label: 'Style', kind: 'select', options: ['jagged', 'zigzag'], default: 'jagged', hideWhen: (p) => p.shape !== 'lightning' },
+    { key: 'segments', label: 'Jags', kind: 'range', min: 2, max: 12, step: 1, default: 5, hideWhen: (p) => p.shape !== 'lightning' || p.lightningStyle === 'zigzag' },
+    { key: 'zigs', label: 'Zigs', kind: 'range', min: 1, max: 8, step: 1, default: 2, hideWhen: (p) => p.shape !== 'lightning' || p.lightningStyle !== 'zigzag' },
     { key: 'jaggedness', label: 'Jaggedness', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.45, hideWhen: (p) => p.shape !== 'lightning' },
-    { key: 'seed', label: 'Seed', kind: 'range', min: 0, max: 99, step: 1, default: 7, hideWhen: (p) => p.shape !== 'lightning' },
+    { key: 'widthTaper', label: 'Width taper', kind: 'range', min: 0.3, max: 4, step: 0.05, default: 1, hideWhen: (p) => p.shape !== 'lightning' },
+    { key: 'tipWidth', label: 'Tip width', kind: 'range', min: 0, max: 0.8, step: 0.02, default: 0, hideWhen: (p) => p.shape !== 'lightning' },
+    { key: 'seed', label: 'Seed', kind: 'range', min: 0, max: 99, step: 1, default: 7, hideWhen: (p) => p.shape !== 'lightning' || p.lightningStyle === 'zigzag' },
   ],
 
   stroke: [

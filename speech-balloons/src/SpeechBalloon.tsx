@@ -7,12 +7,13 @@ import {
   classicTailOffsetAt,
   buildBubbles,
   buildLightning,
+  buildZigzagLightningPolyline,
+  buildTaperedPolygon,
   type BaseSampler,
   type PerimeterPoint,
 } from './geometry';
 import {
   unionPolygons,
-  inflateOpenPolyline,
   offsetClosedPolygons,
   polygonsToSvgPath,
   circleToPolygon,
@@ -41,7 +42,10 @@ function measureTextWidth(text: string, fontPx: number, fontFamily: string): num
 const TAIL_WIDTH_FACTOR: Record<TailShape, number> = {
   classic: 0.8,
   bubbles: 0.23,
-  lightning: 0.06,
+  // lightning bumped from 0.06 → 0.55 so the "Base width" slider gives a
+  // range commensurate with the classic tail's range (was producing
+  // sub-1px ribbons for typical sizes).
+  lightning: 0.55,
 };
 
 // Resolve a tail effect's params into the (length, baseWidth) the geometry
@@ -288,23 +292,19 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const shadowEffect = design.effects.find((e) => e.kind === 'shadow');
 
   // Outer body's effective sampler params. In dome mode on a rectangle
-  // body, the outer corner roundness is AUTO-COMPUTED so the corner-ray
+  // body, the outer corner roundness is auto-computed so the corner-ray
   // distance from centroid to the outer boundary exceeds the distance
   // to the inner boundary by exactly bevelWidth (matching the uniform
-  // bw inset that already holds at edge midpoints). The
-  // `outerCornerOffset` slider then adds an additional manual nudge on
-  // top of that auto value.
+  // bw inset that already holds at edge midpoints).
   const effectiveBaseParams = useMemo<ParamBag>(() => {
     if (design.base !== 'rectangle') return design.baseParams;
     const mode = (fillEffect?.params.mode as string) ?? 'bevel';
     if (mode !== 'dome') return design.baseParams;
     const baseR = (design.baseParams.roundness as number) ?? 0.5;
     const bw = (fillEffect?.params.bevelWidth as number) ?? 22;
-    const manualOffset = (fillEffect?.params.outerCornerOffset as number) ?? 0;
     const autoR = autoOuterRoundness(W, H, baseR, bw);
-    const final = Math.max(0, Math.min(1, autoR + manualOffset));
-    if (final === baseR) return design.baseParams;
-    return { ...design.baseParams, roundness: final };
+    if (autoR === baseR) return design.baseParams;
+    return { ...design.baseParams, roundness: autoR };
   }, [design.base, design.baseParams, fillEffect, W, H]);
 
   const sampler: BaseSampler = useMemo(
@@ -380,6 +380,55 @@ export function SpeechBalloon({ design, runtime }: Props) {
   }, [tailEffects, sampler, W, H, pointTransform]);
 
   // Polygons after bubble-union — kept as polygons so per-heightmap-mode rasterizers can offset them.
+  // Lightning ribbon polygons. Built here BEFORE bodyAndBubblesPolys so
+  // the union step can fold them into the silhouette the same way bubble
+  // circles get folded in. The polyline's first vertex is tucked inward
+  // along the body's inward normal by ~30% of the base width so the
+  // polygon's base overlaps the body silhouette — the union then merges
+  // them flush regardless of the first segment's angular direction.
+  const lightningRibbons = useMemo(() => {
+    const out: Array<{ polys: Polygon[]; d: string }> = [];
+    for (const rt of resolvedTails) {
+      if (rt.shape !== 'lightning') continue;
+      const dims = tailDims(rt.params, 'lightning');
+      const style = (rt.params.lightningStyle as string) ?? 'jagged';
+      const arc = (rt.params.arc as number) ?? 0;
+      const jaggedness = (rt.params.jaggedness as number) ?? 0.45;
+      const baseW = Math.max(1, dims.baseWidth);
+      const widthTaper = (rt.params.widthTaper as number) ?? 1;
+      const tipWidth = Math.max(0, Math.min(0.8, (rt.params.tipWidth as number) ?? 0));
+      const tuck = baseW * 0.35;
+      const tuckedAttach: PerimeterPoint = {
+        x: rt.attach.x - rt.attach.nx * tuck,
+        y: rt.attach.y - rt.attach.ny * tuck,
+        nx: rt.attach.nx,
+        ny: rt.attach.ny,
+      };
+      const effectiveLength = dims.length + tuck;
+      const zigs = (rt.params.zigs as number) ?? 2;
+      const pts = style === 'zigzag'
+        ? buildZigzagLightningPolyline(tuckedAttach, effectiveLength, jaggedness, arc, zigs)
+        : buildLightning(
+            tuckedAttach,
+            effectiveLength,
+            (rt.params.segments as number) ?? 5,
+            jaggedness,
+            (rt.params.seed as number) ?? 7,
+            arc,
+          );
+      // Width at vertex i: linear param t ∈ [1, tipWidth], shaped by the
+      // `widthTaper` exponent — 1 = linear, >1 = fatter base / faster
+      // tip drop-off, <1 = gentler taper.
+      const ribbon = [buildTaperedPolygon(pts, (i, n) => {
+        const u = i / Math.max(1, n - 1);
+        const shaped = Math.pow(1 - u, widthTaper);
+        return baseW * (tipWidth + (1 - tipWidth) * shaped);
+      })];
+      out.push({ polys: ribbon, d: polygonsToSvgPath(ribbon) });
+    }
+    return out;
+  }, [resolvedTails]);
+
   const bodyAndBubblesPolys = useMemo<Polygon[]>(() => {
     const polys: Polygon[] = [bodyPolygon];
     for (const rt of resolvedTails) {
@@ -396,8 +445,13 @@ export function SpeechBalloon({ design, runtime }: Props) {
       );
       for (const b of bubbles) polys.push(circleToPolygon(b.cx, b.cy, b.r));
     }
+    // Fold lightning ribbons into the silhouette so they share the
+    // body's fill, stroke, dome lighting, and plateau geometry.
+    for (const r of lightningRibbons) {
+      for (const poly of r.polys) polys.push(poly);
+    }
     return polys.length === 1 ? [bodyPolygon] : unionPolygons(polys);
-  }, [bodyPolygon, resolvedTails]);
+  }, [bodyPolygon, resolvedTails, lightningRibbons]);
 
   const bodyPath = useMemo(() => polygonsToSvgPath(bodyAndBubblesPolys), [bodyAndBubblesPolys]);
 
@@ -429,26 +483,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
   // ribbon (rounded ends). Each becomes its own polygon-set whose SVG path is
   // derived once; the polygons are kept around so bevel-mode rendering can
   // build nested insets per ribbon.
-  const lightningRibbons = useMemo(() => {
-    const out: Array<{ polys: Polygon[]; d: string }> = [];
-    for (const rt of resolvedTails) {
-      if (rt.shape !== 'lightning') continue;
-      const dims = tailDims(rt.params, 'lightning');
-      const pts = buildLightning(
-        rt.attach,
-        dims.length,
-        (rt.params.segments as number) ?? 5,
-        (rt.params.jaggedness as number) ?? 0.45,
-        (rt.params.seed as number) ?? 7,
-        (rt.params.arc as number) ?? 0,
-      );
-      const halfW = Math.max(0.5, dims.baseWidth / 2);
-      const ribbon = inflateOpenPolyline(pts, halfW, 'round', 'round');
-      out.push({ polys: ribbon, d: polygonsToSvgPath(ribbon) });
-    }
-    return out;
-  }, [resolvedTails]);
-
   const strokeW = strokeEffect ? ((strokeEffect.params.width as number) ?? 0) : 0;
   const strokeColor = strokeEffect ? ((strokeEffect.params.color as string) ?? 'none') : 'none';
   const hasShadow = !!shadowEffect;
@@ -489,7 +523,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
       lightAzimuth: (p.lightAzimuth as number) ?? 270,
       lightElevation: (p.lightElevation as number) ?? 55,
       bevelWidth: (p.bevelWidth as number) ?? 22,
-      outerCornerOffset: (p.outerCornerOffset as number) ?? 0,
       domeGloss: (p.domeGloss as number) ?? 0.35,
       specStrength: (p.specStrength as number) ?? 0.5,
       specSize: (p.specSize as number) ?? 18,
@@ -573,16 +606,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
     fillRender.mode, fillRender.rings, fillRender.contour, fillRender.shading,
     fillRender.amount, fillRender.base, fillRender.shadowColor, fillRender.highlightColor,
     bodyAndBubblesPolys,
-  ]);
-
-  const lightningBevelRings = useMemo(() => {
-    if (fillRender.mode !== 'bevel') return [];
-    return lightningRibbons.map((r) => buildBevelRings(r.polys));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    fillRender.mode, fillRender.rings, fillRender.contour, fillRender.shading,
-    fillRender.amount, fillRender.base, fillRender.shadowColor, fillRender.highlightColor,
-    lightningRibbons,
   ]);
 
   // Dome mode: a single linear gradient overlay applied to the silhouette,
@@ -771,20 +794,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
     bodyAndBubblesPolys,
   ]);
 
-  const lightningDomes = useMemo(() => {
-    if (fillRender.mode !== 'dome') return [];
-    return lightningRibbons.map((r) => {
-      const inner = computeMatPlateau(r.polys, fillRender.bevelWidth);
-      return buildDomeOverlay(r.polys, inner);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    fillRender.mode, fillRender.contour, fillRender.amount, fillRender.bevelWidth,
-    fillRender.lightAzimuth, fillRender.lightElevation, fillRender.highlightColor, fillRender.shadowColor,
-    fillRender.domeGloss, fillRender.specStrength, fillRender.specSize,
-    lightningRibbons,
-  ]);
-
   return (
     <svg
       viewBox={`${-reach} ${-reach} ${W + 2 * reach} ${H + 2 * reach}`}
@@ -872,16 +881,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
                 )}
               </g>
             ))}
-            {lightningRibbons.map((r, i) => (
-              <path
-                key={`lt-${i}`}
-                d={r.d}
-                fill={`url(#${aquaBodyId})`}
-                stroke={strokeW > 0 ? strokeColor : 'none'}
-                strokeWidth={strokeW || 0}
-                strokeLinejoin="round"
-              />
-            ))}
           </>
         ) : fillRender.mode === 'bevel' ? (
           // Bevel: paint nested inset polygons in painter's-algorithm order.
@@ -892,23 +891,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
               <path key={`body-r${i}`} d={r.d} fill={r.fill} />
             ))}
 
-            {/* Each lightning ribbon gets its own nested-inset stack. */}
-            {lightningBevelRings.map((rings, li) => (
-              <g key={`lt-${li}`}>
-                {rings.map((r, i) => (
-                  <path key={`lt${li}-r${i}`} d={r.d} fill={r.fill} />
-                ))}
-                {strokeW > 0 && (
-                  <path
-                    d={lightningRibbons[li].d}
-                    fill="none"
-                    stroke={strokeColor}
-                    strokeWidth={strokeW}
-                    strokeLinejoin="round"
-                  />
-                )}
-              </g>
-            ))}
           </>
         ) : (
           // Dome: solid base color + one partially-transparent linear gradient
@@ -972,68 +954,6 @@ export function SpeechBalloon({ design, runtime }: Props) {
               </>
             )}
 
-            {lightningDomes.map((dome, li) => dome && (
-              <g key={`lt-${li}`}>
-                <defs>
-                  <linearGradient
-                    id={`${idPrefix}-dome-lt${li}`}
-                    gradientUnits="userSpaceOnUse"
-                    x1={dome.gradX1} y1={dome.gradY1}
-                    x2={dome.gradX2} y2={dome.gradY2}
-                  >
-                    {dome.stops.map((s, j) => (
-                      <stop key={j} offset={s.offset} stopColor={s.color} stopOpacity={s.alpha} />
-                    ))}
-                  </linearGradient>
-                  <linearGradient
-                    id={`${idPrefix}-dome-lt${li}-gloss`}
-                    gradientUnits="userSpaceOnUse"
-                    x1={dome.gradX1} y1={dome.gradY1}
-                    x2={dome.gradX2} y2={dome.gradY2}
-                  >
-                    {dome.glossStops.map((s, j) => (
-                      <stop key={j} offset={s.offset} stopColor={fillRender.highlightColor} stopOpacity={s.alpha} />
-                    ))}
-                  </linearGradient>
-                  <radialGradient
-                    id={`${idPrefix}-dome-lt${li}-spec`}
-                    gradientUnits="userSpaceOnUse"
-                    cx={dome.specCx} cy={dome.specCy} r={dome.specR}
-                    fx={dome.specCx} fy={dome.specCy}
-                  >
-                    <stop offset="0" stopColor={fillRender.highlightColor} stopOpacity={dome.specAlpha} />
-                    <stop offset="0.5" stopColor={fillRender.highlightColor} stopOpacity={dome.specAlpha * 0.4} />
-                    <stop offset="1" stopColor={fillRender.highlightColor} stopOpacity="0" />
-                  </radialGradient>
-                </defs>
-                <path d={dome.basePath} fill={fillRender.base} />
-                <path d={dome.overlayPath} fill={`url(#${idPrefix}-dome-lt${li})`} />
-                {fillRender.domeGloss > 0 && (
-                  <path d={dome.overlayPath} fill={`url(#${idPrefix}-dome-lt${li}-gloss)`} />
-                )}
-                {fillRender.specStrength > 0 && (
-                  <path d={dome.overlayPath} fill={`url(#${idPrefix}-dome-lt${li}-spec)`} />
-                )}
-                {dome.plateauPath && (
-                  <path
-                    d={dome.plateauPath}
-                    fill="rgba(255, 235, 0, 0.55)"
-                    stroke="rgba(255, 200, 0, 0.95)"
-                    strokeWidth={1}
-                    pointerEvents="none"
-                  />
-                )}
-                {strokeW > 0 && (
-                  <path
-                    d={lightningRibbons[li].d}
-                    fill="none"
-                    stroke={strokeColor}
-                    strokeWidth={strokeW}
-                    strokeLinejoin="round"
-                  />
-                )}
-              </g>
-            ))}
           </>
         )}
 

@@ -20,13 +20,24 @@ const PRECISION = 3;
 export type Point = { x: number; y: number };
 export type Polygon = Point[];
 
-/** Boolean union of multiple polygons → one or more output polygons. */
+/** Signed 2× polygon area (shoelace). Sign tells us the winding:
+ *  positive = CCW in math y-up coords (= CW in SVG y-down screen). */
+function signedArea2(poly: Polygon): number {
+  let s = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    s += (b.x - a.x) * (b.y + a.y);
+  }
+  return s;
+}
+
+/** Boolean union of multiple polygons → one or more output polygons.
+ *  Polygons with opposing windings would XOR-cancel under clipper2's
+ *  NonZero rule, so we normalize every input polygon to the dominant
+ *  winding (by total absolute area) before the boolean op. */
 export function unionPolygons(polys: Polygon[]): Polygon[] {
   if (polys.length === 0) return [];
-  // Drop any polygon containing non-finite coords — clipper2 multiplies
-  // every coord by 10^PRECISION and throws if the result exceeds
-  // Number.MAX_SAFE_INTEGER. A single NaN/Infinity slipping in from a
-  // caller would crash the whole render; better to silently skip it.
   const safe = polys.filter((poly) => {
     if (poly.length < 3) return false;
     for (const p of poly) {
@@ -36,7 +47,23 @@ export function unionPolygons(polys: Polygon[]): Polygon[] {
   });
   if (safe.length === 0) return [];
   if (safe.length === 1) return [safe[0]];
-  const result: PathsD = unionD(safe as PathD[], [], FillRule.NonZero, PRECISION);
+  // Decide the target winding from the polygon with the largest |area|.
+  let dominant = 0;
+  let bestAbs = -1;
+  for (const poly of safe) {
+    const a = signedArea2(poly);
+    if (Math.abs(a) > bestAbs) {
+      bestAbs = Math.abs(a);
+      dominant = a;
+    }
+  }
+  const targetSign = dominant >= 0 ? 1 : -1;
+  const normalized = safe.map((poly) => {
+    const a = signedArea2(poly);
+    const sign = a >= 0 ? 1 : -1;
+    return sign === targetSign ? poly : poly.slice().reverse();
+  });
+  const result: PathsD = unionD(normalized as PathD[], [], FillRule.NonZero, PRECISION);
   return result.filter((p) => p.length >= 3).map((p) => p.map((pt) => ({ x: pt.x, y: pt.y })));
 }
 

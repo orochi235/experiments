@@ -2,12 +2,12 @@ import type { LabSnapshot } from './types';
 import { BASE_CONTROLS, EFFECT_CONTROLS, defaultParams } from './controls';
 
 // Bump on schema changes — stale entries get dropped silently.
-export const LAB_STORAGE_KEY = 'speech-balloon-lab-v11';
+export const LAB_STORAGE_KEY = 'speech-balloon-lab-v12';
 
 export function initialSnapshot(): LabSnapshot {
   return {
     runtime: {
-      fontFamily: 'Comic Neue, system-ui, sans-serif',
+      fontFamily: 'Bangers, system-ui, sans-serif',
       fontSize: 28,
       text: 'Hello!',
       fitToContent: false,

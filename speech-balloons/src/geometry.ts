@@ -369,3 +369,88 @@ export function buildLightning(
   pts.push({ x: endX, y: endY });
   return pts;
 }
+
+// Comic-book Z-bolt polyline with N alternating kinks between attach and
+// tip. `zigs` is the number of mid-kinks; jaggedness controls the lateral
+// offset amplitude; arc bends the overall axis laterally.
+export function buildZigzagLightningPolyline(
+  attachPoint: PerimeterPoint,
+  length: number,
+  jaggedness: number,
+  arc: number,
+  zigs: number,
+): { x: number; y: number }[] {
+  const dirX = attachPoint.nx;
+  const dirY = attachPoint.ny;
+  const perpX = -dirY;
+  const perpY = dirX;
+  const startX = attachPoint.x;
+  const startY = attachPoint.y;
+  const endX = startX + dirX * length + perpX * arc * length;
+  const endY = startY + dirY * length + perpY * arc * length;
+  const offset = length * 0.32 * (0.4 + jaggedness);
+  const n = Math.max(1, Math.floor(zigs));
+  const out: { x: number; y: number }[] = [{ x: startX, y: startY }];
+  for (let i = 0; i < n; i++) {
+    const t = (i + 1) / (n + 1);
+    const cx = startX + (endX - startX) * t;
+    const cy = startY + (endY - startY) * t;
+    const sign = i % 2 === 0 ? 1 : -1;
+    out.push({ x: cx + perpX * offset * sign, y: cy + perpY * offset * sign });
+  }
+  out.push({ x: endX, y: endY });
+  return out;
+}
+
+// Build a tapered closed polygon by sweeping the perpendicular bisector
+// at each polyline vertex by half the local width. Width per vertex
+// comes from `widthFn(i, n)`. The last vertex collapses to a point so
+// the tip is sharp. Use this instead of clipper inflation when you want
+// linear taper and miter joins.
+export function buildTaperedPolygon(
+  pts: { x: number; y: number }[],
+  widthFn: (i: number, n: number) => number,
+): { x: number; y: number }[] {
+  const n = pts.length;
+  if (n < 2) return [];
+  const perps: { x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    let tx = 0;
+    let ty = 0;
+    if (i > 0) {
+      const dx = pts[i].x - pts[i - 1].x;
+      const dy = pts[i].y - pts[i - 1].y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0) {
+        tx += dx / len;
+        ty += dy / len;
+      }
+    }
+    if (i < n - 1) {
+      const dx = pts[i + 1].x - pts[i].x;
+      const dy = pts[i + 1].y - pts[i].y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      if (len > 0) {
+        tx += dx / len;
+        ty += dy / len;
+      }
+    }
+    const tlen = Math.sqrt(tx * tx + ty * ty);
+    if (tlen > 0) {
+      tx /= tlen;
+      ty /= tlen;
+    }
+    perps.push({ x: -ty, y: tx });
+  }
+  const widths: number[] = [];
+  for (let i = 0; i < n; i++) widths.push(Math.max(0, widthFn(i, n)));
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    out.push({ x: pts[i].x + perps[i].x * widths[i] / 2, y: pts[i].y + perps[i].y * widths[i] / 2 });
+  }
+  out.push({ x: pts[n - 1].x, y: pts[n - 1].y });
+  for (let i = n - 2; i >= 0; i--) {
+    out.push({ x: pts[i].x - perps[i].x * widths[i] / 2, y: pts[i].y - perps[i].y * widths[i] / 2 });
+  }
+  return out;
+}
