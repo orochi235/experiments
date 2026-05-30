@@ -247,6 +247,91 @@ export function classicTailOffsetAt(s: number, cfg: ClassicTailConfig): { dx: nu
   };
 }
 
+// --- Spikes (sunburst / starburst) effect --------------------------------
+//
+// Ported from the weasel badge lab's Spikes effect. Distributes N
+// triangular spikes evenly around the body perimeter; per-spike length
+// scales with the local axis (vert / horz / diagonal) so the sunburst
+// looks balanced regardless of body aspect ratio. Curvature-based
+// shortening (`cornerCompensation`) prevents spikes from visibly fanning
+// out around tight corner arcs.
+
+export interface SpikesConfig {
+  spikeWidth: number;
+  spacing: number;            // gap between adjacent bases (negative = overlap)
+  length: number;
+  taper: number;              // 1 = triangular; >1 sharper tip; <1 blunter
+  vertScale: number;
+  horzScale: number;
+  diagonalScale: number;
+  irregularity: number;
+  cornerCompensation: number; // 0..1
+  phase: number;              // 0..1 fraction of one spike step
+  totalLen: number;
+  perimeterAt: (s: number) => PerimeterPoint;
+}
+
+export function spikesOffsetAt(s: number, cfg: SpikesConfig): { dx: number; dy: number } {
+  const spikeWidth = Math.max(0.5, cfg.spikeWidth);
+  const halfBase = spikeWidth / 2;
+  // Period (center-to-center) = base + spacing; clamp so heavy overlap
+  // doesn't blow up the count to infinity.
+  const period = Math.max(spikeWidth * 0.2, spikeWidth + cfg.spacing);
+  const N = Math.max(3, Math.round(cfg.totalLen / period));
+  const step = cfg.totalLen / N;
+  const phaseOffset = cfg.phase * step;
+  const sm = ((s % cfg.totalLen) + cfg.totalLen) % cfg.totalLen;
+  // For negative spacing the spikes overlap; check neighbors and take the
+  // winner (max profile height) — this gives clean dovetail merging.
+  const overlap = Math.max(1, Math.ceil(halfBase / step) + 1);
+  const baseIdx = Math.round((sm - phaseOffset) / step);
+  const taper = Math.max(0.05, cfg.taper);
+  let bestT = 0;
+  let bestIdx = -1;
+  for (let di = -overlap; di <= overlap; di++) {
+    const idx = baseIdx + di;
+    let sc = idx * step + phaseOffset;
+    sc = ((sc % cfg.totalLen) + cfg.totalLen) % cfg.totalLen;
+    let ds = sm - sc;
+    if (ds > cfg.totalLen / 2) ds -= cfg.totalLen;
+    if (ds < -cfg.totalLen / 2) ds += cfg.totalLen;
+    if (Math.abs(ds) > halfBase) continue;
+    const u = Math.abs(ds) / halfBase;
+    const t = Math.pow(1 - u, taper);
+    if (t > bestT) {
+      bestT = t;
+      bestIdx = idx;
+    }
+  }
+  if (bestT <= 0 || bestIdx < 0) return { dx: 0, dy: 0 };
+  const sc = ((bestIdx * step + phaseOffset) % cfg.totalLen + cfg.totalLen) % cfg.totalLen;
+  const pCenter = cfg.perimeterAt(sc);
+  const dirX = pCenter.nx;
+  const dirY = pCenter.ny;
+  const nxAbs = Math.abs(pCenter.nx);
+  const nyAbs = Math.abs(pCenter.ny);
+  const d = Math.min(1, 2 * nxAbs * nyAbs);
+  const axisScale = nyAbs > nxAbs ? cfg.vertScale : cfg.horzScale;
+  const scale = axisScale * (1 - d) + cfg.diagonalScale * d;
+  const irrMult = 1 + cfg.irregularity * 0.5 * Math.sin(bestIdx * 1.73 + 0.7);
+  const eps = Math.max(step * 0.5, halfBase);
+  const SAMPLES = 5;
+  let kappa = 0;
+  for (let k = 0; k < SAMPLES; k++) {
+    const u2 = (k + 0.5) / SAMPLES;
+    const sA = sc - eps + u2 * 2 * eps - eps / SAMPLES;
+    const sB = sc - eps + u2 * 2 * eps + eps / SAMPLES;
+    const pA = cfg.perimeterAt(sA);
+    const pB = cfg.perimeterAt(sB);
+    kappa += Math.hypot(pB.nx - pA.nx, pB.ny - pA.ny) / (sB - sA);
+  }
+  kappa /= SAMPLES;
+  const baseLen = cfg.length * scale * irrMult * bestT;
+  const comp = Math.max(0, Math.min(cfg.cornerCompensation, 1));
+  const lenCss = Math.max(0, baseLen / (1 + comp * kappa * baseLen));
+  return { dx: dirX * lenCss, dy: dirY * lenCss };
+}
+
 // --- Compose final body silhouette ----------------------------------------
 
 const COMPOSE_SAMPLES = 720;

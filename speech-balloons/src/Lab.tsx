@@ -8,7 +8,6 @@ import {
   LEFT_PANEL_EFFECTS,
   RIGHT_PANEL_EFFECTS,
   defaultParams,
-  effectSummary,
   type LabControl,
 } from './controls';
 import { loadSnapshot, saveSnapshot, LAB_STORAGE_KEY } from './persistence';
@@ -253,42 +252,20 @@ export function Lab() {
 
       <main className="workspace">
         <aside className="side-panel left">
-          <LayerStack
-            title="Fill"
-            effects={leftEffects}
-            allKinds={LEFT_PANEL_EFFECTS}
-            expandedIds={expandedIds}
-            draggingId={draggingId}
-            onAdd={addEffect}
-            onRemove={removeEffect}
-            onToggleExpanded={toggleExpanded}
-            onReorder={reorderEffect}
-            onChange={updateEffectParam}
-            onDragStart={setDraggingId}
-            onDragEnd={() => setDraggingId(null)}
-            bodyW={design.width}
-            bodyH={design.height}
-          />
-        </aside>
-
-        <section className="preview">
-          <div className="preview-stage">
-            <SpeechBalloon design={design} runtime={runtime} />
-          </div>
-        </section>
-
-        <aside className="side-panel right">
-          <Section title="Body">
-            <label className="field">
-              <span>Shape</span>
-              <select value={design.base} onChange={(e) => setBase(e.target.value as BalloonBase)}>
+          <Section
+            title="Body"
+            headerRight={
+              <select
+                className="effect-primary"
+                value={design.base}
+                onChange={(e) => setBase(e.target.value as BalloonBase)}
+              >
                 {BASE_KINDS.map((b) => (
-                  <option key={b} value={b}>
-                    {b}
-                  </option>
+                  <option key={b} value={b}>{b}</option>
                 ))}
               </select>
-            </label>
+            }
+          >
             <ControlList
               controls={BASE_CONTROLS[design.base]}
               params={design.baseParams}
@@ -348,6 +325,31 @@ export function Lab() {
           </Section>
 
           <LayerStack
+            title="Fill"
+            effects={leftEffects}
+            allKinds={LEFT_PANEL_EFFECTS}
+            expandedIds={expandedIds}
+            draggingId={draggingId}
+            onAdd={addEffect}
+            onRemove={removeEffect}
+            onToggleExpanded={toggleExpanded}
+            onReorder={reorderEffect}
+            onChange={updateEffectParam}
+            onDragStart={setDraggingId}
+            onDragEnd={() => setDraggingId(null)}
+            bodyW={design.width}
+            bodyH={design.height}
+          />
+        </aside>
+
+        <section className="preview">
+          <div className="preview-stage">
+            <SpeechBalloon design={design} runtime={runtime} />
+          </div>
+        </section>
+
+        <aside className="side-panel right">
+          <LayerStack
             title="Effects"
             effects={rightEffects}
             allKinds={RIGHT_PANEL_EFFECTS}
@@ -406,14 +408,16 @@ function LayerStack({
 
   return (
     <>
-      <h2 className="layer-stack-title">{title}</h2>
-      <div className="layers-add">
-        <span className="layers-add-label">+ Layer</span>
-        {allKinds.map((k) => (
-          <button key={k} onClick={() => onAdd(k)} className="add-layer-btn">
-            {k}
-          </button>
-        ))}
+      <div className="layer-stack-head">
+        <h2 className="layer-stack-title">{title}</h2>
+        <div className="layers-add">
+          <span className="layers-add-label">+ Layer</span>
+          {allKinds.map((k) => (
+            <button key={k} onClick={() => onAdd(k)} className="add-layer-btn">
+              {k}
+            </button>
+          ))}
+        </div>
       </div>
       {effects.map((eff) => {
         const isExpanded = expandedIds.has(eff.id);
@@ -487,7 +491,7 @@ function EffectCard({
   effect,
   expanded,
   dragging,
-  onToggleExpanded,
+  onToggleExpanded: _onToggleExpanded,
   onRemove,
   onChange,
   onDragStart,
@@ -519,45 +523,76 @@ function EffectCard({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <div className="effect-head" onClick={onToggleExpanded} role="button" tabIndex={0}>
-        <span
-          className="drag-handle"
-          aria-hidden="true"
-          title="Drag to reorder"
-          onMouseDown={() => setDraggable(true)}
-          onMouseUp={() => setDraggable(false)}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <DragHandleIcon />
-        </span>
-        <span className="caret" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
-        <span className="effect-kind">{effect.kind}</span>
-        <span className="effect-summary">{effectSummary(effect.kind, effect.params)}</span>
-        <button
-          className="card-remove"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          title="Remove layer"
-          aria-label="Remove layer"
-        >
-          ✕
-        </button>
-      </div>
-      {expanded && (
-        <div className="effect-body">
-          <ControlList controls={EFFECT_CONTROLS[effect.kind]} params={effect.params} onChange={onChange} bodyW={bodyW} bodyH={bodyH} />
-        </div>
-      )}
+      {(() => {
+        // Hoist the effect's primary mode/shape select into the title bar.
+        // We treat the first non-header control as primary when it's a
+        // select — that's `mode` on fill, `shape` on tail; spikes / stroke
+        // / shadow have none.
+        const allControls = EFFECT_CONTROLS[effect.kind];
+        const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+        const primarySelect = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+        const bodyControls = primarySelect
+          ? allControls.filter((c) => !('key' in c) || c.key !== primarySelect.key)
+          : allControls;
+        const primaryValue = primarySelect
+          ? String(effect.params[primarySelect.key] ?? primarySelect.default)
+          : '';
+        return (
+          <>
+            <div className="effect-head">
+              <span
+                className="drag-handle"
+                aria-hidden="true"
+                title="Drag to reorder"
+                onMouseDown={() => setDraggable(true)}
+                onMouseUp={() => setDraggable(false)}
+              >
+                <DragHandleIcon />
+              </span>
+              <span className="effect-kind">{effect.kind}</span>
+              {primarySelect && (
+                <select
+                  className="effect-primary"
+                  value={primaryValue}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => onChange(primarySelect.key, e.target.value)}
+                >
+                  {primarySelect.options.map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                className="card-remove"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                title="Remove layer"
+                aria-label="Remove layer"
+              >
+                ✕
+              </button>
+            </div>
+            {(
+              <div className="effect-body">
+                <ControlList controls={bodyControls} params={effect.params} onChange={onChange} bodyW={bodyW} bodyH={bodyH} />
+              </div>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, headerRight, children }: { title: string; headerRight?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="panel-section">
-      <h2>{title}</h2>
+      <div className="panel-section-head">
+        <h2>{title}</h2>
+        {headerRight}
+      </div>
       <div className="panel-body">{children}</div>
     </div>
   );
@@ -680,83 +715,112 @@ interface ControlListProps {
   bodyW?: number;
   bodyH?: number;
 }
+function renderControl(
+  c: LabControl,
+  params: ParamBag,
+  onChange: (key: string, value: ParamValue) => void,
+  bodyW?: number,
+  bodyH?: number,
+): React.ReactNode {
+  if (c.kind === 'header') return null;
+  const label = c.label ?? c.key;
+  const value = params[c.key];
+  if (c.kind === 'range') {
+    const dynMax = c.maxFn && bodyW !== undefined && bodyH !== undefined
+      ? c.maxFn({ W: bodyW, H: bodyH })
+      : c.max;
+    const clampedValue = Math.min(Number(value ?? c.default), dynMax);
+    return (
+      <SliderField
+        key={c.key}
+        label={label}
+        value={clampedValue}
+        min={c.min}
+        max={dynMax}
+        step={c.step}
+        fixed={c.step < 1 ? 2 : 0}
+        onChange={(v) => onChange(c.key, v)}
+      />
+    );
+  }
+  if (c.kind === 'select') {
+    return (
+      <label key={c.key} className="field">
+        <span>{label}</span>
+        <select value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)}>
+          {c.options.map((o) => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+  if (c.kind === 'color') {
+    return (
+      <label key={c.key} className="field color">
+        <span>{label}</span>
+        <input type="color" value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)} />
+      </label>
+    );
+  }
+  if (c.kind === 'toggle') {
+    return (
+      <label key={c.key} className="checkbox">
+        <input type="checkbox" checked={Boolean(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.checked)} />
+        <span>{label}</span>
+      </label>
+    );
+  }
+  if (c.kind === 'curve') {
+    const arr = Array.isArray(value) ? (value as number[]) : c.defaults;
+    return (
+      <div key={c.key} className="curve-block">
+        {c.label && <h3 className="curve-label">{c.label}</h3>}
+        <CurveField
+          values={arr}
+          min={c.min}
+          max={c.max}
+          step={c.step}
+          onChange={(vals) => onChange(c.key, vals)}
+        />
+      </div>
+    );
+  }
+  return (
+    <label key={c.key} className="field text">
+      <span>{label}</span>
+      <input type="text" value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)} />
+    </label>
+  );
+}
+
 function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListProps) {
+  // Group controls by their containing header so headered sections render
+  // inside a `.subpanel` with its own background. Controls before the first
+  // header render inline at the parent grid level.
+  type Group = { header: string | null; items: LabControl[] };
+  const groups: Group[] = [{ header: null, items: [] }];
+  for (const c of controls) {
+    if (c.kind === 'header') {
+      if (c.hideWhen && c.hideWhen(params)) continue;
+      groups.push({ header: c.label, items: [] });
+    } else {
+      groups[groups.length - 1].items.push(c);
+    }
+  }
   return (
     <>
-      {controls.map((c, idx) => {
-        if (c.kind === 'header') {
-          if (c.hideWhen && c.hideWhen(params)) return null;
-          return <h3 key={`h-${idx}`}>{c.label}</h3>;
-        }
-        if (c.hideWhen && c.hideWhen(params)) return null;
-        const label = c.label ?? c.key;
-        const value = params[c.key];
-        if (c.kind === 'range') {
-          const dynMax = c.maxFn && bodyW !== undefined && bodyH !== undefined
-            ? c.maxFn({ W: bodyW, H: bodyH })
-            : c.max;
-          const clampedValue = Math.min(Number(value ?? c.default), dynMax);
-          return (
-            <SliderField
-              key={c.key}
-              label={label}
-              value={clampedValue}
-              min={c.min}
-              max={dynMax}
-              step={c.step}
-              fixed={c.step < 1 ? 2 : 0}
-              onChange={(v) => onChange(c.key, v)}
-            />
-          );
-        }
-        if (c.kind === 'select') {
-          return (
-            <label key={c.key} className="field">
-              <span>{label}</span>
-              <select value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)}>
-                {c.options.map((o) => (
-                  <option key={o} value={o}>{o}</option>
-                ))}
-              </select>
-            </label>
-          );
-        }
-        if (c.kind === 'color') {
-          return (
-            <label key={c.key} className="field color">
-              <span>{label}</span>
-              <input type="color" value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)} />
-            </label>
-          );
-        }
-        if (c.kind === 'toggle') {
-          return (
-            <label key={c.key} className="checkbox">
-              <input type="checkbox" checked={Boolean(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.checked)} />
-              <span>{label}</span>
-            </label>
-          );
-        }
-        if (c.kind === 'curve') {
-          const arr = Array.isArray(value) ? (value as number[]) : c.defaults;
-          return (
-            <div key={c.key} className="curve-block">
-              {c.label && <h3 className="curve-label">{c.label}</h3>}
-              <CurveField
-                values={arr}
-                min={c.min}
-                max={c.max}
-                step={c.step}
-                onChange={(vals) => onChange(c.key, vals)}
-              />
-            </div>
-          );
+      {groups.map((g, gi) => {
+        const visible = g.items.filter((c) => !c.hideWhen || !c.hideWhen(params));
+        if (visible.length === 0) return null;
+        if (g.header === null) {
+          return visible.map((c) => renderControl(c, params, onChange, bodyW, bodyH));
         }
         return (
-          <label key={c.key} className="field text">
-            <span>{label}</span>
-            <input type="text" value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)} />
-          </label>
+          <div key={`grp-${gi}`} className="subpanel">
+            <h3 className="subpanel-title">{g.header}</h3>
+            {visible.map((c) => renderControl(c, params, onChange, bodyW, bodyH))}
+          </div>
         );
       })}
     </>

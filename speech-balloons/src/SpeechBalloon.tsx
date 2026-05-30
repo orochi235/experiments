@@ -9,6 +9,7 @@ import {
   buildLightning,
   buildZigzagLightningPolyline,
   buildTaperedPolygon,
+  spikesOffsetAt,
   type BaseSampler,
   type PerimeterPoint,
 } from './geometry';
@@ -38,26 +39,30 @@ function measureTextWidth(text: string, fontPx: number, fontFamily: string): num
 }
 
 // Natural width-to-length factor per tail shape. Multiplied by `weight` and
-// `size` to derive the absolute `baseWidth` that the geometry helpers consume.
+// Base-width factor per shape, applied to the BODY's shorter dimension
+// (not the tail's own length). This decouples width from length —
+// scaling Length doesn't proportionally fatten the tail; scaling the
+// body does.
 const TAIL_WIDTH_FACTOR: Record<TailShape, number> = {
-  classic: 0.8,
-  bubbles: 0.23,
-  // lightning bumped from 0.06 → 0.55 so the "Base width" slider gives a
-  // range commensurate with the classic tail's range (was producing
-  // sub-1px ribbons for typical sizes).
-  lightning: 0.55,
+  classic: 0.34,
+  bubbles: 0.10,
+  lightning: 0.24,
 };
 
 // Resolve a tail effect's params into the (length, baseWidth) the geometry
-// layer wants. Reads `size` and `weight` from params; falls back to the legacy
-// `length`/`baseWidth` shape so older snapshots still render.
-function tailDims(params: ParamBag, shape: TailShape): { length: number; baseWidth: number } {
+// layer wants. baseWidth = bodyRef × factor × weight where bodyRef is the
+// shorter of the body's width/height.
+function tailDims(
+  params: ParamBag,
+  shape: TailShape,
+  bodyW: number,
+  bodyH: number,
+): { length: number; baseWidth: number } {
   const size = (params.size as number) ?? (params.length as number) ?? 60;
   const weight = (params.weight as number) ?? 1;
   const naturalFactor = TAIL_WIDTH_FACTOR[shape];
-  const derivedWidth = size * naturalFactor * weight;
-  // If a legacy `baseWidth` is present and no `weight` was provided, prefer the
-  // legacy value to preserve old-snapshot appearance.
+  const bodyRef = Math.min(bodyW, bodyH);
+  const derivedWidth = bodyRef * naturalFactor * weight;
   const baseWidth = params.weight === undefined && typeof params.baseWidth === 'number'
     ? (params.baseWidth as number)
     : derivedWidth;
@@ -355,15 +360,32 @@ export function SpeechBalloon({ design, runtime }: Props) {
     });
   }, [tailEffects, sampler, W, H, pointTransform]);
 
-  // Body silhouette polygon — includes any classic-tail offsets baked in.
+  const spikesEffects = useMemo(
+    () => design.effects.filter((e) => e.kind === 'spikes'),
+    [design.effects],
+  );
+
+  // Body silhouette polygon — includes classic-tail offsets and spike
+  // sunburst offsets baked into the perimeter via composeBodyPoints.
+  // Spikes are isolated from tail attach regions: at perimeter samples
+  // inside any tail's halfBase arc, the spike offset returns zero so
+  // the tail's bump geometry isn't disturbed by overlapping spikes.
   const bodyPolygon = useMemo<Polygon>(() => {
     const offsets: Array<(s: number) => { dx: number; dy: number }> = [];
+    const tailRanges: Array<{ sc: number; halfBase: number }> = [];
     for (const eff of tailEffects) {
       const shape = ((eff.params.shape as TailShape) ?? 'classic') as TailShape;
-      if (shape !== 'classic') continue;
       const angle = (eff.params.angle as number) ?? 115;
       const sc = attachmentS(angle, sampler, W, H);
-      const dims = tailDims(eff.params, 'classic');
+      const dims = tailDims(eff.params, shape, W, H);
+      // Track the attach region for every tail shape — classic uses its
+      // halfBase directly, bubbles/lightning use baseWidth as a buffer
+      // so spikes don't poke out of their attach footprint either.
+      const halfBase = shape === 'classic'
+        ? dims.baseWidth / 2
+        : Math.max(2, dims.baseWidth);
+      tailRanges.push({ sc, halfBase });
+      if (shape !== 'classic') continue;
       const cfg = {
         sc,
         halfBase: dims.baseWidth / 2,
@@ -376,8 +398,38 @@ export function SpeechBalloon({ design, runtime }: Props) {
       };
       offsets.push((s) => classicTailOffsetAt(s, cfg));
     }
+    const isInTailRange = (s: number): boolean => {
+      const tl = sampler.totalLen;
+      for (const r of tailRanges) {
+        let ds = s - r.sc;
+        if (ds > tl / 2) ds -= tl;
+        if (ds < -tl / 2) ds += tl;
+        if (Math.abs(ds) <= r.halfBase) return true;
+      }
+      return false;
+    };
+    for (const eff of spikesEffects) {
+      const cfg = {
+        spikeWidth: (eff.params.spikeWidth as number) ?? 6,
+        spacing: (eff.params.spacing as number) ?? 4,
+        length: (eff.params.length as number) ?? 18,
+        taper: (eff.params.taper as number) ?? 1,
+        vertScale: (eff.params.vertScale as number) ?? 1.4,
+        horzScale: (eff.params.horzScale as number) ?? 1,
+        diagonalScale: (eff.params.diagonalScale as number) ?? 0.5,
+        irregularity: (eff.params.irregularity as number) ?? 0,
+        cornerCompensation: (eff.params.cornerCompensation as number) ?? 1,
+        phase: (eff.params.phase as number) ?? 0,
+        totalLen: sampler.totalLen,
+        perimeterAt: sampler.perimeterAt,
+      };
+      offsets.push((s) => {
+        if (isInTailRange(s)) return { dx: 0, dy: 0 };
+        return spikesOffsetAt(s, cfg);
+      });
+    }
     return composeBodyPoints(sampler, offsets, pointTransform);
-  }, [tailEffects, sampler, W, H, pointTransform]);
+  }, [tailEffects, spikesEffects, sampler, W, H, pointTransform]);
 
   // Polygons after bubble-union — kept as polygons so per-heightmap-mode rasterizers can offset them.
   // Lightning ribbon polygons. Built here BEFORE bodyAndBubblesPolys so
@@ -390,7 +442,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const out: Array<{ polys: Polygon[]; d: string }> = [];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'lightning') continue;
-      const dims = tailDims(rt.params, 'lightning');
+      const dims = tailDims(rt.params, 'lightning', W, H);
       const style = (rt.params.lightningStyle as string) ?? 'jagged';
       const arc = (rt.params.arc as number) ?? 0;
       const jaggedness = (rt.params.jaggedness as number) ?? 0.45;
@@ -433,7 +485,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const polys: Polygon[] = [bodyPolygon];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'bubbles') continue;
-      const dims = tailDims(rt.params, 'bubbles');
+      const dims = tailDims(rt.params, 'bubbles', W, H);
       const bubbles = buildBubbles(
         rt.attach,
         (rt.params.count as number) ?? 3,
@@ -464,7 +516,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const out: Array<{ cx: number; cy: number; r: number }> = [];
     for (const rt of resolvedTails) {
       if (rt.shape !== 'bubbles') continue;
-      const dims = tailDims(rt.params, 'bubbles');
+      const dims = tailDims(rt.params, 'bubbles', W, H);
       const bubbles = buildBubbles(
         rt.attach,
         (rt.params.count as number) ?? 3,

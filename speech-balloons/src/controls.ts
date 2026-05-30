@@ -65,18 +65,17 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'shape', label: 'Shape', kind: 'select', options: ['classic', 'bubbles', 'lightning'], default: 'classic' },
     { kind: 'header', label: 'Attachment' },
     { key: 'angle', label: 'Angle', kind: 'range', min: 0, max: 359, step: 1, default: 115 },
-    { key: 'radial', label: 'Radial offset (in/out)', kind: 'range', min: -40, max: 60, step: 0.5, default: 0 },
+    { key: 'fillet', label: 'Fillet', kind: 'range', min: 0, max: 8, step: 0.05, default: 1, hideWhen: (p) => p.shape === 'bubbles' },
     { kind: 'header', label: 'Shape' },
     // Single magnitude. Each shape applies its own natural width factor (classic
     // 0.8, bubbles 0.23, lightning 0.06) so size+weight=1 looks sensible across all.
     { key: 'size', label: 'Length', kind: 'range', min: 8, max: 220, step: 0.5, default: 60 },
     // Width multiplier on the shape's natural width factor. 1 = natural, <1 thinner, >1 fatter.
-    { key: 'weight', label: 'Base width', kind: 'range', min: 0.2, max: 3, step: 0.05, default: 1 },
-    { key: 'fillet', label: 'Fillet', kind: 'range', min: 0, max: 8, step: 0.05, default: 1 },
+    { key: 'weight', label: 'Base width', kind: 'range', min: 0.2, max: 2, step: 0.05, default: 1 },
     { key: 'arc', label: 'Arc (lateral bend)', kind: 'range', min: -1, max: 1, step: 0.02, default: 0 },
     { kind: 'header', label: 'Bubbles', hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'count', label: 'Count', kind: 'range', min: 1, max: 8, step: 1, default: 3, hideWhen: (p) => p.shape !== 'bubbles' },
-    { key: 'gap', label: 'Gap (fraction of size)', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.15, hideWhen: (p) => p.shape !== 'bubbles' },
+    { key: 'gap', label: 'Gap (fraction of size)', kind: 'range', min: -1, max: 1, step: 0.02, default: 0.15, hideWhen: (p) => p.shape !== 'bubbles' },
     { kind: 'header', label: 'Lightning', hideWhen: (p) => p.shape !== 'lightning' },
     { key: 'lightningStyle', label: 'Style', kind: 'select', options: ['jagged', 'zigzag'], default: 'jagged', hideWhen: (p) => p.shape !== 'lightning' },
     { key: 'segments', label: 'Jags', kind: 'range', min: 2, max: 12, step: 1, default: 5, hideWhen: (p) => p.shape !== 'lightning' || p.lightningStyle === 'zigzag' },
@@ -85,6 +84,16 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'widthTaper', label: 'Width taper', kind: 'range', min: 0.3, max: 4, step: 0.05, default: 1, hideWhen: (p) => p.shape !== 'lightning' },
     { key: 'tipWidth', label: 'Tip width', kind: 'range', min: 0, max: 0.8, step: 0.02, default: 0, hideWhen: (p) => p.shape !== 'lightning' },
     { key: 'seed', label: 'Seed', kind: 'range', min: 0, max: 99, step: 1, default: 7, hideWhen: (p) => p.shape !== 'lightning' || p.lightningStyle === 'zigzag' },
+  ],
+
+  spikes: [
+    { key: 'spikeWidth', label: 'Spike width', kind: 'range', min: 1, max: 60, step: 0.5, default: 6 },
+    { key: 'spacing', label: 'Spacing', kind: 'range', min: 0, max: 40, step: 0.5, default: 4 },
+    { key: 'length', label: 'Length', kind: 'range', min: 1, max: 120, step: 0.5, default: 18 },
+    { key: 'taper', label: 'Taper', kind: 'range', min: 0.3, max: 4, step: 0.05, default: 1 },
+    { key: 'irregularity', label: 'Irregularity', kind: 'range', min: 0, max: 1, step: 0.02, default: 0 },
+    { key: 'phase', label: 'Phase', kind: 'range', min: 0, max: 1, step: 0.01, default: 0 },
+    { key: 'cornerCompensation', label: 'Corner comp.', kind: 'range', min: 0, max: 1, step: 0.02, default: 1 },
   ],
 
   stroke: [
@@ -100,9 +109,9 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   ],
 };
 
-export const EFFECT_KINDS: EffectKind[] = ['fill', 'tail', 'stroke', 'shadow'];
+export const EFFECT_KINDS: EffectKind[] = ['fill', 'tail', 'spikes', 'stroke', 'shadow'];
 export const LEFT_PANEL_EFFECTS: EffectKind[] = ['fill'];
-export const RIGHT_PANEL_EFFECTS: EffectKind[] = ['tail', 'stroke', 'shadow'];
+export const RIGHT_PANEL_EFFECTS: EffectKind[] = ['tail', 'spikes', 'stroke', 'shadow'];
 export const BASE_KINDS: BalloonBase[] = ['rectangle', 'oval'];
 
 export function defaultParams(controls: LabControl[]): ParamBag {
@@ -130,6 +139,11 @@ export function effectSummary(kind: EffectKind, params: ParamBag): string {
       const shape = (params.shape as string) || 'classic';
       const angle = Math.round((params.angle as number) ?? 115);
       return `${shape} · ${angle}°`;
+    }
+    case 'spikes': {
+      const w = (params.spikeWidth as number) ?? 6;
+      const len = (params.length as number) ?? 18;
+      return `${w}w × ${len}h`;
     }
     case 'stroke': {
       const w = (params.width as number) ?? 2;

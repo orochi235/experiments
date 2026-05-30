@@ -40,6 +40,8 @@
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
   --panel-width: 300px;
+  --left-panel-width: 360px;
+  --right-panel-width: 540px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -135,7 +137,7 @@ body {
 
 .workspace {
   display: grid;
-  grid-template-columns: var(--panel-width) 1fr var(--panel-width);
+  grid-template-columns: var(--left-panel-width) 1fr var(--right-panel-width);
   min-height: 0;
 }
 
@@ -173,11 +175,20 @@ body {
   border-radius: var(--radius-md);
   padding: 14px 16px;
 }
+.panel-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
 .panel-section h2 {
   font: 300 1.05rem/1.2 var(--font-display);
   color: #fff;
-  margin-bottom: 12px;
   letter-spacing: 0.01em;
+  margin: 0;
+}
+.panel-section-head > .effect-primary {
+  margin-left: auto;
 }
 .panel-section h3 {
   font: 500 0.72rem/1 var(--font-display);
@@ -199,6 +210,63 @@ body {
 .panel-body > :not(.field.color),
 .effect-body > :not(.field.color) {
   grid-column: 1 / -1;
+}
+
+/* Sidebar effect panels lay out a grid: left = 2 cols (fill), right = 3
+ * cols (effects). A later `.effect-body { display: flex }` rule
+ * otherwise wins, so re-assert display + grid here. Field widgets get
+ * auto-placement; headers and curve blocks span the full row. */
+.side-panel.left .effect-body,
+.side-panel.right .effect-body {
+  display: grid;
+  column-gap: 10px;
+  row-gap: 10px;
+  align-items: start;
+}
+.side-panel.left .effect-body { grid-template-columns: repeat(2, 1fr); }
+.side-panel.right .effect-body { grid-template-columns: repeat(3, 1fr); }
+.side-panel.left .effect-body > .field,
+.side-panel.right .effect-body > .field {
+  grid-column: auto;
+  min-width: 0;
+}
+.side-panel.left .effect-body > h3,
+.side-panel.left .effect-body > .curve-block,
+.side-panel.left .effect-body > .subpanel,
+.side-panel.right .effect-body > h3,
+.side-panel.right .effect-body > .curve-block,
+.side-panel.right .effect-body > .subpanel {
+  grid-column: 1 / -1;
+}
+
+/* Subpanel: a headered group of controls within an effect body. Gets
+ * its own semi-transparent background + rounded corners, and lays out
+ * its inner fields in the same column count as the parent body. */
+.subpanel {
+  display: grid;
+  column-gap: 10px;
+  row-gap: 10px;
+  align-items: start;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px 10px;
+}
+.subpanel > .field {
+  min-width: 0;
+}
+.subpanel > .curve-block,
+.subpanel > .subpanel-title {
+  grid-column: 1 / -1;
+}
+.side-panel.left .subpanel { grid-template-columns: repeat(2, 1fr); }
+.side-panel.right .subpanel { grid-template-columns: repeat(3, 1fr); }
+.subpanel-title {
+  font: 400 0.72rem/1 var(--font-display);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0 0 2px;
 }
 
 /* ── Form fields ──────────────────────────────────────────── */
@@ -295,24 +363,35 @@ input[type=range]::-moz-range-thumb {
 
 /* ── Layers palette ──────────────────────────────────────── */
 
+.layer-stack-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.side-panel > .panel-section + .layer-stack-head { margin-top: 14px; }
 .layer-stack-title {
   font: 300 1.05rem/1.2 var(--font-display);
   color: #fff;
   letter-spacing: 0.01em;
-  margin-top: 10px;
   padding: 0 4px;
+  margin: 0;
+  flex: 0 0 auto;
 }
-.side-panel > .panel-section + .layer-stack-title { margin-top: 14px; }
 
 .layers-add {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 8px 10px;
+  padding: 6px 10px;
   background: rgba(0, 0, 0, 0.22);
   border: 1px dashed var(--panel-border);
   border-radius: var(--radius-sm);
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: auto;
 }
 .layers-add-label {
   font: 500 0.72rem/1 var(--font-display);
@@ -389,10 +468,26 @@ input[type=range]::-moz-range-thumb {
   text-align: center;
 }
 .effect-kind {
-  font: 500 0.82rem/1 var(--font-display);
+  font: 500 1.05rem/1 var(--font-display);
   color: #fff;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
+}
+.effect-primary {
+  font: 400 0.75rem/1 var(--font-sans);
+  color: var(--fg);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  margin-left: auto;
+}
+/* When the card has no primary select, the X still goes right. */
+.effect-head .card-remove {
+  margin-left: auto;
+}
+.effect-head .effect-primary + .card-remove {
+  margin-left: 6px;
 }
 .effect-summary {
   font: 400 0.75rem/1 var(--font-sans);

@@ -1,5 +1,5 @@
 export type BalloonBase = 'rectangle' | 'oval';
-export type EffectKind = 'fill' | 'tail' | 'stroke' | 'shadow';
+export type EffectKind = 'fill' | 'tail' | 'spikes' | 'stroke' | 'shadow';
 export type TailShape = 'classic' | 'bubbles' | 'lightning';
 export type FillMode = 'aqua' | 'bevel' | 'dome';
 export type ShadingMode = 'multiply' | 'mix' | 'lightness';
