@@ -192,6 +192,38 @@ export function Lab() {
     console.log('Lab snapshot copied to clipboard:\n', json);
   };
 
+  const saveSnapshot = () => {
+    const snap = { design, runtime };
+    const json = JSON.stringify(snap, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = url;
+    a.download = `speech-balloon-${stamp}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const loadInputRef = useRef<HTMLInputElement | null>(null);
+  const loadSnapshot = () => loadInputRef.current?.click();
+  const onLoadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as { design?: DesignState; runtime?: RuntimeState };
+      if (!parsed.design || !parsed.runtime || !Array.isArray(parsed.design.effects)) {
+        alert('Not a valid speech-balloon snapshot — needs {design, runtime}.');
+        return;
+      }
+      setDesign(parsed.design);
+      setRuntime(parsed.runtime);
+    } catch (err) {
+      alert(`Failed to load snapshot: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
   const [isPreparingSvg, setIsPreparingSvg] = useState(false);
   const downloadSvg = async () => {
     const stage = stageRef.current;
@@ -428,6 +460,19 @@ export function Lab() {
           <button onClick={exportSnapshot} title="Copy snapshot JSON to clipboard">
             Export
           </button>
+          <button onClick={saveSnapshot} title="Download snapshot as .json file">
+            Save
+          </button>
+          <button onClick={loadSnapshot} title="Load snapshot from .json file">
+            Load
+          </button>
+          <input
+            ref={loadInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={onLoadFile}
+            style={{ display: 'none' }}
+          />
           <button onClick={downloadSvg} title="Download as SVG" disabled={isPreparingSvg}>
             {isPreparingSvg ? 'Preparing…' : 'Download SVG'}
           </button>
@@ -632,7 +677,7 @@ function CurveBlock({ label, values, min, max, step, onChange }: CurveBlockProps
     return () => obs.disconnect();
   }, []);
   return (
-    <div className="sb-curve-block" ref={wrapRef}>
+    <div className="sb-curve-block lk-property-group__span" ref={wrapRef}>
       {label && <h3 className="sb-curve-label">{label}</h3>}
       {width > 0 && (
         <KitCurveField values={values} min={min} max={max} step={step} width={width} onChange={onChange} />
