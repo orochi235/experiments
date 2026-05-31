@@ -102,7 +102,17 @@ export function Lab() {
     }
     if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
     snapTimerRef.current = setTimeout(() => {
-      updateUndo('balloon', (prev) => pushSnapshot(prev ?? emptyStack(), { design, runtime }, 200));
+      updateUndo('balloon', (prev) => {
+        const stack = prev ?? emptyStack();
+        const last = stack.past[stack.past.length - 1];
+        const snap = { design, runtime };
+        // Skip the push when the most recent snapshot already equals this
+        // one. Prevents the multi-key setConfig fan-out (one render per
+        // top-level key change) from echoing a restored undo state back
+        // into the past stack as a new entry.
+        if (last && JSON.stringify(last) === JSON.stringify(snap)) return stack;
+        return pushSnapshot(stack, snap, 200);
+      });
     }, 300);
   }, [design, runtime, updateUndo]);
 
