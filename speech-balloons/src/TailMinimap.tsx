@@ -108,8 +108,11 @@ export function TailMinimap(props: TailMinimapProps) {
 
   const handleChange = (next: ControlPoint[]) => {
     if (next.length !== derivedPoints.length) return; // structural change → commit phase
-    // Mirror the in-flight drag value so PointPlotter and our render agree.
-    setLiveDrag(next);
+    // Snap both anchors to where they will actually live on commit:
+    //   - base rides the perimeter
+    //   - tip lands at the position implied by (clamped outAngle, clamped
+    //     length, current arc) — so the visual matches the rendered tail.
+    const snapped: ControlPoint[] = next.slice();
     for (let i = 0; i < tails.length; i++) {
       const t = tails[i];
       const newBase = next[i * 2];
@@ -118,12 +121,12 @@ export function TailMinimap(props: TailMinimapProps) {
       const oldTip = points[i * 2 + 1];
       const baseMoved = dist(newBase, oldBase) > 0.05;
       const tipMoved = dist(newTip, oldTip) > 0.05;
-      if (!baseMoved && !tipMoved) continue;
       if (baseMoved) {
-        // Drag base = angle only. Tip will re-derive on next render.
         const a = Math.atan2(newBase.y - cy, newBase.x - cx);
+        const proj = perimeterAtAngle(a);
+        snapped[i * 2] = { x: proj.x, y: proj.y };
         onUpdateTail(t.id, { angle: normalizeDeg((a * 180) / Math.PI) });
-      } else {
+      } else if (tipMoved) {
         // Drag tip = keep attach fixed; recompute outAngle + length from the
         // vector (newTip - attach). With arc !== 0 the tail's drawn tip sits
         // at angle (a + outAngle + atan(arc)) from attach with magnitude
@@ -142,9 +145,23 @@ export function TailMinimap(props: TailMinimapProps) {
         while (outAngle <= -180) outAngle += 360;
         outAngle = Math.max(-90, Math.min(90, outAngle));
         const length = Math.max(8, v / (scale * Math.sqrt(1 + t.arc * t.arc)));
+        // Reproject the tip onto the clamped (outAngle, length, arc) so the
+        // visual handle doesn't drift past the slider clamps during drag.
+        const r = (outAngle * Math.PI) / 180;
+        const ox = Math.cos(a + r);
+        const oy = Math.sin(a + r);
+        const px = -oy;
+        const py = ox;
+        const L = length * scale;
+        const arcShift = t.arc * L;
+        snapped[i * 2 + 1] = {
+          x: b.x + ox * L + px * arcShift,
+          y: b.y + oy * L + py * arcShift,
+        };
         onUpdateTail(t.id, { outAngle, length });
       }
     }
+    setLiveDrag(snapped);
   };
 
   const handleCommit = (next: ControlPoint[], prev: readonly ControlPoint[]) => {

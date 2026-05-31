@@ -743,7 +743,10 @@ export function buildBubbles(
     const cy = attachPoint.y + dirY * dist + perpY * arcShift;
     out.push({ cx, cy, r: size });
     const nextSize = size * falloff;
-    dist += size + nextSize + gapFrac * (size + nextSize);
+    // Edge gap scales with the SMALLER neighbor, not the sum. Without this
+    // the trailing bubble drifts away proportional to its larger
+    // predecessor's radius and reads as isolated.
+    dist += size + nextSize + 2 * gapFrac * Math.min(size, nextSize);
     size = nextSize;
   }
   return out;
