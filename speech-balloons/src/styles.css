@@ -439,7 +439,7 @@ body {
   grid-template-rows: auto auto;
   align-content: end;
   column-gap: 8px;
-  row-gap: 4px;
+  row-gap: 0;
   min-width: 0;
 }
 .field.color > span {
@@ -452,16 +452,17 @@ body {
   grid-column: 2;
   grid-row: 1;
   align-self: center;
-  width: 36px; height: 20px;
+  width: 36px; height: 24px;
   background: transparent;
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-sm);
-  padding: 2px;
+  padding: 0;
   cursor: pointer;
 }
 .field.color > input[type=range].color-alpha {
   grid-column: 1 / -1;
   grid-row: 2;
+  height: 12px;
 }
 .field.color > input[type=range].color-alpha::-webkit-slider-runnable-track {
   background: rgba(126, 200, 227, 0.10);
@@ -493,14 +494,14 @@ input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, hsl(196 80% 62%) 45%, transparent);
   border: none;
   margin-top: -2px;
 }
 input[type=range]::-moz-range-thumb {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, hsl(196 80% 62%) 45%, transparent);
   border: none;
 }
 
@@ -687,9 +688,12 @@ input[type=range]::-moz-range-thumb {
   letter-spacing: 0.04em;
   background: transparent;
   border: 0;
-  /* Padding-right = chevron width (~11px) + 0.5em gap between the
-   * label and the triangle. */
-  padding: 2px calc(0.5em + 11px) 2px 0;
+  /* Shrink to the selected option so the chevron sits just after the
+   * label, not at the far right of the widest option. */
+  width: max-content;
+  /* Padding-right = chevron width (~11px) + ~0.5em gap so the chevron
+   * floats just past the label text. */
+  padding: 2px calc(0.4em + 11px) 2px 0;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
@@ -699,15 +703,13 @@ input[type=range]::-moz-range-thumb {
   background-repeat: no-repeat;
 }
 .effect-kind-select:focus { outline: 1px solid var(--tail-accent, currentColor); outline-offset: 2px; }
-/* When the card has no primary select, the X still goes right. */
-.effect-head .card-remove {
-  margin-left: auto;
-}
+/* Always push the remove button to the right edge — whether it follows
+ * a kind label, a kind <select>, or a primary readout. */
+.effect-head .card-remove,
 .effect-head .effect-primary + .card-remove,
 .effect-head .effect-kind-select + .card-remove {
-  margin-left: 6px;
+  margin-left: auto;
 }
-.effect-head .effect-kind-select { margin-right: auto; }
 .effect-summary {
   font: 400 0.75rem/1 var(--font-sans);
   color: var(--fg-dim);

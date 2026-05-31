@@ -610,18 +610,37 @@ export function buildCloudPuffs(cfg: CloudPuffsConfig): Puff[] {
   const out: Puff[] = [];
   const n = Math.max(1, Math.round((cfg.density * cfg.totalLen) / 100));
   const step = cfg.totalLen / n;
+  // Window for sampling local curvature: a fraction of the inter-puff step
+  // so we estimate the turn the puff actually has to span, not a global avg.
+  const eps = Math.min(cfg.totalLen * 0.5, Math.max(2, step * 0.5));
   for (let i = 0; i < n; i++) {
     const baseS = i * step;
     const posJ = (prng(cfg.seed, i) - 0.5) * cfg.posJitter * step;
     let s = baseS + posJ;
     s = ((s % cfg.totalLen) + cfg.totalLen) % cfg.totalLen;
     const sizeJ = 1 + (prng(cfg.seed + 17, i) - 0.5) * cfg.sizeJitter * 0.7;
-    const r = Math.max(2, cfg.puffSize * sizeJ);
     const p = cfg.perimeterAt(s);
-    // Anchor puff so roughly half its radius sticks outside the body.
-    const inset = r * 0.5;
-    const cx = p.x - p.nx * inset;
-    const cy = p.y - p.ny * inset;
+    // Sample on either side to estimate corner sharpness + average the
+    // normals into a corner bisector. At a sharp convex corner the single-
+    // point normal points hard outward and the puff balloons past the
+    // corner tip; the bisector keeps it symmetric, and `sharpness` lets us
+    // shrink + tuck it so the protrusion matches the surrounding edges.
+    const sBefore = ((s - eps) % cfg.totalLen + cfg.totalLen) % cfg.totalLen;
+    const sAfter = (s + eps) % cfg.totalLen;
+    const a = cfg.perimeterAt(sBefore);
+    const b = cfg.perimeterAt(sAfter);
+    const dot = Math.max(-1, Math.min(1, a.nx * b.nx + a.ny * b.ny));
+    const turn = Math.acos(dot); // 0 = flat, π = U-turn
+    // Sharpness ramps from 0 below ~22° to 1 at ~90°.
+    const sharpness = Math.max(0, Math.min(1, (turn - Math.PI / 8) / (Math.PI / 2 - Math.PI / 8)));
+    let nx = a.nx + b.nx;
+    let ny = a.ny + b.ny;
+    const nLen = Math.hypot(nx, ny);
+    if (nLen > 1e-6) { nx /= nLen; ny /= nLen; } else { nx = p.nx; ny = p.ny; }
+    const r = Math.max(2, cfg.puffSize * sizeJ * (1 - sharpness * 0.4));
+    const inset = r * (0.5 + sharpness * 0.7);
+    const cx = p.x - nx * inset;
+    const cy = p.y - ny * inset;
     out.push({ cx, cy, r });
   }
   return out;
