@@ -262,7 +262,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   // Split effects by kind. Multiple tails allowed.
   // NOTE: these four lookups are not useMemo'd, unlike spikes/lobes/wobble/jitter/cloud
   // below. Each call returns a new reference per render, busting downstream useMemos
-  // (resolvedTails → bodyAndBubblesPolys → bodyPath / computeMatPlateau / etc.). It's
+  // (resolvedTails → bodyAndBubblesPolys → bodyPath / domeLayers / etc.). It's
   // tolerable today, but anything heavy added downstream — like the old bevel-ring
   // 31×-polygon-offset loop — will fire on every state change. Wrap in useMemo before
   // adding more expensive geometry.
