@@ -141,11 +141,15 @@ export function TailMinimap(props: TailMinimapProps) {
         snapped[i * 2] = { x: proj.x, y: proj.y };
         onUpdateTail(t.id, { angle: normalizeDeg((a * 180) / Math.PI) });
         // Reproject the tip from the new base + current (outAngle, length, arc).
-        // Without this, the tip handle stays at its pre-drag screen position
-        // while the base orbits — the tail appears to stretch or fold weirdly.
+        // The rendered model uses the perimeter's outward NORMAL as the
+        // tail's base direction (see rotateAttachByOutAngle in
+        // SpeechBalloon.tsx) — for non-elliptical bodies this differs from
+        // the radial direction. Use proj.nx/ny so the minimap stays faithful.
         const r = ((t.outAngle ?? 0) * Math.PI) / 180;
-        const ox = Math.cos(a + r);
-        const oy = Math.sin(a + r);
+        const cr = Math.cos(r);
+        const sr = Math.sin(r);
+        const ox = proj.nx * cr - proj.ny * sr;
+        const oy = proj.nx * sr + proj.ny * cr;
         const px = -oy;
         const py = ox;
         const L = (t.length ?? 60) * scale;
