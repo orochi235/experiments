@@ -35,10 +35,5 @@ export interface DesignState {
   lean: number; // italic-style skewX in degrees, -25..25
   textColor: string;
   bg: string;
-}
-
-export interface LabSnapshot {
-  runtime: RuntimeState;
-  design: DesignState;
   nextId: number;
 }

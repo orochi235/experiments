@@ -1,0 +1,36 @@
+import { BASE_CONTROLS, EFFECT_CONTROLS, defaultParams } from './controls';
+import type { DesignState, EffectInstance, RuntimeState } from './types';
+
+export function initialDesign(): DesignState {
+  return {
+    base: 'rectangle',
+    baseParams: defaultParams(BASE_CONTROLS.rectangle),
+    effects: initialEffects(),
+    width: 280,
+    height: 140,
+    padX: 24,
+    padY: 18,
+    lean: 0,
+    textColor: '#161921',
+    bg: '#0f1320',
+    nextId: 4,
+  };
+}
+
+export function initialRuntime(): RuntimeState {
+  return {
+    fontFamily: 'Bangers, system-ui, sans-serif',
+    fontSize: 28,
+    text: 'Hello!',
+    fitToContent: false,
+    zoom: 1.2,
+  };
+}
+
+function initialEffects(): EffectInstance[] {
+  return [
+    { id: 1, kind: 'fill',   params: defaultParams(EFFECT_CONTROLS.fill) },
+    { id: 2, kind: 'tail',   params: defaultParams(EFFECT_CONTROLS.tail) },
+    { id: 3, kind: 'shadow', params: defaultParams(EFFECT_CONTROLS.shadow) },
+  ];
+}

@@ -11,7 +11,10 @@ import {
   SelectRow,
   SliderRow,
   TextRow,
+  useExperimentState,
+  useLabStore,
 } from '@labkit/react';
+import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@labkit/react/undo';
 import { SpeechBalloon } from './SpeechBalloon';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import {
@@ -24,14 +27,13 @@ import {
   defaultParams,
   type LabControl,
 } from './controls';
-import { loadSnapshot, saveSnapshot, LAB_STORAGE_KEY } from './persistence';
 import { inlineSvgTextAsPaths } from './textToPath';
+import { useUndoShortcut } from './useUndoShortcut';
 import type {
   BalloonBase,
   DesignState,
   EffectInstance,
   EffectKind,
-  LabSnapshot,
   ParamBag,
   ParamValue,
   RuntimeState,
@@ -68,28 +70,31 @@ const FONT_OPTIONS = [
 ];
 
 export function Lab() {
-  const initial = useMemo(() => loadSnapshot(), []);
-  const [runtime, setRuntime] = useState<RuntimeState>(initial.runtime);
-  const [design, setDesign] = useState<DesignState>(initial.design);
-  const [nextId, setNextId] = useState<number>(initial.nextId);
+  const { config: design, state: runtime, setConfig, setState } = useExperimentState<RuntimeState, DesignState>();
+  const store = useLabStore();
+  const updateUndo = store.updateWorkspaceUndoStack;
+  const currentUndoStack = store.workspaces.find((w) => w.id === 'balloon')?.undoStack ?? emptyStack();
+
+  const setDesign: React.Dispatch<React.SetStateAction<DesignState>> = useCallback((next) => {
+    const nextDesign = typeof next === 'function' ? (next as (d: DesignState) => DesignState)(design) : next;
+    // setConfig is per-key; iterate top-level keys and only set those that changed.
+    for (const k of Object.keys(nextDesign) as (keyof DesignState)[]) {
+      if ((design as Record<string, unknown>)[k] !== (nextDesign as Record<string, unknown>)[k]) {
+        setConfig(k, (nextDesign as DesignState)[k] as never);
+      }
+    }
+  }, [design, setConfig]);
+
+  const setRuntime: React.Dispatch<React.SetStateAction<RuntimeState>> = useCallback((next) => {
+    const nextRuntime = typeof next === 'function' ? (next as (r: RuntimeState) => RuntimeState)(runtime) : next;
+    setState(nextRuntime);
+  }, [runtime, setState]);
+
   const stageRef = useRef<HTMLDivElement | null>(null);
 
-  const currentSnapshot = useCallback(
-    (): LabSnapshot => ({ runtime, design, nextId }),
-    [runtime, design, nextId],
-  );
-
-  useEffect(() => {
-    saveSnapshot(currentSnapshot());
-  }, [currentSnapshot]);
-
-  // Undo/redo with debounced snapshot coalescing.
-  const undoRef = useRef<LabSnapshot[]>([initial]);
-  const redoRef = useRef<LabSnapshot[]>([]);
-  const isRestoringRef = useRef(false);
+  // Debounced undo snapshot: 300ms after the last change.
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [, forceRerender] = useState(0);
-
+  const isRestoringRef = useRef(false);
   useEffect(() => {
     if (isRestoringRef.current) {
       isRestoringRef.current = false;
@@ -97,53 +102,31 @@ export function Lab() {
     }
     if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
     snapTimerRef.current = setTimeout(() => {
-      const snap = currentSnapshot();
-      const top = undoRef.current[undoRef.current.length - 1];
-      if (top && JSON.stringify(top) === JSON.stringify(snap)) return;
-      undoRef.current.push(snap);
-      if (undoRef.current.length > 200) undoRef.current.shift();
-      redoRef.current = [];
-      forceRerender((n) => n + 1);
+      updateUndo('balloon', (prev) => pushSnapshot(prev ?? emptyStack(), { design, runtime }, 200));
     }, 300);
-  }, [currentSnapshot]);
+  }, [design, runtime, updateUndo]);
 
-  const applySnapshot = (snap: LabSnapshot) => {
+  const undo = useCallback(() => {
+    const result = undoStackOp(currentUndoStack, { design, runtime });
+    if (!result) return;
     isRestoringRef.current = true;
-    setRuntime(snap.runtime);
+    const snap = result.snapshot as { design: DesignState; runtime: RuntimeState };
     setDesign(snap.design);
-    setNextId(snap.nextId);
-  };
+    setRuntime(snap.runtime);
+    updateUndo('balloon', result.stack);
+  }, [design, runtime, currentUndoStack, updateUndo, setDesign, setRuntime]);
 
-  const undo = () => {
-    if (undoRef.current.length <= 1) return;
-    const current = undoRef.current.pop()!;
-    redoRef.current.push(current);
-    applySnapshot(undoRef.current[undoRef.current.length - 1]);
-    forceRerender((n) => n + 1);
-  };
-  const redo = () => {
-    const snap = redoRef.current.pop();
-    if (!snap) return;
-    undoRef.current.push(snap);
-    applySnapshot(snap);
-    forceRerender((n) => n + 1);
-  };
+  const redo = useCallback(() => {
+    const result = redoStackOp(currentUndoStack, { design, runtime });
+    if (!result) return;
+    isRestoringRef.current = true;
+    const snap = result.snapshot as { design: DesignState; runtime: RuntimeState };
+    setDesign(snap.design);
+    setRuntime(snap.runtime);
+    updateUndo('balloon', result.stack);
+  }, [design, runtime, currentUndoStack, updateUndo, setDesign, setRuntime]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return;
-      if (e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        undo();
-      } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
-        e.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  useUndoShortcut({ undo, redo });
 
   // --- Effect mutators ----------------------------------------------------
 
@@ -166,9 +149,8 @@ export function Lab() {
       while (used.has(slot)) slot++;
       params.colorSlot = slot;
     }
-    const inst: EffectInstance = { id: nextId, kind, params };
-    setNextId((n) => n + 1);
-    setDesign((d) => ({ ...d, effects: [...d.effects, inst] }));
+    const inst: EffectInstance = { id: design.nextId, kind, params };
+    setDesign((d) => ({ ...d, effects: [...d.effects, inst], nextId: d.nextId + 1 }));
   };
   const removeEffect = (id: number) => {
     setDesign((d) => ({ ...d, effects: d.effects.filter((e) => e.id !== id) }));
@@ -182,16 +164,12 @@ export function Lab() {
 
   const resetAll = () => {
     if (!confirm('Reset all controls to defaults?')) return;
-    localStorage.removeItem(LAB_STORAGE_KEY);
-    const snap = loadSnapshot();
-    applySnapshot(snap);
-    undoRef.current = [snap];
-    redoRef.current = [];
-    forceRerender((n) => n + 1);
+    localStorage.removeItem('lk:speech-balloon-lab-v12:workspaces');
+    window.location.reload();
   };
 
   const exportSnapshot = () => {
-    const snap = currentSnapshot();
+    const snap = { design, runtime };
     const json = JSON.stringify(snap, null, 2);
     navigator.clipboard?.writeText(json);
     console.log('Lab snapshot copied to clipboard:\n', json);
