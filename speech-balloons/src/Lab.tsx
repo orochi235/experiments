@@ -1,4 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  PropertyList,
+  PropertyPanel,
+  PropertyGroup,
+  SliderRow,
+  ColorRow,
+  SelectRow,
+  CheckboxRow,
+} from '@labkit/react';
 import { SpeechBalloon } from './SpeechBalloon';
 import { CurveEditor, type ControlPoint } from './CurveEditor';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
@@ -366,13 +375,12 @@ export function Lab() {
               ))}
             </select>
           </label>
-          <SliderField
+          <SliderRow
             label="Size"
             value={runtime.fontSize}
             min={10}
             max={72}
             step={1}
-            fixed={0}
             unit="px"
             onChange={(v) => setRuntime((r) => ({ ...r, fontSize: v }))}
           />
@@ -393,10 +401,11 @@ export function Lab() {
             />
             <span>Size to content</span>
           </label>
-          <ColorField
+          <ColorRow
             label="Background"
-            value={design.bg}
-            onChange={(v) => setDesign((d) => ({ ...d, bg: v }))}
+            value={splitColor(design.bg).rgb}
+            alphaDisabled
+            onChange={(rgb) => setDesign((d) => ({ ...d, bg: rgb }))}
           /> {/* canvas bg is re-parsed to rgba(...,0.7) — alpha intentionally not exposed */}
         </div>
         <div className="toolbar-group right">
@@ -420,68 +429,44 @@ export function Lab() {
 
       <main className="workspace">
         <aside className="side-panel left">
-          <div className="layer-stack-head"><h2 className="layer-stack-title">Body</h2></div>
-          <Section
-            headerNode={
-              <select
-                className="effect-kind-select"
+          <PropertyPanel title="Body">
+            <PropertyList>
+              <SelectRow
+                label="Shape"
                 value={design.base}
-                onChange={(e) => setBase(e.target.value as BalloonBase)}
-              >
-                {BASE_KINDS.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
-              </select>
-            }
-          >
-            <ControlList
-              controls={BASE_CONTROLS[design.base]}
-              params={design.baseParams}
-              onChange={updateBaseParam}
-            />
-            {runtime.fitToContent ? (
-              <>
-                <SliderField label="Pad X" value={design.padX} min={4} max={80} step={1} fixed={0} unit="px"
-                  onChange={(v) => setDesign((d) => ({ ...d, padX: v }))} />
-                <SliderField label="Pad Y" value={design.padY} min={4} max={60} step={1} fixed={0} unit="px"
-                  onChange={(v) => setDesign((d) => ({ ...d, padY: v }))} />
-              </>
-            ) : (
-              <>
-                <SliderField
-                  label="Width"
-                  value={design.width}
-                  min={60}
-                  max={500}
-                  step={2}
-                  fixed={0}
-                  unit="px"
-                  onChange={(v) => setDesign((d) => {
-                    const ar = d.width / d.height;
-                    return { ...d, width: v, height: Math.max(20, Math.round(v / ar)) };
-                  })}
-                />
-                <SliderField
-                  label="Height"
-                  value={design.height}
-                  min={20}
-                  max={500}
-                  step={2}
-                  fixed={0}
-                  unit="px"
-                  onChange={(v) => setDesign((d) => ({ ...d, height: v }))}
-                />
-              </>
-            )}
-            <SliderField label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} fixed={1} unit="°"
-              onChange={(v) => setDesign((d) => ({ ...d, lean: v }))} />
-            <ColorField
-              label="Text color"
-              value={design.textColor}
-              alphaSupported
-              onChange={(v) => setDesign((d) => ({ ...d, textColor: v }))}
-            />
-          </Section>
+                options={BASE_KINDS.map((b) => ({ value: b, label: b }))}
+                onChange={(v) => setBase(v as BalloonBase)}
+              />
+              <ControlList controls={BASE_CONTROLS[design.base]} params={design.baseParams} onChange={updateBaseParam} />
+              {runtime.fitToContent ? (
+                <>
+                  <SliderRow label="Pad X" value={design.padX} min={4} max={80} step={1} unit="px"
+                    onChange={(v) => setDesign((d) => ({ ...d, padX: v }))} />
+                  <SliderRow label="Pad Y" value={design.padY} min={4} max={60} step={1} unit="px"
+                    onChange={(v) => setDesign((d) => ({ ...d, padY: v }))} />
+                </>
+              ) : (
+                <>
+                  <SliderRow label="Width" value={design.width} min={60} max={500} step={2} unit="px"
+                    onChange={(v) => setDesign((d) => {
+                      const ar = d.width / d.height;
+                      return { ...d, width: v, height: Math.max(20, Math.round(v / ar)) };
+                    })} />
+                  <SliderRow label="Height" value={design.height} min={20} max={500} step={2} unit="px"
+                    onChange={(v) => setDesign((d) => ({ ...d, height: v }))} />
+                </>
+              )}
+              <SliderRow label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} unit={<sup>°</sup>}
+                onChange={(v) => setDesign((d) => ({ ...d, lean: v }))} />
+              <ColorRow
+                label="Text color"
+                value={splitColor(design.textColor).rgb}
+                alpha={splitColor(design.textColor).alpha}
+                onChange={(rgb) => setDesign((d) => ({ ...d, textColor: combineColor(rgb, splitColor(d.textColor).alpha) }))}
+                onAlphaChange={(a) => setDesign((d) => ({ ...d, textColor: combineColor(splitColor(d.textColor).rgb, a) }))}
+              />
+            </PropertyList>
+          </PropertyPanel>
 
           <LayerStack
             title="Morph"
@@ -859,88 +844,7 @@ function EffectCard({
   );
 }
 
-function Section({ title, headerRight, headerNode, children }: { title?: string; headerRight?: React.ReactNode; headerNode?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <div className="panel-section">
-      <div className="panel-section-head">
-        {headerNode ?? <h2>{title}</h2>}
-        {headerRight}
-      </div>
-      <div className="panel-body">{children}</div>
-    </div>
-  );
-}
-
 // --- Field renderers -----------------------------------------------------
-
-interface SliderFieldProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  fixed: number;
-  /** Optional formatter for the readout value. Receives the raw number,
-   *  returns the string to display in the editable input. Default:
-   *  `value.toFixed(fixed)` (with `-` rewritten to U+2212). */
-  format?: (v: number) => string;
-  /** Optional unit suffix appended after the formatted readout, e.g.
-   *  "px", "°", "Hz". Rendered outside the input so it's display-only
-   *  and doesn't interfere with typing. */
-  unit?: string;
-  onChange: (v: number) => void;
-}
-function SliderField({ label, value, min, max, step, fixed, format, unit, onChange }: SliderFieldProps) {
-  // Draft is only set while the readout input is focused; otherwise the
-  // input mirrors the live slider value (formatted to `fixed` decimals).
-  // While editing we show ASCII "-"; idle, we render with the en-dash glyph.
-  const [draft, setDraft] = useState<string | null>(null);
-  // Render the minus sign as U+2212 both idle and while editing; rewrite any
-  // user-typed ASCII "-" the same way so the glyph stays consistent.
-  const fmt = (n: number) => (format ? format(n) : n.toFixed(fixed)).replace('-', '−');
-  const display = draft !== null ? draft : fmt(Number(value));
-  const commit = () => {
-    if (draft !== null) {
-      const n = Number(draft.replace(/[−–]/g, '-'));
-      if (Number.isFinite(n)) onChange(Math.max(min, Math.min(max, n)));
-    }
-    setDraft(null);
-  };
-  return (
-    <label className="field range">
-      <span>
-        {label}{' '}
-        <span className="readout-group">
-          <input
-            className="readout-edit"
-            type="text"
-            inputMode="decimal"
-            value={display}
-            onFocus={(e) => {
-              setDraft(fmt(Number(value)));
-              e.currentTarget.select();
-            }}
-            onChange={(e) => setDraft(e.target.value.replace(/-/g, '−'))}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { commit(); e.currentTarget.blur(); }
-              else if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur(); }
-            }}
-            onClick={(e) => { e.preventDefault(); e.currentTarget.focus(); }}
-          />
-          {unit && (
-            unit === '°'
-              // ° is a top-of-em glyph — wrapping in <sup> keeps it elevated
-              // regardless of the unit's own font-size shrink.
-              ? <sup className="readout-unit readout-unit-sup">{unit}</sup>
-              : <span className="readout-unit">{unit}</span>
-          )}
-        </span>
-      </span>
-      <input type="range" tabIndex={-1} min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-    </label>
-  );
-}
 
 interface CurveFieldProps {
   values: number[];
@@ -1037,7 +941,35 @@ interface ControlListProps {
   bodyW?: number;
   bodyH?: number;
 }
-function renderControl(
+
+function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListProps) {
+  type Group = { header: string | null; hidden?: boolean; items: LabControl[] };
+  const groups: Group[] = [{ header: null, items: [] }];
+  for (const c of controls) {
+    if (c.kind === 'header') {
+      groups.push({ header: c.label, hidden: c.hideWhen?.(params), items: [] });
+    } else {
+      groups[groups.length - 1].items.push(c);
+    }
+  }
+  return (
+    <>
+      {groups.map((g, gi) => {
+        const visible = g.items.filter((c) => !c.hideWhen || !c.hideWhen(params));
+        if (visible.length === 0) return null;
+        const rows = visible.map((c) => renderRow(c, params, onChange, bodyW, bodyH));
+        if (g.header === null) return rows;
+        return (
+          <PropertyGroup key={`grp-${gi}`} title={g.header} hidden={g.hidden}>
+            {rows}
+          </PropertyGroup>
+        );
+      })}
+    </>
+  );
+}
+
+function renderRow(
   c: LabControl,
   params: ParamBag,
   onChange: (key: string, value: ParamValue) => void,
@@ -1053,49 +985,56 @@ function renderControl(
       : c.max;
     const clampedValue = Math.min(Number(value ?? c.default), dynMax);
     return (
-      <SliderField
+      <SliderRow
         key={c.key}
         label={label}
         value={clampedValue}
         min={c.min}
         max={dynMax}
         step={c.step}
-        fixed={c.step >= 1 ? 0 : 1}
         format={c.format}
-        unit={c.unit}
+        unit={c.unit === '°' ? <sup>°</sup> : c.unit}
         onChange={(v) => onChange(c.key, v)}
       />
     );
   }
   if (c.kind === 'select') {
     return (
-      <label key={c.key} className="field">
-        <span>{label}</span>
-        <select value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)}>
-          {c.options.map((o) => (
-            <option key={o} value={o}>{o}</option>
-          ))}
-        </select>
-      </label>
-    );
-  }
-  if (c.kind === 'color') {
-    return (
-      <ColorField
+      <SelectRow
         key={c.key}
         label={label}
         value={String(value ?? c.default)}
-        alphaSupported={c.alpha === true}
+        options={c.options.map((o) => ({ value: o, label: o }))}
         onChange={(v) => onChange(c.key, v)}
+      />
+    );
+  }
+  if (c.kind === 'color') {
+    const cur = String(value ?? c.default);
+    const alphaSupported = c.alpha === true;
+    const { rgb, alpha } = splitColor(cur);
+    return (
+      <ColorRow
+        key={c.key}
+        label={label}
+        value={rgb}
+        alpha={alphaSupported ? alpha : undefined}
+        alphaDisabled={!alphaSupported}
+        onChange={(nextRgb) =>
+          onChange(c.key, combineColor(nextRgb, alphaSupported ? splitColor(String(params[c.key] ?? c.default)).alpha : 1))
+        }
+        onAlphaChange={alphaSupported ? (nextAlpha) => onChange(c.key, combineColor(splitColor(String(params[c.key] ?? c.default)).rgb, nextAlpha)) : undefined}
       />
     );
   }
   if (c.kind === 'toggle') {
     return (
-      <label key={c.key} className="checkbox">
-        <input type="checkbox" checked={Boolean(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.checked)} />
-        <span>{label}</span>
-      </label>
+      <CheckboxRow
+        key={c.key}
+        label={label}
+        value={Boolean(value ?? c.default)}
+        onChange={(v) => onChange(c.key, v)}
+      />
     );
   }
   if (c.kind === 'curve') {
@@ -1113,44 +1052,17 @@ function renderControl(
       </div>
     );
   }
+  // text fallthrough
   return (
-    <label key={c.key} className="field text">
-      <span>{label}</span>
-      <input type="text" value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)} />
-    </label>
-  );
-}
-
-function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListProps) {
-  // Group controls by their containing header so headered sections render
-  // inside a `.subpanel` with its own background. Controls before the first
-  // header render inline at the parent grid level.
-  type Group = { header: string | null; items: LabControl[] };
-  const groups: Group[] = [{ header: null, items: [] }];
-  for (const c of controls) {
-    if (c.kind === 'header') {
-      if (c.hideWhen && c.hideWhen(params)) continue;
-      groups.push({ header: c.label, items: [] });
-    } else {
-      groups[groups.length - 1].items.push(c);
-    }
-  }
-  return (
-    <>
-      {groups.map((g, gi) => {
-        const visible = g.items.filter((c) => !c.hideWhen || !c.hideWhen(params));
-        if (visible.length === 0) return null;
-        if (g.header === null) {
-          return visible.map((c) => renderControl(c, params, onChange, bodyW, bodyH));
-        }
-        return (
-          <div key={`grp-${gi}`} className="subpanel">
-            <h3 className="subpanel-title"><hr /><span>{g.header}</span><hr /></h3>
-            {visible.map((c) => renderControl(c, params, onChange, bodyW, bodyH))}
-          </div>
-        );
-      })}
-    </>
+    <SliderRow
+      key={c.key}
+      label={label}
+      value={Number(value ?? 0)}
+      min={0}
+      max={1}
+      step={0.01}
+      onChange={() => {}}
+    />
   );
 }
 
@@ -1164,41 +1076,6 @@ function combineColor(rgb: string, alpha: number): string {
   const a = Math.max(0, Math.min(255, Math.round(alpha * 255)));
   if (a === 255) return rgb;
   return `${rgb}${a.toString(16).padStart(2, '0')}`;
-}
-
-interface ColorFieldProps {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  // False (default) when the consumer of this color drops the alpha channel
-  // — the slider is rendered disabled so the user isn't misled into thinking
-  // they can tune opacity on it.
-  alphaSupported?: boolean;
-}
-function ColorField({ label, value, onChange, alphaSupported = false }: ColorFieldProps) {
-  const { rgb, alpha } = splitColor(value);
-  return (
-    <label className={`field color${alphaSupported ? '' : ' alpha-disabled'}`}>
-      <span>{label}</span>
-      <input
-        type="color"
-        value={rgb}
-        onChange={(e) => onChange(combineColor(e.target.value, alphaSupported ? alpha : 1))}
-      />
-      <input
-        type="range"
-        className="color-alpha"
-        min={0}
-        max={1}
-        step={0.01}
-        value={alphaSupported ? alpha : 1}
-        tabIndex={-1}
-        disabled={!alphaSupported}
-        title={alphaSupported ? undefined : 'opacity not wired up for this color'}
-        onChange={(e) => onChange(combineColor(rgb, Number(e.target.value)))}
-      />
-    </label>
-  );
 }
 
 function DragHandleIcon() {
