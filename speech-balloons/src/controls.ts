@@ -87,7 +87,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'waveAmp', label: 'Amplitude', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.3, hideWhen: (p) => p.shape !== 'wavy' },
     { kind: 'header', label: 'Bubbles', hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'bubbleDiameter', label: 'Size', kind: 'range', min: 8, max: 120, step: 1, default: 30, hideWhen: (p) => p.shape !== 'bubbles', unit: 'px' },
-    { key: 'count', label: 'Count', kind: 'range', min: 1, max: 8, step: 1, default: 3, hideWhen: (p) => p.shape !== 'bubbles' },
+    { key: 'count', label: 'Count', kind: 'range', min: 3, max: 8, step: 1, default: 3, hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'gap', label: 'Gap (fraction of size)', kind: 'range', min: -1, max: 1, step: 0.02, default: 0.15, hideWhen: (p) => p.shape !== 'bubbles' },
     { key: 'radial', label: 'Base distance', kind: 'range', min: -60, max: 60, step: 0.5, default: 0, hideWhen: (p) => p.shape !== 'bubbles', unit: 'px' },
     { kind: 'header', label: 'Lightning', hideWhen: (p) => p.shape !== 'lightning' },
