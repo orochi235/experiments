@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { PointPlotter, type ControlPoint } from './CurveEditor';
+import { PointPlotter, type ControlPoint } from './PointPlotter';
 import { angleToS, buildBaseSampler } from './geometry';
 import type { BalloonBase, ParamBag } from './types';
 

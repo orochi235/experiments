@@ -1,12 +1,20 @@
+/**
+ * Thin wrapper around weasel-ui's CurveEditor that hides the curve and
+ * presents a 2D point plotter. Re-implemented locally to avoid TypeScript
+ * traversing weasel-ui source (which has unresolvable internal deps).
+ *
+ * Public API mirrors weasel-ui's PointPlotter exactly so this file can be
+ * replaced with a direct re-export once weasel-ui ships pre-built dist.
+ */
 import type { CSSProperties, ReactNode } from 'react';
 import {
   CurveEditor,
   type AnchorRenderProps,
-  type AxesSettings,
   type ControlPoint,
   type CurveEditorProps,
-  type GridSettings,
-} from './CurveEditor';
+} from '@labkit/react/weasel-ui';
+
+export type { ControlPoint };
 
 export interface PointPlotterProps {
   value: readonly ControlPoint[];
@@ -16,26 +24,26 @@ export interface PointPlotterProps {
   yRange?: readonly [number, number];
   width: number;
   height: number;
-  grid?: GridSettings | false | null;
-  axes?: AxesSettings | false | null;
+  grid?: false | null | Record<string, unknown>;
+  axes?: false | null | Record<string, unknown>;
   minPoints?: number;
   maxPoints?: number;
   addPointMode?: 'click-empty' | 'never';
+  history?: boolean;
   renderAnchor?: (info: AnchorRenderProps) => ReactNode;
   decorations?: ReactNode;
   className?: string;
   style?: CSSProperties;
 }
 
-/** 2D point plotter — a CurveEditor with the curve hidden. Inherits drag
- *  and click-empty insert from CurveEditor. */
+/** 2D point plotter — CurveEditor with the curve hidden. */
 export function PointPlotter(props: PointPlotterProps) {
   const curveProps: CurveEditorProps = {
     ...props,
     addPointMode: props.addPointMode ?? 'click-empty',
+    curve: false,
     fill: false,
     endpoints: 'free',
-    hideCurve: true,
   };
   return <CurveEditor {...curveProps} />;
 }

@@ -263,10 +263,10 @@ body {
   min-width: 0;
 }
 .side-panel.left .effect-body > h3,
-.side-panel.left .effect-body > .curve-block,
+.side-panel.left .effect-body > .sb-curve-block,
 .side-panel.left .effect-body > .subpanel,
 .side-panel.right .effect-body > h3,
-.side-panel.right .effect-body > .curve-block,
+.side-panel.right .effect-body > .sb-curve-block,
 .side-panel.right .effect-body > .subpanel {
   grid-column: 1 / -1;
 }
@@ -287,7 +287,7 @@ body {
 .subpanel > .field {
   min-width: 0;
 }
-.subpanel > .curve-block,
+.subpanel > .sb-curve-block,
 .subpanel > .subpanel-title {
   grid-column: 1 / -1;
 }
@@ -763,68 +763,4 @@ input[type=range]::-moz-range-thumb {
   flex-direction: column;
   gap: 10px;
   border-top: 1px solid var(--panel-border);
-}
-
-/* Curve editor (contour) — Photoshop-style drag-to-edit. */
-.curve-field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-}
-.curve-editor-host {
-  width: 100%;
-  border-radius: 4px;
-  overflow: visible;
-}
-.curve-readouts {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-}
-.curve-stop-readout {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  text-align: center;
-  padding: 2px;
-  border-radius: 3px;
-  transition: background 100ms ease;
-}
-.curve-stop-readout.is-active { background: rgba(126, 200, 227, 0.12); }
-.curve-stop-readout span {
-  color: var(--fg-dim);
-  font: 300 0.62rem/1 var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.curve-stop-readout em {
-  font-style: normal;
-  color: var(--accent);
-  font-weight: 500;
-  font-size: 0.78rem;
-  line-height: 1;
-}
-.curve-flip-btn {
-  display: block;
-  width: 100%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-sm);
-  color: var(--fg-muted);
-  font: 400 0.72rem/1 var(--font-display);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 6px 10px;
-  cursor: pointer;
-  transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
-}
-.curve-flip-btn:hover {
-  background: rgba(126, 200, 227, 0.08);
-  color: var(--accent);
-  border-color: var(--accent);
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   CheckboxRow,
   ColorRow,
+  CurveField as KitCurveField,
   LayerStack as KitLayerStack,
   type LayerStackItem,
   PropertyGroup,
@@ -12,7 +13,6 @@ import {
   TextRow,
 } from '@labkit/react';
 import { SpeechBalloon } from './SpeechBalloon';
-import { CurveEditor, type ControlPoint } from './CurveEditor';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import {
   BASE_CONTROLS,
@@ -598,17 +598,17 @@ export function Lab() {
 
 // --- Field renderers -----------------------------------------------------
 
-interface CurveFieldProps {
+interface CurveBlockProps {
+  label?: string;
   values: number[];
   min: number;
   max: number;
   step: number;
-  onChange: (values: number[]) => void;
+  onChange: (vals: number[]) => void;
 }
-function CurveField({ values, min, max, step, onChange }: CurveFieldProps) {
+function CurveBlock({ label, values, min, max, step, onChange }: CurveBlockProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -620,68 +620,12 @@ function CurveField({ values, min, max, step, onChange }: CurveFieldProps) {
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
-
-  const points: ControlPoint[] = useMemo(() => {
-    const out: ControlPoint[] = [];
-    for (let i = 0; i + 1 < values.length; i += 2) out.push({ x: values[i], y: values[i + 1] });
-    return out;
-  }, [values]);
-
-  const handleChange = useCallback((next: ControlPoint[]) => {
-    const flat: number[] = new Array(next.length * 2);
-    for (let i = 0; i < next.length; i++) {
-      const ySnap = Math.round(next[i].y / step) * step;
-      const y = Math.max(min, Math.min(max, ySnap));
-      flat[i * 2] = next[i].x;
-      flat[i * 2 + 1] = y;
-    }
-    onChange(flat);
-  }, [onChange, min, max, step]);
-
-  // Flip the curve left-to-right: each point at (x, y) becomes (1 - x, y);
-  // then resort so x is monotonic. Pairs swap rim ↔ center semantics.
-  const handleFlip = useCallback(() => {
-    const flipped: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i + 1 < values.length; i += 2) {
-      flipped.push({ x: 1 - values[i], y: values[i + 1] });
-    }
-    flipped.sort((a, b) => a.x - b.x);
-    const out: number[] = [];
-    for (const p of flipped) out.push(p.x, p.y);
-    onChange(out);
-  }, [values, onChange]);
-
-  const HEIGHT = 110;
   return (
-    <div className="curve-field">
-      <div ref={wrapRef} className="curve-editor-host">
-        {width > 0 && (
-          <CurveEditor
-            value={points}
-            onChange={handleChange}
-            domain="1d"
-            constrain="function"
-            xRange={[0, 1]}
-            yRange={[min, max]}
-            width={width}
-            height={HEIGHT}
-            endpoints="pinned-x"
-            addPointMode="click-curve"
-            minPoints={2}
-            grid={{}}
-          />
-        )}
-      </div>
-      <div className="curve-readouts">
-        {points.map((p, i) => (
-          <div key={i} className="curve-stop-readout">
-            <em>{p.y.toFixed(step < 1 ? 2 : 0).replace('-', '−')}</em>
-          </div>
-        ))}
-      </div>
-      <button type="button" className="curve-flip-btn" onClick={handleFlip}>
-        Flip horizontally
-      </button>
+    <div className="sb-curve-block" ref={wrapRef}>
+      {label && <h3 className="sb-curve-label">{label}</h3>}
+      {width > 0 && (
+        <KitCurveField values={values} min={min} max={max} step={step} width={width} onChange={onChange} />
+      )}
     </div>
   );
 }
@@ -792,16 +736,15 @@ function renderRow(
   if (c.kind === 'curve') {
     const arr = Array.isArray(value) ? (value as number[]) : c.defaults;
     return (
-      <div key={c.key} className="curve-block">
-        {c.label && <h3 className="curve-label">{c.label}</h3>}
-        <CurveField
-          values={arr}
-          min={c.min}
-          max={c.max}
-          step={c.step}
-          onChange={(vals) => onChange(c.key, vals)}
-        />
-      </div>
+      <CurveBlock
+        key={c.key}
+        label={c.label}
+        values={arr}
+        min={c.min}
+        max={c.max}
+        step={c.step}
+        onChange={(vals) => onChange(c.key, vals)}
+      />
     );
   }
   if (c.kind === 'text') {
