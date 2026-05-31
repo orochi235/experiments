@@ -37,6 +37,27 @@ import type {
   RuntimeState,
 } from './types';
 
+// --- Module-scope helpers for EffectLayerStack ------------------------------
+
+function getPrimarySelect(kind: EffectKind) {
+  const allControls = EFFECT_CONTROLS[kind];
+  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+  return firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+}
+
+function reorderWithinKindSet(
+  effects: EffectInstance[],
+  kindSet: readonly EffectKind[],
+  orderedIds: Array<number | string>,
+): EffectInstance[] {
+  const byId = new Map(effects.map((e) => [e.id, e]));
+  const otherEffects = effects.filter((e) => !kindSet.includes(e.kind));
+  const reordered = (orderedIds as number[])
+    .map((id) => byId.get(id))
+    .filter((e): e is EffectInstance => e !== undefined);
+  return [...otherEffects, ...reordered];
+}
+
 const FONT_OPTIONS = [
   { label: 'Comic Neue', value: 'Comic Neue, system-ui, sans-serif' },
   { label: 'Bangers', value: 'Bangers, system-ui, sans-serif' },
@@ -325,6 +346,65 @@ export function Lab() {
     }));
   };
 
+  // --- Local panel component (captures Lab-scope handlers) -----------------
+
+  interface EffectLayerStackProps {
+    title: string;
+    hideHead?: boolean;
+    effects: EffectInstance[];
+    kindSet: readonly EffectKind[];
+    bodyW?: number;
+    bodyH?: number;
+    decorate?: (eff: EffectInstance) => { accent?: string; badge?: string };
+  }
+  function EffectLayerStack({ title, hideHead, effects, kindSet, bodyW, bodyH, decorate }: EffectLayerStackProps) {
+    const items: LayerStackItem[] = effects.map((eff) => {
+      const primary = getPrimarySelect(eff.kind);
+      const decoration = decorate ? decorate(eff) : {};
+      return {
+        id: eff.id,
+        kind: eff.kind,
+        primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
+        primaryOptions: primary ? primary.options : undefined,
+        ...decoration,
+      };
+    });
+    return (
+      <KitLayerStack
+        title={title}
+        hideHead={hideHead}
+        items={items}
+        paletteKinds={kindSet as unknown as string[]}
+        onAdd={(k) => addEffect(k as EffectKind)}
+        onRemove={(id) => removeEffect(id as number)}
+        onReorder={(ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, kindSet, ids) }))}
+        onPrimaryChange={(id, value) => {
+          const eff = effects.find((e) => e.id === id);
+          if (!eff) return;
+          const primary = getPrimarySelect(eff.kind);
+          if (primary) updateEffectParam(id as number, primary.key, value);
+        }}
+        renderBody={(item) => {
+          const eff = effects.find((e) => e.id === item.id);
+          if (!eff) return null;
+          const primary = getPrimarySelect(eff.kind);
+          const bodyControls = primary
+            ? EFFECT_CONTROLS[eff.kind].filter((c) => !('key' in c) || c.key !== primary.key)
+            : EFFECT_CONTROLS[eff.kind];
+          return (
+            <ControlList
+              controls={bodyControls}
+              params={eff.params}
+              onChange={(k, v) => updateEffectParam(eff.id, k, v)}
+              bodyW={bodyW}
+              bodyH={bodyH}
+            />
+          );
+        }}
+      />
+    );
+  }
+
   return (
     <div className="lab">
       <header className="toolbar">
@@ -440,121 +520,21 @@ export function Lab() {
             </PropertyList>
           </PropertyPanel>
 
-          {(() => {
-            const items: LayerStackItem[] = morphEffects.map((eff) => {
-              const allControls = EFFECT_CONTROLS[eff.kind];
-              const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-              const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-              return {
-                id: eff.id,
-                kind: eff.kind,
-                primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
-                primaryOptions: primary ? primary.options : undefined,
-                accent: undefined,
-                badge: undefined,
-              };
-            });
-            const orderedReorder = (ids: Array<number | string>) => {
-              setDesign((d) => {
-                const moved = ids as number[];
-                const otherEffects = d.effects.filter((e) => !MORPH_EFFECTS.includes(e.kind));
-                const byId = new Map(d.effects.map((e) => [e.id, e]));
-                const nextMorph = moved.map((id) => byId.get(id)!).filter(Boolean);
-                return { ...d, effects: [...otherEffects, ...nextMorph] };
-              });
-            };
-            return (
-              <KitLayerStack
-                title="Morph"
-                items={items}
-                paletteKinds={MORPH_EFFECTS}
-                onAdd={(k) => addEffect(k as EffectKind)}
-                onRemove={(id) => removeEffect(id as number)}
-                onReorder={orderedReorder}
-                onPrimaryChange={(id, value) => {
-                  const eff = morphEffects.find((e) => e.id === id);
-                  const primaryKey = eff && EFFECT_CONTROLS[eff.kind].find((c) => c.kind !== 'header' && c.kind === 'select');
-                  if (primaryKey && 'key' in primaryKey) updateEffectParam(id as number, primaryKey.key, value);
-                }}
-                renderBody={(item) => {
-                  const eff = morphEffects.find((e) => e.id === item.id)!;
-                  const allControls = EFFECT_CONTROLS[eff.kind];
-                  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-                  const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-                  const bodyControls = primary
-                    ? allControls.filter((c) => !('key' in c) || c.key !== primary.key)
-                    : allControls;
-                  return (
-                    <ControlList
-                      controls={bodyControls}
-                      params={eff.params}
-                      onChange={(k, v) => updateEffectParam(eff.id, k, v)}
-                      bodyW={design.width}
-                      bodyH={design.height}
-                    />
-                  );
-                }}
-              />
-            );
-          })()}
+          <EffectLayerStack
+            title="Morph"
+            effects={morphEffects}
+            kindSet={MORPH_EFFECTS}
+            bodyW={design.width}
+            bodyH={design.height}
+          />
 
-          {(() => {
-            const items: LayerStackItem[] = leftEffects.map((eff) => {
-              const allControls = EFFECT_CONTROLS[eff.kind];
-              const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-              const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-              return {
-                id: eff.id,
-                kind: eff.kind,
-                primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
-                primaryOptions: primary ? primary.options : undefined,
-                accent: undefined,
-                badge: undefined,
-              };
-            });
-            const orderedReorder = (ids: Array<number | string>) => {
-              setDesign((d) => {
-                const moved = ids as number[];
-                const otherEffects = d.effects.filter((e) => !LEFT_PANEL_EFFECTS.includes(e.kind));
-                const byId = new Map(d.effects.map((e) => [e.id, e]));
-                const nextLeft = moved.map((id) => byId.get(id)!).filter(Boolean);
-                return { ...d, effects: [...otherEffects, ...nextLeft] };
-              });
-            };
-            return (
-              <KitLayerStack
-                title="Fill"
-                items={items}
-                paletteKinds={LEFT_PANEL_EFFECTS}
-                onAdd={(k) => addEffect(k as EffectKind)}
-                onRemove={(id) => removeEffect(id as number)}
-                onReorder={orderedReorder}
-                onPrimaryChange={(id, value) => {
-                  const eff = leftEffects.find((e) => e.id === id);
-                  const primaryKey = eff && EFFECT_CONTROLS[eff.kind].find((c) => c.kind !== 'header' && c.kind === 'select');
-                  if (primaryKey && 'key' in primaryKey) updateEffectParam(id as number, primaryKey.key, value);
-                }}
-                renderBody={(item) => {
-                  const eff = leftEffects.find((e) => e.id === item.id)!;
-                  const allControls = EFFECT_CONTROLS[eff.kind];
-                  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-                  const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-                  const bodyControls = primary
-                    ? allControls.filter((c) => !('key' in c) || c.key !== primary.key)
-                    : allControls;
-                  return (
-                    <ControlList
-                      controls={bodyControls}
-                      params={eff.params}
-                      onChange={(k, v) => updateEffectParam(eff.id, k, v)}
-                      bodyW={design.width}
-                      bodyH={design.height}
-                    />
-                  );
-                }}
-              />
-            );
-          })()}
+          <EffectLayerStack
+            title="Fill"
+            effects={leftEffects}
+            kindSet={LEFT_PANEL_EFFECTS}
+            bodyW={design.width}
+            bodyH={design.height}
+          />
         </aside>
 
         <section className="preview">
@@ -596,62 +576,20 @@ export function Lab() {
               onRemoveTail={(id) => removeEffect(id)}
             />
           </div>
-          {(() => {
-            const items: LayerStackItem[] = rightEffects.map((eff) => {
-              const allControls = EFFECT_CONTROLS[eff.kind];
-              const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-              const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-              return {
-                id: eff.id,
-                kind: eff.kind,
-                primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
-                primaryOptions: primary ? primary.options : undefined,
-                accent: eff.kind === 'tail' ? tailColor(tailColorSlotById.get(eff.id) ?? 0) : undefined,
-                badge: eff.kind === 'tail' ? String((tailIndexById.get(eff.id) ?? 0) + 1) : undefined,
-              };
-            });
-            const orderedReorder = (ids: Array<number | string>) => {
-              setDesign((d) => {
-                const moved = ids as number[];
-                const otherEffects = d.effects.filter((e) => !RIGHT_PANEL_EFFECTS.includes(e.kind));
-                const byId = new Map(d.effects.map((e) => [e.id, e]));
-                const nextTails = moved.map((id) => byId.get(id)!).filter(Boolean);
-                return { ...d, effects: [...otherEffects, ...nextTails] };
-              });
-            };
-            return (
-              <KitLayerStack
-                title="Tails"
-                hideHead
-                items={items}
-                paletteKinds={RIGHT_PANEL_EFFECTS}
-                onAdd={(k) => addEffect(k as EffectKind)}
-                onRemove={(id) => removeEffect(id as number)}
-                onReorder={orderedReorder}
-                onPrimaryChange={(id, value) => {
-                  const eff = rightEffects.find((e) => e.id === id);
-                  const primaryKey = eff && EFFECT_CONTROLS[eff.kind].find((c) => c.kind !== 'header' && c.kind === 'select');
-                  if (primaryKey && 'key' in primaryKey) updateEffectParam(id as number, primaryKey.key, value);
-                }}
-                renderBody={(item) => {
-                  const eff = rightEffects.find((e) => e.id === item.id)!;
-                  const allControls = EFFECT_CONTROLS[eff.kind];
-                  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-                  const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-                  const bodyControls = primary
-                    ? allControls.filter((c) => !('key' in c) || c.key !== primary.key)
-                    : allControls;
-                  return (
-                    <ControlList
-                      controls={bodyControls}
-                      params={eff.params}
-                      onChange={(k, v) => updateEffectParam(eff.id, k, v)}
-                    />
-                  );
-                }}
-              />
-            );
-          })()}
+          <EffectLayerStack
+            title="Tails"
+            hideHead
+            effects={rightEffects}
+            kindSet={RIGHT_PANEL_EFFECTS}
+            decorate={(eff) =>
+              eff.kind === 'tail'
+                ? {
+                    accent: tailColor(tailColorSlotById.get(eff.id) ?? 0),
+                    badge: String((tailIndexById.get(eff.id) ?? 0) + 1),
+                  }
+                : {}
+            }
+          />
         </aside>
       </main>
     </div>
