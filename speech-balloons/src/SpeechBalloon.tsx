@@ -1,4 +1,4 @@
-import { useId, useMemo } from 'react';
+import { Fragment, useId, useMemo } from 'react';
 import type { DesignState, FillMode, ParamBag, RuntimeState, TailShape } from './types';
 import {
   buildBaseSampler,
@@ -23,7 +23,6 @@ import {
   circleToPolygon,
   type Polygon,
 } from './clipping';
-import { computeMatPlateau } from './plateauMat';
 interface Props {
   design: DesignState;
   runtime: RuntimeState;
@@ -168,43 +167,6 @@ function rotateAttachByOutAngle(p: PerimeterPoint, outAngleDeg: number): Perimet
   const c = Math.cos(r);
   const s = Math.sin(r);
   return { x: p.x, y: p.y, nx: p.nx * c - p.ny * s, ny: p.nx * s + p.ny * c };
-}
-
-// --- Contour curve helpers -----------------------------------------------
-
-// Contour is stored as interleaved [x, y, x, y, …] points.
-type CurvePoint = { x: number; y: number };
-function contourToPoints(contour: number[]): CurvePoint[] {
-  const out: CurvePoint[] = [];
-  for (let i = 0; i + 1 < contour.length; i += 2) out.push({ x: contour[i], y: contour[i + 1] });
-  return out;
-}
-
-// Cubic Hermite (Catmull-Rom-ish) interpolation: smooth curve through arbitrary
-// (x, y) points with tangents derived from finite differences.
-function interpolateCurveY(points: CurvePoint[], x: number): number {
-  const n = points.length;
-  if (n === 0) return 0;
-  if (n === 1) return points[0].y;
-  if (x <= points[0].x) return points[0].y;
-  if (x >= points[n - 1].x) return points[n - 1].y;
-  let i = 0;
-  while (i < n - 1 && points[i + 1].x < x) i++;
-  const p0 = points[i];
-  const p1 = points[i + 1];
-  const m0 =
-    i === 0
-      ? (points[1].y - points[0].y) / Math.max(1e-3, points[1].x - points[0].x)
-      : (points[i + 1].y - points[i - 1].y) / Math.max(1e-3, points[i + 1].x - points[i - 1].x);
-  const m1 =
-    i + 1 === n - 1
-      ? (points[n - 1].y - points[n - 2].y) / Math.max(1e-3, points[n - 1].x - points[n - 2].x)
-      : (points[i + 2].y - points[i].y) / Math.max(1e-3, points[i + 2].x - points[i].x);
-  const h = p1.x - p0.x;
-  const t = (x - p0.x) / h;
-  const t2 = t * t;
-  const t3 = t2 * t;
-  return (2 * t3 - 3 * t2 + 1) * p0.y + (t3 - 2 * t2 + t) * h * m0 + (-2 * t3 + 3 * t2) * p1.y + (t3 - t2) * h * m1;
 }
 
 // Axis-aligned bounding box of one or more polygons.
@@ -743,191 +705,52 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     return { x1, y1, x2, y2, bodyStops };
   }, [fillRender.mode, fillRender.lightAngle, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
 
-  // Dome mode: a single linear gradient overlay applied to the silhouette,
-  // with stops computed by sampling the cross-section profile across one pass
-  // along the light azimuth. No clipper insets, no rings, no bands. The
-  // gradient axis crosses the silhouette's bbox along the azimuth direction;
-  // bevelWidth (in user units) decides how much of that axis is rim ramp
-  // (sampling the contour curve from t=0..1) vs flat plateau (constant t=1).
-  // Stops are semi-transparent tints in lightColor / shadowColor so the base
-  // color underneath shows through.
-
-  const buildDomeOverlay = (polys: Polygon[], innerPolys: Polygon[]): {
-    basePath: string;
-    overlayPath: string;
-    // MAT-eroded plateau region (silhouette inset by bevelWidth).
-    plateauPath: string;
-    // Uniform fill color for the plateau interior. The plateau's surface
-    // normal is straight up, so N·L = sin(elevation) regardless of
-    // azimuth — sampled into a single fill color so the plateau reads as
-    // a true flat top against the directional rim.
-    plateauColor: string;
-    stops: Array<{ offset: number; color: string; alpha: number }>;
-    gradX1: number; gradY1: number; gradX2: number; gradY2: number;
-    glossStops: Array<{ offset: number; alpha: number }>;
-    specCx: number; specCy: number; specR: number; specAlpha: number;
-  } | null => {
-    if (polys.length === 0) return null;
-    const bb = polysBBox(polys);
-    if (bb.w <= 0 || bb.h <= 0) return null;
-    const cPoints = contourToPoints(fillRender.contour);
-
-    // Azimuth in math convention; SVG y is flipped so 90° = visual up.
-    const az = (fillRender.lightAzimuth * Math.PI) / 180;
-    const el = (fillRender.lightElevation * Math.PI) / 180;
-    const dx = Math.cos(az);
-    const dy = -Math.sin(az);
-
-    // Project the silhouette's bbox corners onto the azimuth axis to find
-    // the lit-most and shadow-most extent (rather than using the bbox
-    // diagonal, which would over-extend the gradient on rotated lights).
-    const cx = bb.x + bb.w / 2;
-    const cy = bb.y + bb.h / 2;
-    const corners: Array<[number, number]> = [
-      [bb.x, bb.y], [bb.x + bb.w, bb.y],
-      [bb.x, bb.y + bb.h], [bb.x + bb.w, bb.y + bb.h],
+  // Multi-light dome. Two lights for v1: a key light from the user-controlled
+  // azimuth/elevation and a hardcoded fill from the opposite side. Each
+  // light's lit perimeter arc is clipped, a linear gradient along its
+  // azimuth fills that wedge, and they composite additively below.
+  // TODO: expose lights as a customizable list per fill effect.
+  const domeLights = useMemo(() => {
+    const keyAz = fillRender.lightAzimuth;
+    const keyEl = fillRender.lightElevation;
+    return [
+      { az: keyAz, el: keyEl, intensity: 1.0 },
+      { az: (keyAz + 180) % 360, el: 25, intensity: 0.35 },
     ];
-    let minProj = Infinity, maxProj = -Infinity;
-    for (const [x, y] of corners) {
-      const proj = (x - cx) * dx + (y - cy) * dy;
-      if (proj < minProj) minProj = proj;
-      if (proj > maxProj) maxProj = proj;
-    }
-    // Lit side at maxProj end of axis, shadow at minProj.
-    const litX = cx + dx * maxProj;
-    const litY = cy + dy * maxProj;
-    const shaX = cx + dx * minProj;
-    const shaY = cy + dy * minProj;
+  }, [fillRender.lightAzimuth, fillRender.lightElevation]);
 
-    // bevelWidth in user units mapped to a fraction of the gradient axis.
-    // Capped at 0.49 so we always have a sliver of plateau in the middle.
-    const totalExtent = maxProj - minProj;
-    const bevelFrac = totalExtent > 0
-      ? Math.max(0.005, Math.min(0.49, fillRender.bevelWidth / totalExtent))
-      : 0.25;
-
-    const cosEl = Math.cos(el);
-    const sinEl = Math.sin(el);
-    const amount = fillRender.amount;
-
-    const stopColor = (b: number) => (b >= 0 ? fillRender.highlightColor : fillRender.shadowColor);
-    const stopAlpha = (b: number) => Math.max(0, Math.min(1, Math.abs(b) * amount));
-
-    // Sample N+1 stops across the gradient. Each stop's (t, sign) is mapped
-    // from s by bevelFrac: rim bands at the ends ramp t from 0→1; the
-    // plateau in the middle holds t=1.
-    const N = 32;
-    const stops: Array<{ offset: number; color: string; alpha: number }> = [];
-    for (let i = 0; i <= N; i++) {
-      const s = i / N;
-      let t: number;
-      let sign: number;
-      if (s < bevelFrac) {
-        t = s / bevelFrac;       // 0 at lit edge → 1 at end of lit rim
-        sign = 1;
-      } else if (s > 1 - bevelFrac) {
-        t = (1 - s) / bevelFrac; // 1 at start of shadow rim → 0 at shadow edge
-        sign = -1;
-      } else {
-        // Plateau: t pinned at 1. Sign transitions smoothly across the
-        // plateau so the directional component fades through zero.
-        t = 1;
-        const plateauHalfSpan = 0.5 - bevelFrac;
-        sign = plateauHalfSpan > 0 ? (0.5 - s) / plateauHalfSpan : 0;
-      }
-      const eps = 0.02;
-      const tA = Math.max(0, t - eps);
-      const tB = Math.min(1, t + eps);
-      const slope = (interpolateCurveY(cPoints, tB) - interpolateCurveY(cPoints, tA)) / Math.max(1e-3, tB - tA);
-      const norm = Math.sqrt(1 + slope * slope);
-      // Outward normal in (radial-out, vert) = (slope, 1)/norm. Project light
-      // onto the same plane: horizontal = sign × cosEl, vert = sinEl.
-      const b = (sign * slope * cosEl + sinEl) / norm;
-      stops.push({ offset: s, color: stopColor(b), alpha: stopAlpha(b) });
-    }
-
-    // ── Gloss overlay ───────────────────────────────────────────────────
-    // A soft light-tint gradient biased to the lit half. Conceptually a
-    // diffuse Lambert wash from the same 3D light, but rendered as a single
-    // linear gradient with peak alpha tied to domeGloss and falloff biased
-    // toward the shadow side. Width scales with elevation: at el=90° the
-    // gloss spreads broadly (top-down lit cap); at el=0° it concentrates on
-    // the lit rim.
-    const glossPeak = fillRender.domeGloss;
-    // Gloss reach: a fraction of the axis from the lit end that the gloss
-    // covers. Wider for high elevation (broad top-lit cap), narrower for
-    // grazing light (concentrated lit-side highlight).
-    const glossReach = 0.25 + 0.4 * sinEl;
-    const glossStops: Array<{ offset: number; alpha: number }> = [
-      { offset: 0, alpha: glossPeak },
-      { offset: glossReach * 0.6, alpha: glossPeak * 0.35 },
-      { offset: glossReach, alpha: 0 },
-      { offset: 1, alpha: 0 },
-    ];
-
-    // ── Specular spot ───────────────────────────────────────────────────
-    // Phong-style narrow highlight at the reflection point. For an
-    // orthographic view V=(0,0,1), the half-angle vector H lies in the
-    // plane of L and V. Its horizontal projection along azimuth has
-    // magnitude cosEl / |L + V|; its vertical component is (sinEl + 1) /
-    // |L + V|. The dome surface position whose normal best matches H is
-    // where slope_normalized's horizontal component equals H_horiz. We
-    // approximate by placing the spot a fraction of bevelWidth in from the
-    // lit edge along the azimuth axis, modulated by sinEl so high light
-    // raises the spot toward the plateau center.
-    const specT = bevelFrac * 0.6 + (0.5 - bevelFrac * 0.6) * sinEl;
-    const specAxisFrac = specT; // s along gradient axis (0 = lit, 1 = shadow)
-    const specCx = litX + (shaX - litX) * specAxisFrac;
-    const specCy = litY + (shaY - litY) * specAxisFrac;
-    // Brightness at the spec point, used to dim/intensify it depending on
-    // how aligned the surface there is with H. At specT we're at t≈1
-    // (plateau), slope≈0, so the highlight relies almost entirely on
-    // ambient + the cosEl-modulated horizontal of L.
-    const specBrightness = sinEl + (1 - sinEl) * Math.max(0, cosEl);
-    const specAlpha = Math.max(0, Math.min(1, specBrightness * fillRender.specStrength));
-    const specR = Math.max(2, fillRender.specSize);
-
-    const plateauPath = innerPolys.length > 0 ? polygonsToSvgPath(innerPolys) : '';
-
-    // Plateau lit color: flat top has surface normal straight up, so
-    // N·L = sin(elevation) for any azimuth. The contour curve at t=1
-    // adds a baseline brightness modifier on top. Combined, the plateau
-    // reads as a uniform color slightly lighter or darker than base.
-    const profilePeak = Math.max(-1, Math.min(1, interpolateCurveY(cPoints, 1)));
-    const plateauB = Math.max(-1, Math.min(1, sinEl + profilePeak * 0.5));
-    const baseRgb = parseHex(fillRender.base);
-    const tintRgb = parseHex(plateauB >= 0 ? fillRender.highlightColor : fillRender.shadowColor);
-    const plateauAlpha = Math.max(0, Math.min(1, Math.abs(plateauB) * amount));
-    const plateauColor = `rgb(${Math.round(baseRgb[0] + (tintRgb[0] - baseRgb[0]) * plateauAlpha)} ${Math.round(baseRgb[1] + (tintRgb[1] - baseRgb[1]) * plateauAlpha)} ${Math.round(baseRgb[2] + (tintRgb[2] - baseRgb[2]) * plateauAlpha)})`;
-
-    return {
-      basePath: polygonsToSvgPath(polys),
-      overlayPath: polygonsToSvgPath(polys),
-      plateauPath,
-      plateauColor,
-      stops,
-      gradX1: litX, gradY1: litY, gradX2: shaX, gradY2: shaY,
-      glossStops,
-      specCx, specCy, specR, specAlpha,
+  // Wrap the existing arc-length sampler in an angle-keyed one so the dome
+  // helpers can ask for the perimeter point along a ray from centroid.
+  const angleSampler = useMemo<PerimeterSampler>(() => {
+    return (angle: number) => {
+      const sc = attachmentS((angle * 180) / Math.PI, sampler, W / 2, H / 2);
+      const p = sampler.perimeterAt(sc);
+      return { x: p.x, y: p.y, nx: p.nx, ny: p.ny };
     };
-  };
+  }, [sampler, W, H]);
 
-  const bodyDome = useMemo(() => {
-    if (fillRender.mode !== 'dome') return null;
-    // Plateau computed by clipper polygon erosion (MAT-equivalent for
-    // polygons): every plateau point is at distance ≥ bevelWidth from
-    // the outer silhouette boundary. Convex source corners become arcs
-    // of radius bevelWidth; concave corners stay sharp; regions thinner
-    // than 2·bevelWidth vanish.
-    const inner = computeMatPlateau(bodyAndBubblesPolys, fillRender.bevelWidth);
-    return buildDomeOverlay(bodyAndBubblesPolys, inner);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    fillRender.mode, fillRender.contour, fillRender.amount, fillRender.bevelWidth,
-    fillRender.lightAzimuth, fillRender.lightElevation, fillRender.highlightColor, fillRender.shadowColor,
-    fillRender.domeGloss, fillRender.specStrength, fillRender.specSize,
-    bodyAndBubblesPolys,
-  ]);
+  const domeLayers = useMemo(() => {
+    if (fillRender.mode !== 'dome') return [];
+    const bb = polysBBox(bodyAndBubblesPolys);
+    if (bb.w <= 0 || bb.h <= 0) return [];
+    const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
+    const r = Math.hypot(bb.w, bb.h) / 2;
+    return domeLights.map((light) => {
+      const arcs = computeLitArcs(angleSampler, light.az, light.el, 240);
+      const clipD = buildLightWedgePath(angleSampler, arcs, centroid);
+      const azRad = (light.az * Math.PI) / 180;
+      const dx = Math.cos(azRad);
+      const dy = Math.sin(azRad);
+      return {
+        clipD,
+        x1: centroid[0] + dx * r,
+        y1: centroid[1] + dy * r,
+        x2: centroid[0] - dx * r,
+        y2: centroid[1] - dy * r,
+        intensity: light.intensity,
+      };
+    });
+  }, [fillRender.mode, bodyAndBubblesPolys, angleSampler, domeLights]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
@@ -1021,66 +844,57 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
             ))}
           </>
         ) : (
-          // Dome: solid base color + one partially-transparent linear gradient
-          // overlay across the silhouette. Stops are computed from the profile
-          // curve and bevelWidth; gradient axis runs along the light azimuth.
+          // Dome: solid base color + N additive light layers, each clipped
+          // to its lit region (centroid-to-perimeter wedge across the lit
+          // arc) and painted with a linear gradient along its azimuth.
+          // Plateau emerges naturally where every light's wedge covers it.
           <>
-            {bodyDome && (
+            {domeLayers.length > 0 && (
               <>
                 <defs>
-                  <linearGradient
-                    id={`${idPrefix}-dome-body`}
-                    gradientUnits="userSpaceOnUse"
-                    x1={bodyDome.gradX1} y1={bodyDome.gradY1}
-                    x2={bodyDome.gradX2} y2={bodyDome.gradY2}
-                  >
-                    {bodyDome.stops.map((s, j) => (
-                      <stop key={j} offset={s.offset} stopColor={s.color} stopOpacity={s.alpha} />
-                    ))}
-                  </linearGradient>
-                  <linearGradient
-                    id={`${idPrefix}-dome-gloss`}
-                    gradientUnits="userSpaceOnUse"
-                    x1={bodyDome.gradX1} y1={bodyDome.gradY1}
-                    x2={bodyDome.gradX2} y2={bodyDome.gradY2}
-                  >
-                    {bodyDome.glossStops.map((s, j) => (
-                      <stop key={j} offset={s.offset} stopColor={fillRender.highlightColor} stopOpacity={s.alpha} />
-                    ))}
-                  </linearGradient>
-                  <radialGradient
-                    id={`${idPrefix}-dome-spec`}
-                    gradientUnits="userSpaceOnUse"
-                    cx={bodyDome.specCx} cy={bodyDome.specCy}
-                    r={bodyDome.specR}
-                    fx={bodyDome.specCx} fy={bodyDome.specCy}
-                  >
-                    <stop offset="0" stopColor={fillRender.highlightColor} stopOpacity={bodyDome.specAlpha} />
-                    <stop offset="0.5" stopColor={fillRender.highlightColor} stopOpacity={bodyDome.specAlpha * 0.4} />
-                    <stop offset="1" stopColor={fillRender.highlightColor} stopOpacity="0" />
-                  </radialGradient>
+                  {domeLayers.map((layer, i) => (
+                    <Fragment key={i}>
+                      <clipPath id={`${idPrefix}-dome-clip-${i}`}>
+                        <path d={layer.clipD} />
+                      </clipPath>
+                      <linearGradient
+                        id={`${idPrefix}-dome-grad-${i}`}
+                        gradientUnits="userSpaceOnUse"
+                        x1={layer.x1} y1={layer.y1}
+                        x2={layer.x2} y2={layer.y2}
+                      >
+                        <stop
+                          offset="0"
+                          stopColor={fillRender.highlightColor}
+                          stopOpacity={fillRender.amount * layer.intensity}
+                        />
+                        <stop
+                          offset="0.6"
+                          stopColor={fillRender.highlightColor}
+                          stopOpacity={fillRender.amount * layer.intensity * 0.45}
+                        />
+                        <stop
+                          offset="1"
+                          stopColor={fillRender.highlightColor}
+                          stopOpacity="0"
+                        />
+                      </linearGradient>
+                    </Fragment>
+                  ))}
                 </defs>
-                <path d={bodyDome.basePath} fill={fillRender.base} />
-                <path d={bodyDome.overlayPath} fill={`url(#${idPrefix}-dome-body)`} />
-                {fillRender.domeGloss > 0 && (
-                  <path d={bodyDome.overlayPath} fill={`url(#${idPrefix}-dome-gloss)`} />
-                )}
-                {fillRender.specStrength > 0 && (
-                  <path d={bodyDome.overlayPath} fill={`url(#${idPrefix}-dome-spec)`} />
-                )}
-                {/* Debug: filled plateau region with translucent yellow so
-                    the shape pops against the blue dome — easy to spot
-                    shape mismatches while iterating. */}
-                {bodyDome.plateauPath && (
-                  <path
-                    d={bodyDome.plateauPath}
-                    fill={bodyDome.plateauColor}
-                    pointerEvents="none"
-                  />
-                )}
+                <path d={bodyPath} fill={fillRender.base} />
+                <g style={{ mixBlendMode: 'screen', isolation: 'isolate' }}>
+                  {domeLayers.map((_, i) => (
+                    <path
+                      key={i}
+                      d={bodyPath}
+                      fill={`url(#${idPrefix}-dome-grad-${i})`}
+                      clipPath={`url(#${idPrefix}-dome-clip-${i})`}
+                    />
+                  ))}
+                </g>
               </>
             )}
-
           </>
         )}
 
