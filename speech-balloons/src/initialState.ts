@@ -10,7 +10,7 @@ export function initialDesign(): DesignState {
     height: 140,
     padX: 24,
     padY: 18,
-    lean: 0,
+    shear: 0,
     textColor: '#161921',
     bg: '#0f1320',
     nextId: 4,

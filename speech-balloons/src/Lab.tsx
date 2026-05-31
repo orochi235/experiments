@@ -503,8 +503,8 @@ export function Lab() {
                       onChange={(v) => setDesign((d) => ({ ...d, height: v }))} />
                   </>
                 )}
-                <SliderRow label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} unit={<sup>°</sup>}
-                  onChange={(v) => setDesign((d) => ({ ...d, lean: v }))} />
+                <SliderRow label="Shear" value={design.shear} min={-25} max={25} step={0.5} unit={<sup>°</sup>}
+                  onChange={(v) => setDesign((d) => ({ ...d, shear: v }))} />
                 <ColorRow
                   label="Text color"
                   value={splitColor(design.textColor).rgb}
@@ -564,6 +564,7 @@ export function Lab() {
                 bodyW={design.width}
                 bodyH={design.height}
                 bodyParams={design.baseParams}
+                shear={design.shear}
                 tails={minimapTails}
                 onUpdateTail={updateTailFromMinimap}
                 onCommitTail={() => { /* per-tail commit hook; debounced undo coalesces */ }}

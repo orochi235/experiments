@@ -36,6 +36,7 @@ interface TailMinimapProps {
   bodyW: number;
   bodyH: number;
   bodyParams: ParamBag;
+  shear?: number; // degrees; positive = lean right
   tails: MinimapTail[];
   onUpdateTail: (id: number, updates: { angle?: number; length?: number; arc?: number; outAngle?: number }) => void;
   onCommitTail: (id: number) => void;
@@ -45,7 +46,7 @@ interface TailMinimapProps {
 
 export function TailMinimap(props: TailMinimapProps) {
   const {
-    width, height, bodyShape, bodyW, bodyH, bodyParams, tails,
+    width, height, bodyShape, bodyW, bodyH, bodyParams, shear = 0, tails,
     onUpdateTail, onCommitTail, onAddTail, onRemoveTail,
   } = props;
 
@@ -59,6 +60,17 @@ export function TailMinimap(props: TailMinimapProps) {
   const offsetX = cx - scaledW / 2;
   const offsetY = cy - scaledH / 2;
 
+  // Shear coefficient: same formula as SpeechBalloon (positive = lean right).
+  // Applied relative to the body center — x' = x + k*(cy_body - y).
+  const shearK = Math.tan((shear * Math.PI) / 180);
+  const bodyCenterY = offsetY + scaledH / 2;
+
+  // Apply shear to a point in plot space.
+  const applyShear = (x: number, y: number): { x: number; y: number } => ({
+    x: x + shearK * (bodyCenterY - y),
+    y,
+  });
+
   // Build the real sampler at minimap scale so the body silhouette and
   // ray-perimeter intersections match the actual body shape — including
   // polygon corners and cloud lobes — instead of an approximate ellipse/rect.
@@ -67,11 +79,13 @@ export function TailMinimap(props: TailMinimapProps) {
     [bodyShape, bodyParams, scaledW, scaledH],
   );
 
-  // Plot-space perimeter point at angle θ (measured from body center).
+  // Plot-space perimeter point at angle θ (measured from body center),
+  // with shear applied so it lands on the leaned silhouette.
   const perimeterAtAngle = (angle: number): { x: number; y: number; nx: number; ny: number } => {
     const s = angleToS(angle * 180 / Math.PI, sampler, scaledW / 2, scaledH / 2);
     const p = sampler.perimeterAt(s);
-    return { x: offsetX + p.x, y: offsetY + p.y, nx: p.nx, ny: p.ny };
+    const sheared = applyShear(offsetX + p.x, offsetY + p.y);
+    return { x: sheared.x, y: sheared.y, nx: p.nx, ny: p.ny };
   };
 
   // Each tail contributes [base, tip] in plot coords (yRange flipped so
@@ -94,7 +108,7 @@ export function TailMinimap(props: TailMinimapProps) {
       out.push({ x: b.x + ox * L + px * arcShift, y: b.y + oy * L + py * arcShift });
     }
     return out;
-  }, [tails, sampler, scale, offsetX, offsetY, scaledW, scaledH]);
+  }, [tails, sampler, scale, offsetX, offsetY, scaledW, scaledH, shearK]);
 
   // While dragging, the PointPlotter is the source of truth for anchor
   // positions — if we let React re-derive positions from updated angle/length
@@ -194,10 +208,16 @@ export function TailMinimap(props: TailMinimapProps) {
 
   // Draw the real body silhouette from the sampler so polygon corners,
   // cloud lobes, and rectangle roundness all read accurately.
+  // Apply the shear via SVG matrix: in sampler-local coords the transform is
+  // x' = x + k*(H/2 - y) = x - k*y + k*H/2  →  matrix(1, 0, -k, 1, k*H/2, 0)
+  const bodyShearMatrix = shearK !== 0
+    ? `matrix(1,0,${(-shearK).toFixed(6)},1,${(shearK * scaledH / 2).toFixed(6)},0)`
+    : undefined;
   const bodyDecoration = (
     <g transform={`translate(${offsetX} ${offsetY})`}>
       <path
         d={sampler.bodyPath}
+        transform={bodyShearMatrix}
         fill="rgba(255,255,255,0.08)"
         stroke="rgba(255,255,255,0.32)"
         strokeWidth={1.5}

@@ -327,14 +327,14 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     [design.base, effectiveBaseParams, W, H],
   );
 
-  // Italic lean: skew about the body's x-center, baked into the body samples
-  // before the (classic) tail offset, so the body leans but tails don't.
+  // Shear: skew about the body's x-center, baked into the body samples
+  // before the (classic) tail offset, so the body shears but tails don't.
   const pointTransform = useMemo(() => {
-    if (!design.lean) return undefined;
-    const k = Math.tan((design.lean * Math.PI) / 180);
+    if (!design.shear) return undefined;
+    const k = Math.tan((design.shear * Math.PI) / 180);
     const cy = H / 2;
     return (x: number, y: number) => ({ x: x + k * (cy - y), y });
-  }, [design.lean, H]);
+  }, [design.shear, H]);
 
   // For each tail effect, resolve its attachment point and shape.
   interface ResolvedTail {

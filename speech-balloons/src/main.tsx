@@ -18,7 +18,11 @@ const NEW_WORKSPACES_KEY = `lk:${STORAGE_KEY}:workspaces`;
  */
 function migrateStorage() {
   try {
-    if (localStorage.getItem(NEW_WORKSPACES_KEY)) return;
+    if (localStorage.getItem(NEW_WORKSPACES_KEY)) {
+      // Already using labkit workspaces — apply field-rename migrations in place.
+      migrateWorkspaces();
+      return;
+    }
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const old = JSON.parse(raw) as { runtime: unknown; design: unknown; nextId?: number };
@@ -37,6 +41,11 @@ function migrateStorage() {
         }
       }
     }
+    // Migrate design.lean → design.shear.
+    if (typeof design.lean === 'number' && design.shear === undefined) {
+      design.shear = design.lean;
+      delete design.lean;
+    }
     const oldRuntime = old.runtime as Record<string, unknown>;
     const oldZoom = typeof oldRuntime.zoom === 'number' ? oldRuntime.zoom : 1.2;
     const workspace = {
@@ -48,6 +57,34 @@ function migrateStorage() {
     };
     localStorage.setItem(NEW_WORKSPACES_KEY, JSON.stringify([workspace]));
     localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* malformed snapshot — fall through to defaults */
+  }
+}
+
+/**
+ * In-place migrations on the labkit workspace JSON already stored.
+ * Runs when the new workspaces key already exists (i.e. already ported).
+ */
+function migrateWorkspaces() {
+  try {
+    const raw = localStorage.getItem(NEW_WORKSPACES_KEY);
+    if (!raw) return;
+    const workspaces = JSON.parse(raw) as Array<{ config?: Record<string, unknown> }>;
+    let dirty = false;
+    for (const ws of workspaces) {
+      const config = ws.config;
+      if (!config) continue;
+      // design.lean → design.shear
+      if (typeof config.lean === 'number' && config.shear === undefined) {
+        config.shear = config.lean;
+        delete config.lean;
+        dirty = true;
+      }
+    }
+    if (dirty) {
+      localStorage.setItem(NEW_WORKSPACES_KEY, JSON.stringify(workspaces));
+    }
   } catch {
     /* malformed snapshot — fall through to defaults */
   }

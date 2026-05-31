@@ -29,7 +29,7 @@ export interface DesignState {
   height: number;
   padX: number; // used when fitToContent is on
   padY: number;
-  lean: number; // italic-style skewX in degrees, -25..25
+  shear: number; // italic-style skewX in degrees, -25..25
   textColor: string;
   bg: string;
   nextId: number;
