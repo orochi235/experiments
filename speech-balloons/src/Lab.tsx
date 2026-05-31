@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
+  CheckboxRow,
+  ColorRow,
+  PropertyGroup,
   PropertyList,
   PropertyPanel,
-  PropertyGroup,
-  SliderRow,
-  ColorRow,
   SelectRow,
-  CheckboxRow,
+  SliderRow,
 } from '@labkit/react';
 import { SpeechBalloon } from './SpeechBalloon';
 import { CurveEditor, type ControlPoint } from './CurveEditor';
@@ -362,6 +362,8 @@ export function Lab() {
           <h1>{`I'll take "Balloons" for $600, Alex`}</h1>
         </div>
         <div className="toolbar-group">
+          {/* Font select, multi-line text textarea, and size-to-content checkbox keep
+              raw HTML — none fit the labkit PropertyRow stacked label+control shape. */}
           <label className="field">
             <span>Font</span>
             <select
@@ -1021,9 +1023,9 @@ function renderRow(
         alpha={alphaSupported ? alpha : undefined}
         alphaDisabled={!alphaSupported}
         onChange={(nextRgb) =>
-          onChange(c.key, combineColor(nextRgb, alphaSupported ? splitColor(String(params[c.key] ?? c.default)).alpha : 1))
+          onChange(c.key, combineColor(nextRgb, alphaSupported ? alpha : 1))
         }
-        onAlphaChange={alphaSupported ? (nextAlpha) => onChange(c.key, combineColor(splitColor(String(params[c.key] ?? c.default)).rgb, nextAlpha)) : undefined}
+        onAlphaChange={alphaSupported ? (nextAlpha) => onChange(c.key, combineColor(rgb, nextAlpha)) : undefined}
       />
     );
   }
@@ -1052,18 +1054,23 @@ function renderRow(
       </div>
     );
   }
-  // text fallthrough
-  return (
-    <SliderRow
-      key={c.key}
-      label={label}
-      value={Number(value ?? 0)}
-      min={0}
-      max={1}
-      step={0.01}
-      onChange={() => {}}
-    />
-  );
+  if (c.kind === 'text') {
+    return (
+      <label key={c.key} className="field text">
+        <span>{label}</span>
+        <textarea
+          className="text-multiline"
+          rows={2}
+          value={String(value ?? c.default)}
+          onChange={(e) => onChange(c.key, e.target.value)}
+        />
+      </label>
+    );
+  }
+  // Exhaustiveness check — every LabControl kind must be handled above.
+  // @ts-ignore
+  const _exhaustive: never = c;
+  throw new Error(`[Lab] unhandled control kind: ${(c as { kind: string }).kind}`);
 }
 
 function splitColor(hex: string): { rgb: string; alpha: number } {
