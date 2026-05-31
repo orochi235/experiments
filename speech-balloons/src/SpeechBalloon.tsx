@@ -77,6 +77,87 @@ function mixCss(a: RGB, b: RGB, t: number): string {
   const bl = Math.round(a[2] + (b[2] - a[2]) * t);
   return `rgb(${r} ${g} ${bl})`;
 }
+// --- Multi-light dome shading ---------------------------------------------
+
+export type PerimeterSampler = (angle: number) => {
+  x: number;
+  y: number;
+  nx: number;
+  ny: number;
+};
+
+export interface LitArc {
+  start: number; // radians
+  end: number;   // radians
+}
+
+function lightDirection(azimuthDeg: number, elevationDeg: number): [number, number, number] {
+  const az = (azimuthDeg * Math.PI) / 180;
+  const el = (elevationDeg * Math.PI) / 180;
+  const ce = Math.cos(el);
+  return [Math.cos(az) * ce, Math.sin(az) * ce, Math.sin(el)];
+}
+
+// Sample the perimeter at `samples` angles and return the contiguous arcs
+// where the 2D outward normal has a positive dot with the light's in-plane
+// direction. v1 approximation: rim's outward normal treated as if it lies
+// in-plane (no contour-driven tilt). Refines later.
+export function computeLitArcs(
+  sampler: PerimeterSampler,
+  azimuthDeg: number,
+  elevationDeg: number,
+  samples: number = 240,
+): LitArc[] {
+  const L = lightDirection(azimuthDeg, elevationDeg);
+  const lit: boolean[] = new Array(samples);
+  for (let i = 0; i < samples; i++) {
+    const a = (i / samples) * 2 * Math.PI;
+    const p = sampler(a);
+    lit[i] = p.nx * L[0] + p.ny * L[1] > 1e-9;
+  }
+  if (lit.every((x) => x)) return [{ start: 0, end: 2 * Math.PI }];
+  if (lit.every((x) => !x)) return [];
+  const firstFalse = lit.indexOf(false);
+  const rot = [...lit.slice(firstFalse), ...lit.slice(0, firstFalse)];
+  const arcs: LitArc[] = [];
+  let i = 0;
+  while (i < samples) {
+    while (i < samples && !rot[i]) i++;
+    if (i >= samples) break;
+    const runStart = i;
+    while (i < samples && rot[i]) i++;
+    const runEnd = i;
+    arcs.push({
+      start: (((runStart + firstFalse) % samples) / samples) * 2 * Math.PI,
+      end: (((runEnd + firstFalse) % samples) / samples) * 2 * Math.PI,
+    });
+  }
+  return arcs;
+}
+
+// Centroid → arc wedge path per lit arc; SVG-d for use as a clipPath.
+export function buildLightWedgePath(
+  sampler: PerimeterSampler,
+  arcs: readonly LitArc[],
+  centroid: readonly [number, number],
+  arcResolutionRad: number = Math.PI / 60,
+): string {
+  const parts: string[] = [];
+  for (const a of arcs) {
+    const span = (a.end - a.start + 2 * Math.PI) % (2 * Math.PI) || 2 * Math.PI;
+    const steps = Math.max(2, Math.ceil(span / arcResolutionRad));
+    let d = `M ${centroid[0]} ${centroid[1]}`;
+    for (let i = 0; i <= steps; i++) {
+      const t = a.start + (span * i) / steps;
+      const p = sampler(t);
+      d += ` L ${p.x} ${p.y}`;
+    }
+    d += ' Z';
+    parts.push(d);
+  }
+  return parts.join(' ');
+}
+
 // Rotate an attach-point's outward normal by `outAngle` degrees in-plane.
 // Bubbles / lightning don't deform the body silhouette, so they don't go
 // through pointedTailOffsetAt (which applies its own outAngle). Their
