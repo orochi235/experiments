@@ -2119,7 +2119,7 @@ import { initialDesign, initialRuntime } from './initialState';
 import './styles.css';
 
 const STORAGE_KEY = 'speech-balloon-lab-v12';
-const NEW_WORKSPACES_KEY = `${STORAGE_KEY}:workspaces`;
+const NEW_WORKSPACES_KEY = `lk:${STORAGE_KEY}:workspaces`;
 
 /**
  * One-shot migration: if a pre-labkit snapshot lives at the bare
@@ -2329,7 +2329,7 @@ const addEffect = (kind: EffectKind, overrides?: ParamBag) => {
 ```tsx
 const resetAll = () => {
   if (!confirm('Reset all controls to defaults?')) return;
-  localStorage.removeItem('speech-balloon-lab-v12:workspaces');
+  localStorage.removeItem('lk:speech-balloon-lab-v12:workspaces');
   window.location.reload();
 };
 ```
@@ -2342,7 +2342,7 @@ const resetAll = () => {
 cd ~/src/experiments/speech-balloons && rm src/persistence.ts
 ```
 
-Update imports in `Lab.tsx`: remove `import { loadSnapshot, saveSnapshot, LAB_STORAGE_KEY } from './persistence';` and replace any `LAB_STORAGE_KEY` reference with the inline string `'speech-balloon-lab-v12:workspaces'`.
+Update imports in `Lab.tsx`: remove `import { loadSnapshot, saveSnapshot, LAB_STORAGE_KEY } from './persistence';` and replace any `LAB_STORAGE_KEY` reference with the inline string `'lk:speech-balloon-lab-v12:workspaces'`.
 
 - [ ] **Step 5: Verify test + dev**
 
@@ -2365,7 +2365,7 @@ localStorage.getItem('speech-balloon-lab-v12')
 
 // Post-migration, the bare key should be gone and the new key populated:
 localStorage.getItem('speech-balloon-lab-v12')              // null
-localStorage.getItem('speech-balloon-lab-v12:workspaces')   // array with one workspace
+localStorage.getItem('lk:speech-balloon-lab-v12:workspaces')   // array with one workspace
 ```
 
 - [ ] **Step 6: Commit**
@@ -2378,7 +2378,7 @@ git commit -m "speech-balloons: adopt labkit state runtime + undo primitives
 Replaces the local snapshot/undo/persistence machinery with
 SingletonExperimentProvider + useExperimentState + labkit's pushSnapshot/
 undo/redo primitives. Storage key migrates to the labkit shape
-('speech-balloon-lab-v12:workspaces') — old localStorage entries
+('lk:speech-balloon-lab-v12:workspaces') — old localStorage entries
 under the bare key are ignored and re-seeded from defaults."
 ```
 
