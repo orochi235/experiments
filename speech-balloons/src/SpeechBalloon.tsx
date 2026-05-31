@@ -4,7 +4,7 @@ import {
   buildBaseSampler,
   composeBodyPoints,
   attachmentS,
-  classicTailOffsetAt,
+  pointedTailOffsetAt,
   buildBubbles,
   buildCloudPuffs,
   buildLightning,
@@ -80,7 +80,7 @@ function mixCss(a: RGB, b: RGB, t: number): string {
 function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
 // Rotate an attach-point's outward normal by `outAngle` degrees in-plane.
 // Bubbles / lightning don't deform the body silhouette, so they don't go
-// through classicTailOffsetAt (which applies its own outAngle). Their
+// through pointedTailOffsetAt (which applies its own outAngle). Their
 // chain direction is derived from the attach normal, so we rotate it here.
 function rotateAttachByOutAngle(p: PerimeterPoint, outAngleDeg: number): PerimeterPoint {
   if (!outAngleDeg) return p;
@@ -362,7 +362,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
         : shifted;
       return {
         id: eff.id,
-        shape: ((eff.params.shape as TailShape) ?? 'classic') as TailShape,
+        shape: ((eff.params.shape as TailShape) ?? 'pointed') as TailShape,
         attach: attachLeaned,
         params: eff.params,
       };
@@ -390,7 +390,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
     [design.effects],
   );
 
-  // Body silhouette polygon — includes classic-tail offsets and spike
+  // Body silhouette polygon — includes pointed-tail offsets and spike
   // sunburst offsets baked into the perimeter via composeBodyPoints.
   // Spikes are isolated from tail attach regions: at perimeter samples
   // inside any tail's halfBase arc, the spike offset returns zero so
@@ -400,26 +400,26 @@ export function SpeechBalloon({ design, runtime }: Props) {
     const tailRanges: Array<{ sc: number; halfBase: number }> = [];
     const denseRanges: Array<{ sc: number; halfWidth: number; samples: number }> = [];
     for (const eff of tailEffects) {
-      const shape = ((eff.params.shape as TailShape) ?? 'classic') as TailShape;
+      const shape = ((eff.params.shape as TailShape) ?? 'pointed') as TailShape;
       const angle = (eff.params.angle as number) ?? 115;
       const sc = attachmentS(angle, sampler, W, H);
       const dims = tailDims(eff.params, shape, W, H);
       // Track the attach region for every tail shape — classic uses its
       // halfBase directly, bubbles/lightning use baseWidth as a buffer
       // so spikes don't poke out of their attach footprint either.
-      // `wavy` is a classic-flavored bump with sinusoidal spine wave —
+      // `wavy` is a pointed-flavored bump with sinusoidal spine wave —
       // use the same halfBase / dense-sample / offset machinery.
-      const classicLike = shape === 'classic' || shape === 'wavy';
-      const halfBase = classicLike
+      const pointedLike = shape === 'pointed' || shape === 'wavy';
+      const halfBase = pointedLike
         ? dims.baseWidth / 2
         : Math.max(2, dims.baseWidth);
       tailRanges.push({ sc, halfBase });
-      if (classicLike) {
+      if (pointedLike) {
         // Resolve the arc edges densely regardless of how few uniform body
         // samples land inside this thin range.
         denseRanges.push({ sc, halfWidth: halfBase, samples: 96 });
       }
-      if (!classicLike) continue;
+      if (!pointedLike) continue;
       const cfg = {
         sc,
         halfBase: dims.baseWidth / 2,
@@ -433,7 +433,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
         waveFreq: shape === 'wavy' ? ((eff.params.waveFreq as number) ?? 2) : undefined,
         waveAmp: shape === 'wavy' ? ((eff.params.waveAmp as number) ?? 0.3) : undefined,
       };
-      offsets.push((s) => classicTailOffsetAt(s, cfg));
+      offsets.push((s) => pointedTailOffsetAt(s, cfg));
     }
     const isInTailRange = (s: number): boolean => {
       const tl = sampler.totalLen;
@@ -641,7 +641,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const reach = useMemo(() => {
     let max = 60;
     for (const eff of tailEffects) {
-      const shape = (eff.params.shape as string) ?? 'classic';
+      const shape = (eff.params.shape as string) ?? 'pointed';
       const size = (eff.params.size as number) ?? (eff.params.length as number) ?? 50;
       max = Math.max(max, size);
       // Bubbles chain length isn't governed by `size` — it's the sum of

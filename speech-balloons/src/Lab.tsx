@@ -250,7 +250,7 @@ export function Lab() {
     let max = 60;
     for (const eff of design.effects) {
       if (eff.kind === 'tail') {
-        const shape = (eff.params.shape as string) ?? 'classic';
+        const shape = (eff.params.shape as string) ?? 'pointed';
         const size = (eff.params.size as number) ?? (eff.params.length as number) ?? 50;
         max = Math.max(max, size);
         if (shape === 'bubbles') {

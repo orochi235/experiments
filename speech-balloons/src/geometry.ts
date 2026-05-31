@@ -376,9 +376,9 @@ export function attachmentS(
   return angleToS(angleDeg, sampler, boxW / 2, boxH / 2);
 }
 
-// --- Classic (triangular) tail as a perimeter offset ----------------------
+// --- Pointed (triangular) tail as a perimeter offset ----------------------
 
-export interface ClassicTailConfig {
+export interface PointedTailConfig {
   sc: number;
   halfBase: number;
   length: number;
@@ -399,7 +399,7 @@ export interface ClassicTailConfig {
   waveAmp?: number;
 }
 
-export function classicTailOffsetAt(s: number, cfg: ClassicTailConfig): { dx: number; dy: number } {
+export function pointedTailOffsetAt(s: number, cfg: PointedTailConfig): { dx: number; dy: number } {
   let ds = s - cfg.sc;
   if (ds > cfg.totalLen / 2) ds -= cfg.totalLen;
   if (ds < -cfg.totalLen / 2) ds += cfg.totalLen;

@@ -70,7 +70,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   ],
 
   tail: [
-    { key: 'shape', label: 'Shape', kind: 'select', options: ['classic', 'bubbles', 'lightning', 'wavy'], default: 'classic' },
+    { key: 'shape', label: 'Shape', kind: 'select', options: ['pointed', 'bubbles', 'lightning', 'wavy'], default: 'pointed' },
     { key: 'angle', label: 'Angle', kind: 'range', min: 0, max: 359, step: 1, default: 115, unit: '°' },
     // Tilt of the tail's outward direction relative to the body's normal
     // at the attach point. 0 = straight out from the body, -90/+90 = lays
@@ -183,7 +183,7 @@ export function effectSummary(kind: EffectKind, params: ParamBag): string {
       return `${mode} · ${base}`;
     }
     case 'tail': {
-      const shape = (params.shape as string) || 'classic';
+      const shape = (params.shape as string) || 'pointed';
       const angle = Math.round((params.angle as number) ?? 115);
       return `${shape} · ${angle}°`;
     }

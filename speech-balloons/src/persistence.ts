@@ -43,6 +43,10 @@ export function loadSnapshot(): LabSnapshot {
     if (!parsed.runtime || !parsed.design) return initialSnapshot();
     // Default new fields on load so old snapshots keep working.
     if (parsed.runtime.zoom === undefined) parsed.runtime.zoom = 1.2;
+    // Migrate: rename shape 'classic' → 'pointed' (renamed in UI and code).
+    for (const eff of parsed.design?.effects ?? []) {
+      if (eff.kind === 'tail' && eff.params.shape === 'classic') eff.params.shape = 'pointed';
+    }
     return parsed;
   } catch {
     return initialSnapshot();

@@ -1,6 +1,6 @@
 export type BalloonBase = 'rectangle' | 'oval' | 'polygon' | 'cloud';
 export type EffectKind = 'fill' | 'tail' | 'spikes' | 'lobes' | 'wobble' | 'jitter' | 'cloud' | 'stroke' | 'shadow';
-export type TailShape = 'classic' | 'bubbles' | 'lightning' | 'wavy';
+export type TailShape = 'pointed' | 'bubbles' | 'lightning' | 'wavy';
 export type FillMode = 'aqua' | 'bevel' | 'dome';
 export type ShadingMode = 'multiply' | 'mix' | 'lightness';
 

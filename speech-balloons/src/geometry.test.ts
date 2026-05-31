@@ -5,7 +5,7 @@ import {
   buildPolygon,
   buildCloud,
   angleToS,
-  classicTailOffsetAt,
+  pointedTailOffsetAt,
   spikesOffsetAt,
   buildBubbles,
   buildCloudPuffs,
@@ -13,7 +13,7 @@ import {
   wobbleOffsetAt,
   jitterOffsetAt,
   type BaseSampler,
-  type ClassicTailConfig,
+  type PointedTailConfig,
   type SpikesConfig,
 } from './geometry';
 
@@ -156,9 +156,9 @@ function flatLineSampler(totalLen: number): BaseSampler {
   };
 }
 
-describe('classicTailOffsetAt', () => {
+describe('pointedTailOffsetAt', () => {
   const sampler = flatLineSampler(1000);
-  const baseCfg: ClassicTailConfig = {
+  const baseCfg: PointedTailConfig = {
     sc: 500,
     halfBase: 20,
     length: 100,
@@ -170,38 +170,38 @@ describe('classicTailOffsetAt', () => {
   };
 
   it('returns zero offset outside the half-base', () => {
-    const off = classicTailOffsetAt(baseCfg.sc + baseCfg.halfBase + 1, baseCfg);
+    const off = pointedTailOffsetAt(baseCfg.sc + baseCfg.halfBase + 1, baseCfg);
     expect(off.dx).toBe(0);
     expect(off.dy).toBe(0);
-    const off2 = classicTailOffsetAt(baseCfg.sc - baseCfg.halfBase - 1, baseCfg);
+    const off2 = pointedTailOffsetAt(baseCfg.sc - baseCfg.halfBase - 1, baseCfg);
     expect(off2.dx).toBe(0);
     expect(off2.dy).toBe(0);
   });
 
   it('at ds=0 outward magnitude equals length + radial', () => {
-    const cfg: ClassicTailConfig = { ...baseCfg, length: 100, radial: 25 };
-    const off = classicTailOffsetAt(cfg.sc, cfg);
+    const cfg: PointedTailConfig = { ...baseCfg, length: 100, radial: 25 };
+    const off = pointedTailOffsetAt(cfg.sc, cfg);
     // Normal is (0,1) -> outward only in +y. Magnitude = length + radial.
     expect(off.dx).toBeCloseTo(0, 6);
     expect(off.dy).toBeCloseTo(125, 6);
   });
 
   it('wavy config injects a sinusoidal perpendicular shift that vanishes at the base', () => {
-    const cfg: ClassicTailConfig = {
+    const cfg: PointedTailConfig = {
       ...baseCfg,
       waveFreq: 2,
       waveAmp: 0.3,
     };
     // At exactly the base edge (ds = halfBase), t = 1 - 1 = 0 -> all zero.
-    const offAtBase = classicTailOffsetAt(cfg.sc + cfg.halfBase, cfg);
+    const offAtBase = pointedTailOffsetAt(cfg.sc + cfg.halfBase, cfg);
     expect(offAtBase.dx).toBeCloseTo(0, 6);
     expect(offAtBase.dy).toBeCloseTo(0, 6);
     // Pick a sample where the sine is decidedly nonzero. ds = halfBase/4 →
     // u = 0.25, t = 0.75, sin(2π · 2 · 0.75) = sin(3π) = 0; ds = halfBase/8 →
     // u = 0.125, t = 0.875, sin(2π · 2 · 0.875) = sin(3.5π) = -1 ≠ 0.
     const mid = cfg.sc + cfg.halfBase / 8;
-    const offNoWave = classicTailOffsetAt(mid, baseCfg);
-    const offWave = classicTailOffsetAt(mid, cfg);
+    const offNoWave = pointedTailOffsetAt(mid, baseCfg);
+    const offWave = pointedTailOffsetAt(mid, cfg);
     // perp axis on flat sampler with n=(0,1) is (-ny, nx) = (-1, 0) → x component.
     expect(Math.abs(offWave.dx - offNoWave.dx)).toBeGreaterThan(EPS);
   });
