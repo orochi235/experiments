@@ -60,7 +60,13 @@ body {
   overflow: hidden;
 }
 
-/* ── LabShell override: body fills without extra padding ──── */
+/* ── LabShell overrides ──────────────────────────────────── */
+
+/* Bind the lab chrome to Oswald so headings remain consistent even if
+   labkit's default --lk-font-display token changes in a future build. */
+.lk-shell {
+  --lk-font-display: 'Oswald', sans-serif;
+}
 
 .lk-shell-body {
   padding: 0;
