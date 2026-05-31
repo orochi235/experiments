@@ -387,13 +387,15 @@ export function Lab() {
             ? EFFECT_CONTROLS[eff.kind].filter((c) => !('key' in c) || c.key !== primary.key)
             : EFFECT_CONTROLS[eff.kind];
           return (
-            <ControlList
-              controls={bodyControls}
-              params={eff.params}
-              onChange={(k, v) => updateEffectParam(eff.id, k, v)}
-              bodyW={bodyW}
-              bodyH={bodyH}
-            />
+            <PropertyList pack="pairs">
+              <ControlList
+                controls={bodyControls}
+                params={eff.params}
+                onChange={(k, v) => updateEffectParam(eff.id, k, v)}
+                bodyW={bodyW}
+                bodyH={bodyH}
+              />
+            </PropertyList>
           );
         }}
       />
@@ -477,7 +479,7 @@ export function Lab() {
         <div className="sb-workspace">
           <aside className="sb-side-panel sb-side-panel-left">
             <PropertyPanel title="Body">
-              <PropertyList>
+              <PropertyList pack="pairs">
                 <SelectRow
                   label="Shape"
                   value={design.base}
@@ -653,7 +655,7 @@ function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListPr
         const rows = visible.map((c) => renderRow(c, params, onChange, bodyW, bodyH));
         if (g.header === null) return rows;
         return (
-          <PropertyGroup key={`grp-${gi}`} title={g.header} hidden={g.hidden}>
+          <PropertyGroup key={`grp-${gi}`} title={g.header} hidden={g.hidden} pack="pairs">
             {rows}
           </PropertyGroup>
         );
