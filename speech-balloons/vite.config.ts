@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react';
 // of monorepo-internal bare paths (`core/...`, `features/...`). Reuse the
 // kit's own alias generator so vite resolves them all from any position.
 const weaselRoot = fileURLToPath(new URL('../../weasel', import.meta.url));
+const labkitRoot = fileURLToPath(new URL('../../labkit', import.meta.url));
 const aliasModule = (await import(
   /* @vite-ignore */ new URL(`file://${weaselRoot}/scripts/vite-aliases.ts`).href
 )) as { weaselAliases: (root: string) => { find: string | RegExp; replacement: string }[] };
@@ -20,5 +21,12 @@ export default defineConfig({
     alias: weaselAliases,
     dedupe: ['react', 'react-dom'],
   },
-  server: { port: 5180, open: true },
+  server: {
+    port: 5180,
+    open: true,
+    // Vite rewrites bare assets in linked packages (e.g. labkit's @font-face
+    // URL) to /@fs/<absolute path>. That path is outside this project's
+    // root, so it needs explicit fs allow-listing.
+    fs: { allow: ['.', labkitRoot, weaselRoot] },
+  },
 });
