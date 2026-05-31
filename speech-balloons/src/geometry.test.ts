@@ -162,7 +162,6 @@ describe('pointedTailOffsetAt', () => {
     sc: 500,
     halfBase: 20,
     length: 100,
-    fillet: 0,
     arc: 0,
     radial: 0,
     totalLen: sampler.totalLen,

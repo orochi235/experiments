@@ -28,7 +28,7 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   fill: [
     { key: 'mode', label: 'Mode', kind: 'select',
-      options: ['aqua', 'bevel', 'dome'],
+      options: ['aqua', 'dome'],
       default: 'dome' },
     { key: 'base', label: 'Base color', kind: 'color', default: '#3b82f6' },
 
@@ -39,12 +39,9 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'highlightTint', label: 'Highlight tint', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'aqua' },
     { key: 'shadowTint', label: 'Shadow tint', kind: 'color', default: '#0a1020', hideWhen: (p) => p.mode !== 'aqua' },
 
-    { kind: 'header', label: 'Bevel', hideWhen: (p) => p.mode !== 'bevel' },
-    { key: 'rings', label: 'Ring count', kind: 'range', min: 4, max: 96, step: 1, default: 32, hideWhen: (p) => p.mode !== 'bevel' },
-    { key: 'shading', label: 'Shading', kind: 'select', options: ['multiply', 'mix', 'lightness'], default: 'multiply', hideWhen: (p) => p.mode !== 'bevel' },
-    { key: 'amount', label: 'Amount', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'bevel' && p.mode !== 'dome' },
-    { key: 'shadowColor', label: 'Shadow color', kind: 'color', default: '#000000', hideWhen: (p) => (p.mode !== 'bevel' || p.shading !== 'mix') && p.mode !== 'dome' },
-    { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => (p.mode !== 'bevel' || p.shading !== 'mix') && p.mode !== 'dome' },
+    { key: 'amount', label: 'Amount', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'shadowColor', label: 'Shadow color', kind: 'color', default: '#000000', hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'dome' },
 
     { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' },
     { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H }) => Math.floor(Math.min(W, H) / 3), unit: 'px' },
@@ -65,7 +62,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
       // (dark, profile_y rising fast) flattening toward the center
       // (bright top, slope ≈ 0). Interleaved [x0,y0,x1,y1,x2,y2].
       defaults: [0, -1, 0.5, 0.5, 1, 0.7],
-      hideWhen: (p) => p.mode !== 'bevel' && p.mode !== 'dome',
+      hideWhen: (p) => p.mode !== 'dome',
     },
   ],
 
@@ -77,7 +74,6 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     // along the perimeter tangent.
     { key: 'outAngle', label: 'Tip angle', kind: 'range', min: -90, max: 90, step: 1, default: 0, unit: '°' },
     { key: 'arc', label: 'Bend', kind: 'range', min: -1, max: 1, step: 0.02, default: 0 },
-    { key: 'fillet', label: 'Fillet', kind: 'range', min: 0, max: 8, step: 0.05, default: 1, hideWhen: (p) => p.shape === 'bubbles' },
     { key: 'size', label: 'Length', kind: 'range', min: 8, max: 220, step: 0.5, default: 60, unit: 'px' },
     // Degrees of arc subtended at body center. baseWidth = 2·bodyRef·sin(deg/2).
     // Used for classic + lightning; bubbles uses its own bubbleDiameter (px).

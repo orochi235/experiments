@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react';
-import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingMode, TailShape } from './types';
+import type { DesignState, FillMode, ParamBag, RuntimeState, TailShape } from './types';
 import {
   buildBaseSampler,
   composeBodyPoints,
@@ -19,7 +19,6 @@ import {
 } from './geometry';
 import {
   unionPolygons,
-  offsetClosedPolygons,
   polygonsToSvgPath,
   circleToPolygon,
   type Polygon,
@@ -78,7 +77,6 @@ function mixCss(a: RGB, b: RGB, t: number): string {
   const bl = Math.round(a[2] + (b[2] - a[2]) * t);
   return `rgb(${r} ${g} ${bl})`;
 }
-function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
 // Rotate an attach-point's outward normal by `outAngle` degrees in-plane.
 // Bubbles / lightning don't deform the body silhouette, so they don't go
 // through pointedTailOffsetAt (which applies its own outAngle). Their
@@ -89,88 +87,6 @@ function rotateAttachByOutAngle(p: PerimeterPoint, outAngleDeg: number): Perimet
   const c = Math.cos(r);
   const s = Math.sin(r);
   return { x: p.x, y: p.y, nx: p.nx * c - p.ny * s, ny: p.nx * s + p.ny * c };
-}
-function rgbCss(rgb: RGB): string {
-  return `rgb(${Math.round(rgb[0])} ${Math.round(rgb[1])} ${Math.round(rgb[2])})`;
-}
-type HSL = [number, number, number]; // h ∈ [0,1), s ∈ [0,1], l ∈ [0,1]
-function rgbToHsl([r, g, b]: RGB): HSL {
-  const rf = r / 255, gf = g / 255, bf = b / 255;
-  const max = Math.max(rf, gf, bf), min = Math.min(rf, gf, bf);
-  const l = (max + min) / 2;
-  if (max === min) return [0, 0, l];
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  let h: number;
-  if (max === rf) h = (gf - bf) / d + (gf < bf ? 6 : 0);
-  else if (max === gf) h = (bf - rf) / d + 2;
-  else h = (rf - gf) / d + 4;
-  return [h / 6, s, l];
-}
-function hueToRgb(p: number, q: number, t: number): number {
-  if (t < 0) t += 1;
-  if (t > 1) t -= 1;
-  if (t < 1 / 6) return p + (q - p) * 6 * t;
-  if (t < 1 / 2) return q;
-  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-  return p;
-}
-function hslToRgb([h, s, l]: HSL): RGB {
-  if (s === 0) {
-    const v = l * 255;
-    return [v, v, v];
-  }
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-  const p = 2 * l - q;
-  return [
-    hueToRgb(p, q, h + 1 / 3) * 255,
-    hueToRgb(p, q, h) * 255,
-    hueToRgb(p, q, h - 1 / 3) * 255,
-  ];
-}
-
-// y ∈ [-1, +1] from the contour curve at ring position t (rim → center).
-// Three shading modes produce concrete fill colors for that ring:
-//
-// - 'multiply' : base × (1 + amount*y), clamped per channel.
-// - 'mix'      : lerp(base, lerp(shadow, highlight, (y+1)/2), amount).
-// - 'lightness': base in HSL with L shifted by amount*y (clamped).
-function shadeColor(
-  baseHex: string,
-  shadowHex: string,
-  highlightHex: string,
-  shading: ShadingMode,
-  amount: number,
-  y: number,
-): string {
-  const base = parseHex(baseHex);
-  if (shading === 'multiply') {
-    const k = 1 + amount * y;
-    return rgbCss([
-      Math.max(0, Math.min(255, base[0] * k)),
-      Math.max(0, Math.min(255, base[1] * k)),
-      Math.max(0, Math.min(255, base[2] * k)),
-    ]);
-  }
-  if (shading === 'mix') {
-    const sh = parseHex(shadowHex);
-    const hi = parseHex(highlightHex);
-    const t = (y + 1) / 2;
-    const target: RGB = [
-      sh[0] + (hi[0] - sh[0]) * t,
-      sh[1] + (hi[1] - sh[1]) * t,
-      sh[2] + (hi[2] - sh[2]) * t,
-    ];
-    return rgbCss([
-      base[0] + (target[0] - base[0]) * amount,
-      base[1] + (target[1] - base[1]) * amount,
-      base[2] + (target[2] - base[2]) * amount,
-    ]);
-  }
-  // 'lightness'
-  const hsl = rgbToHsl(base);
-  hsl[2] = clamp01(hsl[2] + amount * y);
-  return rgbCss(hslToRgb(hsl));
 }
 
 // --- Contour curve helpers -----------------------------------------------
@@ -301,6 +217,12 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   }, [runtime.fitToContent, runtime.text, runtime.fontFamily, runtime.fontSize, design.width, design.height, design.padX, design.padY]);
 
   // Split effects by kind. Multiple tails allowed.
+  // NOTE: these four lookups are not useMemo'd, unlike spikes/lobes/wobble/jitter/cloud
+  // below. Each call returns a new reference per render, busting downstream useMemos
+  // (resolvedTails → bodyAndBubblesPolys → bodyPath / computeMatPlateau / etc.). It's
+  // tolerable today, but anything heavy added downstream — like the old bevel-ring
+  // 31×-polygon-offset loop — will fire on every state change. Wrap in useMemo before
+  // adding more expensive geometry.
   const fillEffect = design.effects.find((e) => e.kind === 'fill');
   const tailEffects = design.effects.filter((e) => e.kind === 'tail');
   const strokeEffect = design.effects.find((e) => e.kind === 'stroke');
@@ -313,7 +235,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   // bw inset that already holds at edge midpoints).
   const effectiveBaseParams = useMemo<ParamBag>(() => {
     if (design.base !== 'rectangle') return design.baseParams;
-    const mode = (fillEffect?.params.mode as string) ?? 'bevel';
+    const mode = (fillEffect?.params.mode as string) ?? 'dome';
     if (mode !== 'dome') return design.baseParams;
     const baseR = (design.baseParams.roundness as number) ?? 0.5;
     const bw = (fillEffect?.params.bevelWidth as number) ?? 22;
@@ -425,7 +347,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
         sc,
         halfBase: dims.baseWidth / 2,
         length: dims.length,
-        fillet: (eff.params.fillet as number) ?? 0.5,
         arc: (eff.params.arc as number) ?? 0,
         radial: (eff.params.radial as number) ?? 0,
         outAngle: (eff.params.outAngle as number) ?? 0,
@@ -603,9 +524,16 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
 
   const bodyPath = useMemo(() => polygonsToSvgPath(bodyAndBubblesPolys), [bodyAndBubblesPolys]);
 
-  // Body silhouette only (no bubbles unioned in). Used by aqua mode so each
-  // bubble gets its own bbox-anchored gradient instead of inheriting the body's.
-  const bodyOnlyPath = useMemo(() => polygonsToSvgPath([bodyPolygon]), [bodyPolygon]);
+  // Body silhouette, with lightning ribbons unioned in but NOT bubbles. Used by
+  // aqua mode so the body's gradient flows continuously through any lightning
+  // tails (one piece of mylar) while bubbles — which are physically separate
+  // floaty objects — still get their own bbox-anchored gradient.
+  const bodyOnlyPath = useMemo(() => {
+    if (lightningRibbons.length === 0) return polygonsToSvgPath([bodyPolygon]);
+    const polys: Polygon[] = [bodyPolygon];
+    for (const r of lightningRibbons) for (const p of r.polys) polys.push(p);
+    return polygonsToSvgPath(unionPolygons(polys));
+  }, [bodyPolygon, lightningRibbons]);
 
   // Flat list of bubbles from every bubble-shaped tail.
   const allBubbles = useMemo(() => {
@@ -630,8 +558,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
 
   // Lightning tails: inflate the open polyline by baseWidth/2 to get a filled
   // ribbon (rounded ends). Each becomes its own polygon-set whose SVG path is
-  // derived once; the polygons are kept around so bevel-mode rendering can
-  // build nested insets per ribbon.
+  // derived once.
   const strokeW = strokeEffect ? ((strokeEffect.params.width as number) ?? 0) : 0;
   const strokeColor = strokeEffect ? ((strokeEffect.params.color as string) ?? 'none') : 'none';
   const hasShadow = !!shadowEffect;
@@ -676,19 +603,17 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   const aquaGlossId = `${idPrefix}-aqua-gloss`;
 
   // Resolve fill params from the effect's ParamBag, with sensible defaults
-  // for missing keys (e.g. legacy snapshots saved before bevel landed).
+  // for missing keys.
   const fillRender = useMemo(() => {
     const p = fillEffect?.params ?? {};
     const rawMode = (p.mode as string) ?? 'dome';
-    const mode: FillMode = rawMode === 'aqua' ? 'aqua' : rawMode === 'dome' ? 'dome' : 'bevel';
+    const mode: FillMode = rawMode === 'aqua' ? 'aqua' : 'dome';
     const base = (p.base as string) ?? '#ffffff';
     const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, -0.5, 0.5, 0, 1, 0.5];
     return {
       mode,
       base,
       contour,
-      rings: Math.max(2, Math.round((p.rings as number) ?? 32)),
-      shading: ((p.shading as ShadingMode) ?? 'multiply') as ShadingMode,
       amount: (p.amount as number) ?? 0.6,
       shadowColor: (p.shadowColor as string) ?? '#000000',
       highlightColor: (p.highlightColor as string) ?? '#ffffff',
@@ -736,49 +661,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     ];
     return { x1, y1, x2, y2, bodyStops };
   }, [fillRender.mode, fillRender.lightAngle, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
-
-  // Build a stack of nested inset polygons for a polygon set. Each ring is
-  // painter's-algorithm: outer drawn first, inner over the top. Ring colors
-  // come from sampling the contour curve at t = ringIndex / (rings - 1)
-  // (t=0 = rim, t=1 = center) and feeding y(t) ∈ [-1,+1] into the chosen
-  // shading mode against the base color.
-  const buildBevelRings = (polys: Polygon[]): Array<{ d: string; fill: string }> => {
-    if (polys.length === 0) return [];
-    const bb = polysBBox(polys);
-    if (bb.w <= 0 || bb.h <= 0) return [];
-    const rings = fillRender.rings;
-    const maxInset = Math.min(bb.w, bb.h) / 2;
-    const step = maxInset / rings;
-    const cPoints = contourToPoints(fillRender.contour);
-    const out: Array<{ d: string; fill: string }> = [];
-    for (let i = 0; i < rings; i++) {
-      const inset = i === 0 ? polys : offsetClosedPolygons(polys, -i * step);
-      if (inset.length === 0) break;
-      const d = polygonsToSvgPath(inset);
-      const t = rings === 1 ? 0 : i / (rings - 1);
-      const y = Math.max(-1, Math.min(1, interpolateCurveY(cPoints, t)));
-      const fill = shadeColor(
-        fillRender.base,
-        fillRender.shadowColor,
-        fillRender.highlightColor,
-        fillRender.shading,
-        fillRender.amount,
-        y,
-      );
-      out.push({ d, fill });
-    }
-    return out;
-  };
-
-  const bodyBevelRings = useMemo(() => {
-    if (fillRender.mode !== 'bevel') return null;
-    return buildBevelRings(bodyAndBubblesPolys);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    fillRender.mode, fillRender.rings, fillRender.contour, fillRender.shading,
-    fillRender.amount, fillRender.base, fillRender.shadowColor, fillRender.highlightColor,
-    bodyAndBubblesPolys,
-  ]);
 
   // Dome mode: a single linear gradient overlay applied to the silhouette,
   // with stops computed by sampling the cross-section profile across one pass
@@ -1057,21 +939,10 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
               </g>
             ))}
           </>
-        ) : fillRender.mode === 'bevel' ? (
-          // Bevel: paint nested inset polygons in painter's-algorithm order.
-          // Each ring's color is shadeColor(base, shadow, highlight, mode,
-          // amount, contour(t)) where t = ringIdx / (rings-1).
-          <>
-            {bodyBevelRings && bodyBevelRings.map((r, i) => (
-              <path key={`body-r${i}`} d={r.d} fill={r.fill} />
-            ))}
-
-          </>
         ) : (
           // Dome: solid base color + one partially-transparent linear gradient
           // overlay across the silhouette. Stops are computed from the profile
           // curve and bevelWidth; gradient axis runs along the light azimuth.
-          // No clipper insets, no rings.
           <>
             {bodyDome && (
               <>

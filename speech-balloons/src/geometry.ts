@@ -382,7 +382,6 @@ export interface PointedTailConfig {
   sc: number;
   halfBase: number;
   length: number;
-  fillet: number; // 0 = sharp triangular tail; 1 = full tangent fillet at base
   arc: number;    // lateral bend of the tail spine, -1..1
   radial: number; // outward translation of the bump along the normal (px)
   totalLen: number;
@@ -405,23 +404,7 @@ export function pointedTailOffsetAt(s: number, cfg: PointedTailConfig): { dx: nu
   if (ds < -cfg.totalLen / 2) ds += cfg.totalLen;
   if (Math.abs(ds) > cfg.halfBase) return { dx: 0, dy: 0 };
   const u = Math.abs(ds) / cfg.halfBase;
-  // fillet rounds the concave (negative-space) corners where the tail
-  // base meets the body. Piecewise: linear t = 1 − u over the central
-  // bump region (which keeps the tip shape unaffected), then a cubic
-  // Hermite fillet over the last `w` of the bump that approaches the
-  // body tangentially. `w = f/(f+1)` maps the slider to a 0..1 fillet
-  // zone width (so the slider can extend arbitrarily — w → 1 as f → ∞,
-  // covering more of the bump with the fillet).
-  const f = Math.max(0, cfg.fillet);
-  const w = f / (f + 1);
-  let t: number;
-  if (u <= 1 - w || w <= 0) {
-    t = 1 - u;
-  } else {
-    const tau = (u - (1 - w)) / w;
-    t = w * (tau * tau * tau - tau * tau - tau + 1);
-  }
-  t = Math.max(0, t);
+  const t = Math.max(0, 1 - u);
   const p = cfg.perimeterAt(cfg.sc);
   // Rotate the outward + perpendicular basis by `outAngle` (deg) so the
   // arc/wave bends still read perpendicular to the rotated tail spine.
