@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '@labkit/react/styles.css';
 import { Lab } from './Lab';
 import './styles.css';
 
