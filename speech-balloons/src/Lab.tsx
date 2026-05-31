@@ -3,6 +3,7 @@ import {
   CheckboxRow,
   ColorRow,
   CurveField as KitCurveField,
+  LabShell,
   LayerStack as KitLayerStack,
   type LayerStackItem,
   PropertyGroup,
@@ -399,15 +400,33 @@ export function Lab() {
   }
 
   return (
-    <div className="lab">
-      <header className="toolbar">
-        <div className="brand">
-          <h1>{`I'll take "Balloons" for $600, Alex`}</h1>
+    <LabShell
+      title="I'll take 'Balloons' for $600, Alex"
+      header={
+        <div className="sb-toolbar-actions">
+          <button onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
+            Undo
+          </button>
+          <button onClick={redo} title="Redo (⌘⇧Z)" aria-label="Redo">
+            Redo
+          </button>
+          <button onClick={exportSnapshot} title="Copy snapshot JSON to clipboard">
+            Export
+          </button>
+          <button onClick={downloadSvg} title="Download as SVG" disabled={isPreparingSvg}>
+            {isPreparingSvg ? 'Preparing…' : 'Download SVG'}
+          </button>
+          <button onClick={resetAll} className="danger" title="Reset to defaults">
+            Reset all
+          </button>
         </div>
-        <div className="toolbar-group">
+      }
+    >
+      <div className="sb-lab-body">
+        <div className="sb-toolbar-fields">
           {/* Font select, multi-line text textarea, and size-to-content checkbox keep
               raw HTML — none fit the labkit PropertyRow stacked label+control shape. */}
-          <label className="field">
+          <label className="sb-field">
             <span>Font</span>
             <select
               value={runtime.fontFamily}
@@ -429,16 +448,16 @@ export function Lab() {
             unit="px"
             onChange={(v) => setRuntime((r) => ({ ...r, fontSize: v }))}
           />
-          <label className="field text">
+          <label className="sb-field sb-field-text">
             <span>Text</span>
             <textarea
-              className="text-multiline"
+              className="sb-text-multiline"
               rows={2}
               value={runtime.text}
               onChange={(e) => setRuntime((r) => ({ ...r, text: e.target.value }))}
             />
           </label>
-          <label className="checkbox">
+          <label className="sb-checkbox">
             <input
               type="checkbox"
               checked={runtime.fitToContent}
@@ -453,139 +472,122 @@ export function Lab() {
             onChange={(rgb) => setDesign((d) => ({ ...d, bg: rgb }))}
           /> {/* canvas bg is re-parsed to rgba(...,0.7) — alpha intentionally not exposed */}
         </div>
-        <div className="toolbar-group right">
-          <button onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
-            Undo
-          </button>
-          <button onClick={redo} title="Redo (⌘⇧Z)" aria-label="Redo">
-            Redo
-          </button>
-          <button onClick={exportSnapshot} title="Copy snapshot JSON to clipboard">
-            Export
-          </button>
-          <button onClick={downloadSvg} title="Download as SVG" disabled={isPreparingSvg}>
-            {isPreparingSvg ? 'Preparing…' : 'Download SVG'}
-          </button>
-          <button onClick={resetAll} className="danger" title="Reset to defaults">
-            Reset all
-          </button>
-        </div>
-      </header>
 
-      <main className="workspace">
-        <aside className="side-panel left">
-          <PropertyPanel title="Body">
-            <PropertyList>
-              <SelectRow
-                label="Shape"
-                value={design.base}
-                options={BASE_KINDS.map((b) => ({ value: b, label: b }))}
-                onChange={(v) => setBase(v as BalloonBase)}
-              />
-              <ControlList controls={BASE_CONTROLS[design.base]} params={design.baseParams} onChange={updateBaseParam} />
-              {runtime.fitToContent ? (
-                <>
-                  <SliderRow label="Pad X" value={design.padX} min={4} max={80} step={1} unit="px"
-                    onChange={(v) => setDesign((d) => ({ ...d, padX: v }))} />
-                  <SliderRow label="Pad Y" value={design.padY} min={4} max={60} step={1} unit="px"
-                    onChange={(v) => setDesign((d) => ({ ...d, padY: v }))} />
-                </>
-              ) : (
-                <>
-                  <SliderRow label="Width" value={design.width} min={60} max={500} step={2} unit="px"
-                    onChange={(v) => setDesign((d) => {
-                      const ar = d.width / d.height;
-                      return { ...d, width: v, height: Math.max(20, Math.round(v / ar)) };
-                    })} />
-                  <SliderRow label="Height" value={design.height} min={20} max={500} step={2} unit="px"
-                    onChange={(v) => setDesign((d) => ({ ...d, height: v }))} />
-                </>
-              )}
-              <SliderRow label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} unit={<sup>°</sup>}
-                onChange={(v) => setDesign((d) => ({ ...d, lean: v }))} />
-              <ColorRow
-                label="Text color"
-                value={splitColor(design.textColor).rgb}
-                alpha={splitColor(design.textColor).alpha}
-                onChange={(rgb) => setDesign((d) => ({ ...d, textColor: combineColor(rgb, splitColor(d.textColor).alpha) }))}
-                onAlphaChange={(a) => setDesign((d) => ({ ...d, textColor: combineColor(splitColor(d.textColor).rgb, a) }))}
-              />
-            </PropertyList>
-          </PropertyPanel>
+        <div className="sb-workspace">
+          <aside className="sb-side-panel sb-side-panel-left">
+            <PropertyPanel title="Body">
+              <PropertyList>
+                <SelectRow
+                  label="Shape"
+                  value={design.base}
+                  options={BASE_KINDS.map((b) => ({ value: b, label: b }))}
+                  onChange={(v) => setBase(v as BalloonBase)}
+                />
+                <ControlList controls={BASE_CONTROLS[design.base]} params={design.baseParams} onChange={updateBaseParam} />
+                {runtime.fitToContent ? (
+                  <>
+                    <SliderRow label="Pad X" value={design.padX} min={4} max={80} step={1} unit="px"
+                      onChange={(v) => setDesign((d) => ({ ...d, padX: v }))} />
+                    <SliderRow label="Pad Y" value={design.padY} min={4} max={60} step={1} unit="px"
+                      onChange={(v) => setDesign((d) => ({ ...d, padY: v }))} />
+                  </>
+                ) : (
+                  <>
+                    <SliderRow label="Width" value={design.width} min={60} max={500} step={2} unit="px"
+                      onChange={(v) => setDesign((d) => {
+                        const ar = d.width / d.height;
+                        return { ...d, width: v, height: Math.max(20, Math.round(v / ar)) };
+                      })} />
+                    <SliderRow label="Height" value={design.height} min={20} max={500} step={2} unit="px"
+                      onChange={(v) => setDesign((d) => ({ ...d, height: v }))} />
+                  </>
+                )}
+                <SliderRow label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} unit={<sup>°</sup>}
+                  onChange={(v) => setDesign((d) => ({ ...d, lean: v }))} />
+                <ColorRow
+                  label="Text color"
+                  value={splitColor(design.textColor).rgb}
+                  alpha={splitColor(design.textColor).alpha}
+                  onChange={(rgb) => setDesign((d) => ({ ...d, textColor: combineColor(rgb, splitColor(d.textColor).alpha) }))}
+                  onAlphaChange={(a) => setDesign((d) => ({ ...d, textColor: combineColor(splitColor(d.textColor).rgb, a) }))}
+                />
+              </PropertyList>
+            </PropertyPanel>
 
-          <EffectLayerStack
-            title="Morph"
-            effects={morphEffects}
-            kindSet={MORPH_EFFECTS}
-            bodyW={design.width}
-            bodyH={design.height}
-          />
-
-          <EffectLayerStack
-            title="Fill"
-            effects={leftEffects}
-            kindSet={LEFT_PANEL_EFFECTS}
-            bodyW={design.width}
-            bodyH={design.height}
-          />
-        </aside>
-
-        <section className="preview">
-          <div className="preview-stage" ref={stageRef}>
-            <SpeechBalloon design={design} runtime={runtime} />
-          </div>
-          <div className="zoom-bar">
-            <span className="zoom-label">Zoom</span>
-            <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.max(0.1, r.zoom - 0.1) }))} title="Zoom out">−</button>
-            <input
-              className="zoom-slider"
-              type="range"
-              min={0.1}
-              max={4}
-              step={0.05}
-              value={runtime.zoom}
-              onChange={(e) => setRuntime((r) => ({ ...r, zoom: Number(e.target.value) }))}
-            />
-            <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.min(4, r.zoom + 0.1) }))} title="Zoom in">+</button>
-            <span className="zoom-readout">{Math.round(runtime.zoom * 100)}%</span>
-            <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: 1 }))} title="Reset to 100%">1:1</button>
-            <button type="button" onClick={fitZoomToStage} title="Fit content to viewport">Fit</button>
-          </div>
-        </section>
-
-        <aside className="side-panel right">
-          <div className="tail-minimap-wrap">
-            <TailMinimap
-              width={260}
-              height={200}
-              bodyShape={design.base}
+            <EffectLayerStack
+              title="Morph"
+              effects={morphEffects}
+              kindSet={MORPH_EFFECTS}
               bodyW={design.width}
               bodyH={design.height}
-              bodyParams={design.baseParams}
-              tails={minimapTails}
-              onUpdateTail={updateTailFromMinimap}
-              onCommitTail={() => { /* per-tail commit hook; debounced undo coalesces */ }}
-              onAddTail={(angle) => addEffect('tail', { angle })}
-              onRemoveTail={(id) => removeEffect(id)}
             />
-          </div>
-          <EffectLayerStack
-            title="Tails"
-            hideHead
-            effects={rightEffects}
-            kindSet={RIGHT_PANEL_EFFECTS}
-            decorate={(eff) =>
-              eff.kind === 'tail'
-                ? {
-                    accent: tailColor(tailColorSlotById.get(eff.id) ?? 0),
-                    badge: String((tailIndexById.get(eff.id) ?? 0) + 1),
-                  }
-                : {}
-            }
-          />
-        </aside>
-      </main>
-    </div>
+
+            <EffectLayerStack
+              title="Fill"
+              effects={leftEffects}
+              kindSet={LEFT_PANEL_EFFECTS}
+              bodyW={design.width}
+              bodyH={design.height}
+            />
+          </aside>
+
+          <section className="sb-preview">
+            <div className="sb-preview-stage" ref={stageRef}>
+              <SpeechBalloon design={design} runtime={runtime} />
+            </div>
+            <div className="sb-zoom-bar">
+              <span className="sb-zoom-label">Zoom</span>
+              <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.max(0.1, r.zoom - 0.1) }))} title="Zoom out">−</button>
+              <input
+                className="sb-zoom-slider"
+                type="range"
+                min={0.1}
+                max={4}
+                step={0.05}
+                value={runtime.zoom}
+                onChange={(e) => setRuntime((r) => ({ ...r, zoom: Number(e.target.value) }))}
+              />
+              <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.min(4, r.zoom + 0.1) }))} title="Zoom in">+</button>
+              <span className="sb-zoom-readout">{Math.round(runtime.zoom * 100)}%</span>
+              <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: 1 }))} title="Reset to 100%">1:1</button>
+              <button type="button" onClick={fitZoomToStage} title="Fit content to viewport">Fit</button>
+            </div>
+          </section>
+
+          <aside className="sb-side-panel sb-side-panel-right">
+            <div className="sb-tail-minimap-wrap">
+              <TailMinimap
+                width={260}
+                height={200}
+                bodyShape={design.base}
+                bodyW={design.width}
+                bodyH={design.height}
+                bodyParams={design.baseParams}
+                tails={minimapTails}
+                onUpdateTail={updateTailFromMinimap}
+                onCommitTail={() => { /* per-tail commit hook; debounced undo coalesces */ }}
+                onAddTail={(angle) => addEffect('tail', { angle })}
+                onRemoveTail={(id) => removeEffect(id)}
+              />
+            </div>
+            <EffectLayerStack
+              title="Tails"
+              hideHead
+              effects={rightEffects}
+              kindSet={RIGHT_PANEL_EFFECTS}
+              decorate={(eff) =>
+                eff.kind === 'tail'
+                  ? {
+                      accent: tailColor(tailColorSlotById.get(eff.id) ?? 0),
+                      badge: String((tailIndexById.get(eff.id) ?? 0) + 1),
+                    }
+                  : {}
+              }
+            />
+          </aside>
+        </div>
+      </div>
+    </LabShell>
   );
 }
 
