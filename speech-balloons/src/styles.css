@@ -41,7 +41,7 @@
 
   --panel-width: 300px;
   --left-panel-width: 360px;
-  --right-panel-width: 540px;
+  --right-panel-width: 360px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -143,25 +143,57 @@ body {
 
 .preview {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
+  flex-direction: column;
   min-height: 0;
+  min-width: 0;
 }
 .preview-stage {
-  width: 100%;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  overflow: auto;
 }
+
+.zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--panel-border);
+  background: rgba(0, 0, 0, 0.32);
+  flex-shrink: 0;
+}
+.zoom-bar .zoom-slider {
+  flex: 1;
+  min-width: 80px;
+}
+.zoom-bar .zoom-readout {
+  min-width: 52px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-dim);
+}
+.zoom-bar button {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.zoom-bar button:hover { background: rgba(255, 255, 255, 0.1); }
+.zoom-bar .zoom-label { color: var(--fg-dim); font-size: 12px; }
 
 /* ── Side panels ──────────────────────────────────────────── */
 
 .side-panel {
   background: rgba(0, 0, 0, 0.25);
   overflow-y: auto;
-  padding: 16px;
+  padding: 5px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -204,8 +236,8 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 10px;
-  row-gap: 10px;
-  align-items: start;
+  row-gap: 3px;
+  align-items: stretch;
 }
 .panel-body > :not(.field.color),
 .effect-body > :not(.field.color) {
@@ -220,11 +252,11 @@ body {
 .side-panel.right .effect-body {
   display: grid;
   column-gap: 10px;
-  row-gap: 10px;
-  align-items: start;
+  row-gap: 3px;
+  align-items: stretch;
 }
 .side-panel.left .effect-body { grid-template-columns: repeat(2, 1fr); }
-.side-panel.right .effect-body { grid-template-columns: repeat(3, 1fr); }
+.side-panel.right .effect-body { grid-template-columns: repeat(2, 1fr); }
 .side-panel.left .effect-body > .field,
 .side-panel.right .effect-body > .field {
   grid-column: auto;
@@ -239,18 +271,18 @@ body {
   grid-column: 1 / -1;
 }
 
-/* Subpanel: a headered group of controls within an effect body. Gets
- * its own semi-transparent background + rounded corners, and lays out
- * its inner fields in the same column count as the parent body. */
+/* Subpanel: a headered group of controls within an effect body. Just
+ * a layout grouping — no background, padding, or margin. The header
+ * is the only visual divider. */
 .subpanel {
   display: grid;
   column-gap: 10px;
-  row-gap: 10px;
-  align-items: start;
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px 10px;
+  row-gap: 3px;
+  align-items: stretch;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
 }
 .subpanel > .field {
   min-width: 0;
@@ -260,13 +292,24 @@ body {
   grid-column: 1 / -1;
 }
 .side-panel.left .subpanel { grid-template-columns: repeat(2, 1fr); }
-.side-panel.right .subpanel { grid-template-columns: repeat(3, 1fr); }
+.side-panel.right .subpanel { grid-template-columns: repeat(2, 1fr); }
 .subpanel-title {
   font: 400 0.72rem/1 var(--font-display);
-  color: var(--fg-muted);
+  color: #fff;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin: 0 0 2px;
+  margin: 0;
+  padding: 6px 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.subpanel-title > span { flex: 0 0 auto; }
+.subpanel-title > hr {
+  flex: 1 1 auto;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  margin: 0;
 }
 
 /* ── Form fields ──────────────────────────────────────────── */
@@ -274,7 +317,7 @@ body {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 .field > span {
   font: 300 0.78rem/1.2 var(--font-display);
@@ -296,7 +339,87 @@ body {
 .toolbar .field > span { display: inline-flex; }
 .toolbar .field.range { min-width: 180px; flex-direction: column; align-items: stretch; }
 .toolbar .field.range.stem { min-width: 220px; }
+
+/* When a slider's label wraps onto two lines, keep the slider track
+ * at the bottom of the cell so all sliders in a row line up. */
+.field.range { justify-content: flex-end; }
+.field.range > input[type="range"] { margin-top: auto; }
+
+/* Label hugs the left edge; readout sits flush right. */
+.field.range > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: -4px;
+}
+.field.range .readout-edit {
+  text-align: right;
+}
+/* Inline-block (not inline-flex) so the browser's native vertical-align
+ * for <sub>/<sup> still works inside — flex strips that semantic and
+ * forces baseline alignment, which sinks superscripts onto the baseline. */
+.field.range .readout-group {
+  display: inline-block;
+  white-space: nowrap;
+}
+/* Word units (e.g. "px") sit baseline-aligned next to the digits at a
+ * slightly smaller font so they read as a subscript-style suffix. */
+.field.range .readout-unit {
+  color: var(--fg-dim);
+  font-size: 0.78em;
+  line-height: 1;
+  pointer-events: none;
+}
+/* Symbol units like ° use the browser's native <sup> super positioning.
+ * Don't fight it with line-height: 0 (that would re-collapse it onto
+ * the baseline inside inline-flex containers). */
+.field.range .readout-unit-sup {
+  color: var(--fg-dim);
+  font-size: 0.7em;
+}
+
+/* Slider readout doubles as an inline numeric input. Default styling
+ * mimics the prior <em> text label; focus reveals editing affordance. */
+.field.range .readout-edit {
+  font: 500 0.78rem/1 var(--font-display);
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 1px 0;
+  margin: 0;
+  width: calc(5em - 24px);
+  cursor: text;
+  transition: background 80ms ease, border-color 80ms ease;
+  -moz-appearance: textfield;
+}
+.field.range .readout-edit:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.field.range .readout-edit:focus {
+  outline: none;
+  background: rgba(0, 0, 0, 0.4);
+  border-color: var(--accent);
+}
+.field.range .readout-edit::-webkit-outer-spin-button,
+.field.range .readout-edit::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .toolbar .field.text input { min-width: 200px; }
+.toolbar .field.text textarea.text-multiline {
+  min-width: 200px;
+  font: inherit;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--fg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  resize: vertical;
+  line-height: 1.2;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
 
 .field select,
 .field input[type=text] {
@@ -311,20 +434,40 @@ body {
 .field input[type=text]:focus { outline: 1px solid var(--accent); }
 
 .field.color {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-content: end;
+  column-gap: 8px;
+  row-gap: 4px;
   min-width: 0;
 }
-.field.color > span { flex: 1; min-width: 0; }
-.field.color input[type=color] {
-  width: 36px; height: 24px;
+.field.color > span {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  min-width: 0;
+}
+.field.color > input[type=color] {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  width: 36px; height: 20px;
   background: transparent;
   border: 1px solid var(--panel-border);
   border-radius: var(--radius-sm);
   padding: 2px;
   cursor: pointer;
-  flex-shrink: 0;
+}
+.field.color > input[type=range].color-alpha {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+.field.color > input[type=range].color-alpha::-webkit-slider-runnable-track {
+  background: rgba(126, 200, 227, 0.10);
+}
+.field.color > input[type=range].color-alpha::-moz-range-track {
+  background: rgba(126, 200, 227, 0.10);
 }
 
 /* ── Sliders ──────────────────────────────────────────────── */
@@ -337,28 +480,28 @@ input[type=range] {
   width: 100%;
 }
 input[type=range]::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: rgba(126, 200, 227, 0.18);
 }
 input[type=range]::-moz-range-track {
-  height: 6px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: rgba(126, 200, 227, 0.18);
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 14px; height: 14px;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--accent);
-  margin-top: -4px;
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  border: none;
+  margin-top: -2px;
 }
 input[type=range]::-moz-range-thumb {
-  width: 14px; height: 14px;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  background: #fff;
-  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  border: none;
 }
 
 /* ── Layers palette ──────────────────────────────────────── */
@@ -371,11 +514,13 @@ input[type=range]::-moz-range-thumb {
 }
 .side-panel > .panel-section + .layer-stack-head { margin-top: 14px; }
 .layer-stack-title {
-  font: 300 1.05rem/1.2 var(--font-display);
+  font: 300 1.85rem/1.1 var(--font-display);
   color: #fff;
   letter-spacing: 0.01em;
   padding: 0 4px;
-  margin: 0;
+  /* Indent so the header's left edge aligns with the body text below
+   * (effect-card border + .effect-head padding). */
+  margin: 0 0 0 14px;
   flex: 0 0 auto;
 }
 
@@ -442,11 +587,59 @@ input[type=range]::-moz-range-thumb {
 .effect-card.is-dragging { opacity: 0.45; }
 .effect-card.is-expanded { background: rgba(0, 0, 0, 0.3); }
 
+/* Tail effect cards are tinted with the color matching their handle in
+ * the minimap. The title bar is fully painted with the accent color and
+ * its contents render in black; the body retains the dark theme. */
+.effect-card.has-accent {
+  /* Re-bind --accent inside the card so every descendant style that
+   * paints with var(--accent) — readout text, slider thumb border —
+   * picks up this card's tail color automatically. */
+  --accent: var(--tail-accent);
+  background: color-mix(in srgb, var(--tail-accent) 4%, rgba(0, 0, 0, 0.28));
+  border-color: color-mix(in srgb, var(--tail-accent) 28%, var(--panel-border));
+  border-left-width: 4px;
+  border-left-color: var(--tail-accent);
+}
+.effect-card.has-accent.is-expanded {
+  background: color-mix(in srgb, var(--tail-accent) 5%, rgba(0, 0, 0, 0.35));
+}
+.effect-card.has-accent .effect-head {
+  background: color-mix(in srgb, var(--tail-accent) 38%, rgba(0, 0, 0, 0.4));
+}
+.effect-card.has-accent .effect-head:hover {
+  background: color-mix(in srgb, var(--tail-accent) 48%, rgba(0, 0, 0, 0.35));
+}
+
+.effect-index-badge {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  min-width: 14px;
+  padding: 0 2px;
+  color: var(--tail-accent, var(--fg-dim));
+  font-size: 14px;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1;
+  cursor: grab;
+}
+
+.tail-minimap-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+}
+.tail-minimap-wrap svg {
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: var(--radius-sm);
+}
+
 .effect-head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 2px 10px;
   cursor: pointer;
   user-select: none;
 }
@@ -468,7 +661,7 @@ input[type=range]::-moz-range-thumb {
   text-align: center;
 }
 .effect-kind {
-  font: 500 1.05rem/1 var(--font-display);
+  font: 500 0.9rem/1 var(--font-display);
   color: #fff;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -482,13 +675,39 @@ input[type=range]::-moz-range-thumb {
   padding: 2px 6px;
   margin-left: auto;
 }
+/* Tail-card title dropdown — styled to read as a header, not a control.
+ * Same typography as .effect-kind so it visually replaces the kind label. */
+.effect-kind-select {
+  font: 500 0.9rem/1 var(--font-display);
+  color: #fff;
+  /* Uppercase the collapsed anchor display — Chromium-based browsers
+   * leave the open <option> menu in its natural case so the dropdown
+   * items stay readable. */
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: transparent;
+  border: 0;
+  /* Padding-right = chevron width (~11px) + 0.5em gap between the
+   * label and the triangle. */
+  padding: 2px calc(0.5em + 11px) 2px 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 6px top 50%, right 1px top 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.effect-kind-select:focus { outline: 1px solid var(--tail-accent, currentColor); outline-offset: 2px; }
 /* When the card has no primary select, the X still goes right. */
 .effect-head .card-remove {
   margin-left: auto;
 }
-.effect-head .effect-primary + .card-remove {
+.effect-head .effect-primary + .card-remove,
+.effect-head .effect-kind-select + .card-remove {
   margin-left: 6px;
 }
+.effect-head .effect-kind-select { margin-right: auto; }
 .effect-summary {
   font: 400 0.75rem/1 var(--font-sans);
   color: var(--fg-dim);
@@ -539,7 +758,7 @@ input[type=range]::-moz-range-thumb {
 .curve-editor-host {
   width: 100%;
   border-radius: 4px;
-  overflow: hidden;
+  overflow: visible;
 }
 .curve-readouts {
   display: grid;

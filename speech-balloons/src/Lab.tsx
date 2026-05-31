@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SpeechBalloon } from './SpeechBalloon';
 import { CurveEditor, type ControlPoint } from './CurveEditor';
+import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import {
   BASE_CONTROLS,
   EFFECT_CONTROLS,
   BASE_KINDS,
   LEFT_PANEL_EFFECTS,
+  MORPH_EFFECTS,
   RIGHT_PANEL_EFFECTS,
   defaultParams,
   type LabControl,
 } from './controls';
 import { loadSnapshot, saveSnapshot, LAB_STORAGE_KEY } from './persistence';
+import { inlineSvgTextAsPaths } from './textToPath';
 import type {
   BalloonBase,
   DesignState,
@@ -39,6 +42,7 @@ export function Lab() {
   // Per-effect expand/collapse state (UI-only, not persisted).
   const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set(initial.design.effects.map((e) => e.id)));
   const [draggingId, setDraggingId] = useState<number | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
 
   const currentSnapshot = useCallback(
     (): LabSnapshot => ({ runtime, design, nextId }),
@@ -119,8 +123,20 @@ export function Lab() {
       effects: d.effects.map((e) => (e.id === id ? { ...e, params: { ...e.params, [key]: value } } : e)),
     }));
   };
-  const addEffect = (kind: EffectKind) => {
-    const inst: EffectInstance = { id: nextId, kind, params: defaultParams(EFFECT_CONTROLS[kind]) };
+  const addEffect = (kind: EffectKind, overrides?: ParamBag) => {
+    const params: ParamBag = { ...defaultParams(EFFECT_CONTROLS[kind]), ...(overrides ?? {}) };
+    // Tails get an identity-bound color slot — sticky across removes so
+    // existing tails keep their color when an earlier tail is deleted.
+    if (kind === 'tail' && typeof params.colorSlot !== 'number') {
+      const used = new Set<number>();
+      for (const e of design.effects) {
+        if (e.kind === 'tail' && typeof e.params.colorSlot === 'number') used.add(e.params.colorSlot as number);
+      }
+      let slot = 0;
+      while (used.has(slot)) slot++;
+      params.colorSlot = slot;
+    }
+    const inst: EffectInstance = { id: nextId, kind, params };
     setNextId((n) => n + 1);
     setDesign((d) => ({ ...d, effects: [...d.effects, inst] }));
     // Newly-added effects start expanded so the user can tweak right away.
@@ -181,8 +197,152 @@ export function Lab() {
     console.log('Lab snapshot copied to clipboard:\n', json);
   };
 
+  const [isPreparingSvg, setIsPreparingSvg] = useState(false);
+  const downloadSvg = async () => {
+    const stage = stageRef.current;
+    const svg = stage?.querySelector('svg');
+    if (!svg) return;
+    setIsPreparingSvg(true);
+    try {
+      const clone = svg.cloneNode(true) as SVGSVGElement;
+      if (!clone.getAttribute('xmlns')) clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      if (!clone.getAttribute('xmlns:xlink')) clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      // The clone must be in the document for getComputedStyle on its <text>
+      // elements to resolve inherited font properties. Mount it off-screen.
+      clone.style.position = 'absolute';
+      clone.style.left = '-99999px';
+      clone.style.top = '-99999px';
+      clone.style.visibility = 'hidden';
+      document.body.appendChild(clone);
+      try {
+        await inlineSvgTextAsPaths(clone);
+      } finally {
+        document.body.removeChild(clone);
+      }
+      // Strip the off-screen positioning we added before serializing.
+      clone.style.position = '';
+      clone.style.left = '';
+      clone.style.top = '';
+      clone.style.visibility = '';
+      if (!clone.getAttribute('style')) clone.removeAttribute('style');
+      const data = new XMLSerializer().serializeToString(clone);
+      const blob = new Blob([`<?xml version="1.0" encoding="UTF-8"?>\n${data}`], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'speech-balloon.svg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally {
+      setIsPreparingSvg(false);
+    }
+  };
+
   const leftEffects = design.effects.filter((e) => LEFT_PANEL_EFFECTS.includes(e.kind));
+  const morphEffects = design.effects.filter((e) => MORPH_EFFECTS.includes(e.kind));
   const rightEffects = design.effects.filter((e) => RIGHT_PANEL_EFFECTS.includes(e.kind));
+
+  // Mirror SpeechBalloon's reach calculation so Fit-to-viewport can compute
+  // the right zoom without measuring the rendered SVG.
+  const reach = useMemo(() => {
+    let max = 60;
+    for (const eff of design.effects) {
+      if (eff.kind === 'tail') {
+        const shape = (eff.params.shape as string) ?? 'classic';
+        const size = (eff.params.size as number) ?? (eff.params.length as number) ?? 50;
+        max = Math.max(max, size);
+        if (shape === 'bubbles') {
+          const diam = (eff.params.bubbleDiameter as number) ?? 30;
+          const count = (eff.params.count as number) ?? 3;
+          const gap = (eff.params.gap as number) ?? 0.15;
+          max = Math.max(max, count * diam * (1 + gap));
+        }
+      } else if (eff.kind === 'spikes') {
+        max = Math.max(max, (eff.params.length as number) ?? 18);
+      } else if (eff.kind === 'lobes') {
+        max = Math.max(max, (eff.params.depth as number) ?? 12);
+      } else if (eff.kind === 'wobble') {
+        max = Math.max(max, (eff.params.amplitude as number) ?? 8);
+      } else if (eff.kind === 'jitter') {
+        max = Math.max(max, (eff.params.amount as number) ?? 6);
+      }
+    }
+    return max + 30;
+  }, [design.effects]);
+  const fitZoomToStage = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const pad = 0; // .preview-stage has no padding
+    const fitW = (rect.width - pad * 2) / (design.width + 2 * reach);
+    const fitH = (rect.height - pad * 2) / (design.height + 2 * reach);
+    const fit = Math.max(0.1, Math.min(4, Math.min(fitW, fitH)));
+    setRuntime((r) => ({ ...r, zoom: fit }));
+  }, [design.width, design.height, reach]);
+  const tailEffects = design.effects.filter((e) => e.kind === 'tail');
+  // Sticky palette slot per tail id. Explicit slots in params win; tails
+  // missing one (legacy snapshots) get the next-available slot derived in
+  // a stable left-to-right pass — and a useEffect below persists the
+  // derivation so the slot stays put through future removals.
+  const tailColorSlotById = useMemo(() => {
+    const map = new Map<number, number>();
+    const used = new Set<number>();
+    for (const e of tailEffects) {
+      const s = e.params.colorSlot;
+      if (typeof s === 'number') { map.set(e.id, s); used.add(s); }
+    }
+    let next = 0;
+    for (const e of tailEffects) {
+      if (map.has(e.id)) continue;
+      while (used.has(next)) next++;
+      map.set(e.id, next);
+      used.add(next);
+    }
+    return map;
+  }, [tailEffects]);
+  // Persist derived slots back into params once, so the next render's
+  // assignment is stable even after removals shift indices.
+  useEffect(() => {
+    let dirty = false;
+    const nextEffects = design.effects.map((e) => {
+      if (e.kind !== 'tail') return e;
+      if (typeof e.params.colorSlot === 'number') return e;
+      const slot = tailColorSlotById.get(e.id);
+      if (slot === undefined) return e;
+      dirty = true;
+      return { ...e, params: { ...e.params, colorSlot: slot } };
+    });
+    if (dirty) setDesign((d) => ({ ...d, effects: nextEffects }));
+  }, [design.effects, tailColorSlotById]);
+  // id → 0-based position among tails (drives the numeric badge label)
+  const tailIndexById = new Map<number, number>();
+  tailEffects.forEach((e, i) => tailIndexById.set(e.id, i));
+  const minimapTails: MinimapTail[] = tailEffects.map((e) => ({
+    id: e.id,
+    angle: (e.params.angle as number) ?? 115,
+    length: (e.params.size as number) ?? 60,
+    arc: (e.params.arc as number) ?? 0,
+    colorSlot: tailColorSlotById.get(e.id) ?? 0,
+  }));
+  const updateTailFromMinimap = (id: number, u: { angle?: number; length?: number; arc?: number }) => {
+    // Apply all three params in a single setDesign so React doesn't
+    // partially batch them — previously chaining three updateEffectParam
+    // calls in a row caused some props to lag, making the sliders appear
+    // out of sync with the minimap drag.
+    setDesign((d) => ({
+      ...d,
+      effects: d.effects.map((e) => {
+        if (e.id !== id) return e;
+        const params = { ...e.params };
+        if (u.angle !== undefined) params.angle = u.angle;
+        if (u.length !== undefined) params.size = u.length;
+        if (u.arc !== undefined) params.arc = u.arc;
+        return { ...e, params };
+      }),
+    }));
+  };
 
   return (
     <div className="lab">
@@ -204,23 +364,21 @@ export function Lab() {
               ))}
             </select>
           </label>
-          <label className="field range">
-            <span>
-              Size <em>{runtime.fontSize}</em>
-            </span>
-            <input
-              type="range"
-              min={10}
-              max={72}
-              step={1}
-              value={runtime.fontSize}
-              onChange={(e) => setRuntime((r) => ({ ...r, fontSize: Number(e.target.value) }))}
-            />
-          </label>
+          <SliderField
+            label="Size"
+            value={runtime.fontSize}
+            min={10}
+            max={72}
+            step={1}
+            fixed={0}
+            unit="px"
+            onChange={(v) => setRuntime((r) => ({ ...r, fontSize: v }))}
+          />
           <label className="field text">
             <span>Text</span>
-            <input
-              type="text"
+            <textarea
+              className="text-multiline"
+              rows={2}
               value={runtime.text}
               onChange={(e) => setRuntime((r) => ({ ...r, text: e.target.value }))}
             />
@@ -233,6 +391,11 @@ export function Lab() {
             />
             <span>Size to content</span>
           </label>
+          <ColorField
+            label="Background"
+            value={design.bg}
+            onChange={(v) => setDesign((d) => ({ ...d, bg: v }))}
+          />
         </div>
         <div className="toolbar-group right">
           <button onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
@@ -244,6 +407,9 @@ export function Lab() {
           <button onClick={exportSnapshot} title="Copy snapshot JSON to clipboard">
             Export
           </button>
+          <button onClick={downloadSvg} title="Download as SVG" disabled={isPreparingSvg}>
+            {isPreparingSvg ? 'Preparing…' : 'Download SVG'}
+          </button>
           <button onClick={resetAll} className="danger" title="Reset to defaults">
             Reset all
           </button>
@@ -252,11 +418,11 @@ export function Lab() {
 
       <main className="workspace">
         <aside className="side-panel left">
+          <div className="layer-stack-head"><h2 className="layer-stack-title">Body</h2></div>
           <Section
-            title="Body"
-            headerRight={
+            headerNode={
               <select
-                className="effect-primary"
+                className="effect-kind-select"
                 value={design.base}
                 onChange={(e) => setBase(e.target.value as BalloonBase)}
               >
@@ -273,56 +439,63 @@ export function Lab() {
             />
             {runtime.fitToContent ? (
               <>
-                <SliderField label="Pad X" value={design.padX} min={4} max={80} step={1} fixed={0}
+                <SliderField label="Pad X" value={design.padX} min={4} max={80} step={1} fixed={0} unit="px"
                   onChange={(v) => setDesign((d) => ({ ...d, padX: v }))} />
-                <SliderField label="Pad Y" value={design.padY} min={4} max={60} step={1} fixed={0}
+                <SliderField label="Pad Y" value={design.padY} min={4} max={60} step={1} fixed={0} unit="px"
                   onChange={(v) => setDesign((d) => ({ ...d, padY: v }))} />
               </>
             ) : (
               <>
                 <SliderField
-                  label="Size"
-                  value={Math.max(design.width, design.height)}
+                  label="Width"
+                  value={design.width}
                   min={60}
                   max={500}
                   step={2}
                   fixed={0}
+                  unit="px"
                   onChange={(v) => setDesign((d) => {
                     const ar = d.width / d.height;
-                    return ar >= 1
-                      ? { ...d, width: v, height: Math.round(v / ar) }
-                      : { ...d, width: Math.round(v * ar), height: v };
+                    return { ...d, width: v, height: Math.max(20, Math.round(v / ar)) };
                   })}
                 />
                 <SliderField
-                  label="Aspect ratio"
-                  value={design.width / design.height}
-                  min={0.3}
-                  max={3.5}
-                  step={0.05}
-                  fixed={2}
-                  onChange={(ar) => setDesign((d) => {
-                    const size = Math.max(d.width, d.height);
-                    return ar >= 1
-                      ? { ...d, width: size, height: Math.round(size / ar) }
-                      : { ...d, width: Math.round(size * ar), height: size };
-                  })}
+                  label="Height"
+                  value={design.height}
+                  min={20}
+                  max={500}
+                  step={2}
+                  fixed={0}
+                  unit="px"
+                  onChange={(v) => setDesign((d) => ({ ...d, height: v }))}
                 />
               </>
             )}
-            <SliderField label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} fixed={1}
+            <SliderField label="Italic lean" value={design.lean} min={-25} max={25} step={0.5} fixed={1} unit="°"
               onChange={(v) => setDesign((d) => ({ ...d, lean: v }))} />
-            <label className="field color">
-              <span>Text color</span>
-              <input type="color" value={design.textColor}
-                onChange={(e) => setDesign((d) => ({ ...d, textColor: e.target.value }))} />
-            </label>
-            <label className="field color">
-              <span>Background</span>
-              <input type="color" value={design.bg}
-                onChange={(e) => setDesign((d) => ({ ...d, bg: e.target.value }))} />
-            </label>
+            <ColorField
+              label="Text color"
+              value={design.textColor}
+              onChange={(v) => setDesign((d) => ({ ...d, textColor: v }))}
+            />
           </Section>
+
+          <LayerStack
+            title="Morph"
+            effects={morphEffects}
+            allKinds={MORPH_EFFECTS}
+            expandedIds={expandedIds}
+            draggingId={draggingId}
+            onAdd={addEffect}
+            onRemove={removeEffect}
+            onToggleExpanded={toggleExpanded}
+            onReorder={reorderEffect}
+            onChange={updateEffectParam}
+            onDragStart={setDraggingId}
+            onDragEnd={() => setDraggingId(null)}
+            bodyW={design.width}
+            bodyH={design.height}
+          />
 
           <LayerStack
             title="Fill"
@@ -343,14 +516,52 @@ export function Lab() {
         </aside>
 
         <section className="preview">
-          <div className="preview-stage">
+          <div className="preview-stage" ref={stageRef}>
             <SpeechBalloon design={design} runtime={runtime} />
+          </div>
+          <div className="zoom-bar">
+            <span className="zoom-label">Zoom</span>
+            <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.max(0.1, r.zoom - 0.1) }))} title="Zoom out">−</button>
+            <input
+              className="zoom-slider"
+              type="range"
+              min={0.1}
+              max={4}
+              step={0.05}
+              value={runtime.zoom}
+              onChange={(e) => setRuntime((r) => ({ ...r, zoom: Number(e.target.value) }))}
+            />
+            <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.min(4, r.zoom + 0.1) }))} title="Zoom in">+</button>
+            <span className="zoom-readout">{Math.round(runtime.zoom * 100)}%</span>
+            <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: 1 }))} title="Reset to 100%">1:1</button>
+            <button type="button" onClick={fitZoomToStage} title="Fit content to viewport">Fit</button>
           </div>
         </section>
 
         <aside className="side-panel right">
+          <LayerStackHead
+            title="Tails"
+            allKinds={RIGHT_PANEL_EFFECTS}
+            onAdd={addEffect}
+          />
+          <div className="tail-minimap-wrap">
+            <TailMinimap
+              width={260}
+              height={200}
+              bodyShape={design.base}
+              bodyW={design.width}
+              bodyH={design.height}
+              bodyParams={design.baseParams}
+              tails={minimapTails}
+              onUpdateTail={updateTailFromMinimap}
+              onCommitTail={() => { /* per-tail commit hook; debounced undo coalesces */ }}
+              onAddTail={(angle) => addEffect('tail', { angle })}
+              onRemoveTail={(id) => removeEffect(id)}
+            />
+          </div>
           <LayerStack
-            title="Effects"
+            title="Tails"
+            hideHead
             effects={rightEffects}
             allKinds={RIGHT_PANEL_EFFECTS}
             expandedIds={expandedIds}
@@ -362,6 +573,8 @@ export function Lab() {
             onChange={updateEffectParam}
             onDragStart={setDraggingId}
             onDragEnd={() => setDraggingId(null)}
+            tailIndexById={tailIndexById}
+            tailColorSlotById={tailColorSlotById}
           />
         </aside>
       </main>
@@ -370,6 +583,27 @@ export function Lab() {
 }
 
 // --- Layer stack: add palette + draggable expandable cards ---------------
+
+interface LayerStackHeadProps {
+  title: string;
+  allKinds: EffectKind[];
+  onAdd: (kind: EffectKind) => void;
+}
+function LayerStackHead({ title, allKinds, onAdd }: LayerStackHeadProps) {
+  return (
+    <div className="layer-stack-head">
+      <h2 className="layer-stack-title">{title}</h2>
+      <div className="layers-add">
+        <span className="layers-add-label">+ Layer</span>
+        {allKinds.map((k) => (
+          <button key={k} onClick={() => onAdd(k)} className="add-layer-btn">
+            {k}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 interface LayerStackProps {
   title: string;
@@ -386,6 +620,9 @@ interface LayerStackProps {
   onDragEnd: () => void;
   bodyW?: number;
   bodyH?: number;
+  tailIndexById?: Map<number, number>;
+  tailColorSlotById?: Map<number, number>;
+  hideHead?: boolean;
 }
 function LayerStack({
   title,
@@ -402,23 +639,16 @@ function LayerStack({
   onDragEnd,
   bodyW,
   bodyH,
+  tailIndexById,
+  tailColorSlotById,
+  hideHead,
 }: LayerStackProps) {
   // dropIndicator: { id, position } where `id` is the effect being hovered over
   const [dropHint, setDropHint] = useState<{ id: number; position: 'before' | 'after' } | null>(null);
 
   return (
     <>
-      <div className="layer-stack-head">
-        <h2 className="layer-stack-title">{title}</h2>
-        <div className="layers-add">
-          <span className="layers-add-label">+ Layer</span>
-          {allKinds.map((k) => (
-            <button key={k} onClick={() => onAdd(k)} className="add-layer-btn">
-              {k}
-            </button>
-          ))}
-        </div>
-      </div>
+      {!hideHead && <LayerStackHead title={title} allKinds={allKinds} onAdd={onAdd} />}
       {effects.map((eff) => {
         const isExpanded = expandedIds.has(eff.id);
         const isDragging = draggingId === eff.id;
@@ -462,6 +692,8 @@ function LayerStack({
               }}
               bodyW={bodyW}
               bodyH={bodyH}
+              tailIndex={eff.kind === 'tail' ? tailIndexById?.get(eff.id) : undefined}
+              tailColorSlot={eff.kind === 'tail' ? tailColorSlotById?.get(eff.id) : undefined}
             />
             {showHintAfter && <div className="drop-hint" />}
           </div>
@@ -486,12 +718,14 @@ interface EffectCardProps {
   onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
   bodyW?: number;
   bodyH?: number;
+  tailIndex?: number;
+  tailColorSlot?: number;
 }
 function EffectCard({
   effect,
   expanded,
   dragging,
-  onToggleExpanded: _onToggleExpanded,
+  onToggleExpanded,
   onRemove,
   onChange,
   onDragStart,
@@ -501,14 +735,18 @@ function EffectCard({
   onDrop,
   bodyW,
   bodyH,
+  tailIndex,
+  tailColorSlot,
 }: EffectCardProps) {
+  const accent = tailColorSlot !== undefined ? tailColor(tailColorSlot) : undefined;
   // Drag is opt-in: the card is only `draggable` while the user is pressing the
   // ⋮⋮ handle. Without this, the whole card swallows pointer events to inner
   // controls (sliders, color pickers) since `draggable` intercepts the drag start.
   const [draggable, setDraggable] = useState(false);
   return (
     <div
-      className={`effect-card ${expanded ? 'is-expanded' : 'is-collapsed'} ${dragging ? 'is-dragging' : ''}`}
+      className={`effect-card ${expanded ? 'is-expanded' : 'is-collapsed'} ${dragging ? 'is-dragging' : ''} ${accent ? 'has-accent' : ''}`}
+      style={accent ? ({ '--tail-accent': accent } as React.CSSProperties) : undefined}
       draggable={draggable}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move';
@@ -540,27 +778,59 @@ function EffectCard({
         return (
           <>
             <div className="effect-head">
-              <span
-                className="drag-handle"
-                aria-hidden="true"
-                title="Drag to reorder"
-                onMouseDown={() => setDraggable(true)}
-                onMouseUp={() => setDraggable(false)}
-              >
-                <DragHandleIcon />
-              </span>
-              <span className="effect-kind">{effect.kind}</span>
-              {primarySelect && (
-                <select
-                  className="effect-primary"
-                  value={primaryValue}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => onChange(primarySelect.key, e.target.value)}
-                >
-                  {primarySelect.options.map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
+              {tailIndex !== undefined ? (
+                <>
+                  <span
+                    className="effect-index-badge drag-handle"
+                    title="Drag to reorder · click to toggle"
+                    aria-label={`tail ${tailIndex + 1} — drag to reorder, click to toggle`}
+                    onMouseDown={() => setDraggable(true)}
+                    onMouseUp={() => setDraggable(false)}
+                    onClick={(e) => { e.stopPropagation(); onToggleExpanded(); }}
+                  >
+                    {tailIndex + 1}
+                  </span>
+                  {primarySelect ? (
+                    <select
+                      className="effect-kind-select"
+                      value={primaryValue}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => onChange(primarySelect.key, e.target.value)}
+                    >
+                      {primarySelect.options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="effect-kind">{effect.kind}</span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span
+                    className="drag-handle"
+                    aria-hidden="true"
+                    title="Drag to reorder"
+                    onMouseDown={() => setDraggable(true)}
+                    onMouseUp={() => setDraggable(false)}
+                  >
+                    <DragHandleIcon />
+                  </span>
+                  {primarySelect ? (
+                    <select
+                      className="effect-kind-select"
+                      value={primaryValue}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => onChange(primarySelect.key, e.target.value)}
+                    >
+                      {primarySelect.options.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="effect-kind">{effect.kind}</span>
+                  )}
+                </>
               )}
               <button
                 className="card-remove"
@@ -586,11 +856,11 @@ function EffectCard({
   );
 }
 
-function Section({ title, headerRight, children }: { title: string; headerRight?: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, headerRight, headerNode, children }: { title?: string; headerRight?: React.ReactNode; headerNode?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="panel-section">
       <div className="panel-section-head">
-        <h2>{title}</h2>
+        {headerNode ?? <h2>{title}</h2>}
         {headerRight}
       </div>
       <div className="panel-body">{children}</div>
@@ -607,15 +877,64 @@ interface SliderFieldProps {
   max: number;
   step: number;
   fixed: number;
+  /** Optional formatter for the readout value. Receives the raw number,
+   *  returns the string to display in the editable input. Default:
+   *  `value.toFixed(fixed)` (with `-` rewritten to U+2212). */
+  format?: (v: number) => string;
+  /** Optional unit suffix appended after the formatted readout, e.g.
+   *  "px", "°", "Hz". Rendered outside the input so it's display-only
+   *  and doesn't interfere with typing. */
+  unit?: string;
   onChange: (v: number) => void;
 }
-function SliderField({ label, value, min, max, step, fixed, onChange }: SliderFieldProps) {
+function SliderField({ label, value, min, max, step, fixed, format, unit, onChange }: SliderFieldProps) {
+  // Draft is only set while the readout input is focused; otherwise the
+  // input mirrors the live slider value (formatted to `fixed` decimals).
+  // While editing we show ASCII "-"; idle, we render with the en-dash glyph.
+  const [draft, setDraft] = useState<string | null>(null);
+  // Render the minus sign as U+2212 both idle and while editing; rewrite any
+  // user-typed ASCII "-" the same way so the glyph stays consistent.
+  const fmt = (n: number) => (format ? format(n) : n.toFixed(fixed)).replace('-', '−');
+  const display = draft !== null ? draft : fmt(Number(value));
+  const commit = () => {
+    if (draft !== null) {
+      const n = Number(draft.replace(/[−–]/g, '-'));
+      if (Number.isFinite(n)) onChange(Math.max(min, Math.min(max, n)));
+    }
+    setDraft(null);
+  };
   return (
     <label className="field range">
       <span>
-        {label} <em>{Number(value).toFixed(fixed)}</em>
+        {label}{' '}
+        <span className="readout-group">
+          <input
+            className="readout-edit"
+            type="text"
+            inputMode="decimal"
+            value={display}
+            onFocus={(e) => {
+              setDraft(fmt(Number(value)));
+              e.currentTarget.select();
+            }}
+            onChange={(e) => setDraft(e.target.value.replace(/-/g, '−'))}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { commit(); e.currentTarget.blur(); }
+              else if (e.key === 'Escape') { setDraft(null); e.currentTarget.blur(); }
+            }}
+            onClick={(e) => { e.preventDefault(); e.currentTarget.focus(); }}
+          />
+          {unit && (
+            unit === '°'
+              // ° is a top-of-em glyph — wrapping in <sup> keeps it elevated
+              // regardless of the unit's own font-size shrink.
+              ? <sup className="readout-unit readout-unit-sup">{unit}</sup>
+              : <span className="readout-unit">{unit}</span>
+          )}
+        </span>
       </span>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <input type="range" tabIndex={-1} min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
     </label>
   );
 }
@@ -697,7 +1016,7 @@ function CurveField({ values, min, max, step, onChange }: CurveFieldProps) {
       <div className="curve-readouts">
         {points.map((p, i) => (
           <div key={i} className="curve-stop-readout">
-            <em>{p.y.toFixed(step < 1 ? 2 : 0)}</em>
+            <em>{p.y.toFixed(step < 1 ? 2 : 0).replace('-', '−')}</em>
           </div>
         ))}
       </div>
@@ -738,7 +1057,9 @@ function renderControl(
         min={c.min}
         max={dynMax}
         step={c.step}
-        fixed={c.step < 1 ? 2 : 0}
+        fixed={c.step >= 1 ? 0 : 1}
+        format={c.format}
+        unit={c.unit}
         onChange={(v) => onChange(c.key, v)}
       />
     );
@@ -757,10 +1078,12 @@ function renderControl(
   }
   if (c.kind === 'color') {
     return (
-      <label key={c.key} className="field color">
-        <span>{label}</span>
-        <input type="color" value={String(value ?? c.default)} onChange={(e) => onChange(c.key, e.target.value)} />
-      </label>
+      <ColorField
+        key={c.key}
+        label={label}
+        value={String(value ?? c.default)}
+        onChange={(v) => onChange(c.key, v)}
+      />
     );
   }
   if (c.kind === 'toggle') {
@@ -818,12 +1141,53 @@ function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListPr
         }
         return (
           <div key={`grp-${gi}`} className="subpanel">
-            <h3 className="subpanel-title">{g.header}</h3>
+            <h3 className="subpanel-title"><hr /><span>{g.header}</span><hr /></h3>
             {visible.map((c) => renderControl(c, params, onChange, bodyW, bodyH))}
           </div>
         );
       })}
     </>
+  );
+}
+
+function splitColor(hex: string): { rgb: string; alpha: number } {
+  const h = (hex ?? '').trim();
+  if (h.length === 9) return { rgb: h.slice(0, 7), alpha: parseInt(h.slice(7, 9), 16) / 255 };
+  if (h.length === 7) return { rgb: h, alpha: 1 };
+  return { rgb: '#000000', alpha: 1 };
+}
+function combineColor(rgb: string, alpha: number): string {
+  const a = Math.max(0, Math.min(255, Math.round(alpha * 255)));
+  if (a === 255) return rgb;
+  return `${rgb}${a.toString(16).padStart(2, '0')}`;
+}
+
+interface ColorFieldProps {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}
+function ColorField({ label, value, onChange }: ColorFieldProps) {
+  const { rgb, alpha } = splitColor(value);
+  return (
+    <label className="field color">
+      <span>{label}</span>
+      <input
+        type="color"
+        value={rgb}
+        onChange={(e) => onChange(combineColor(e.target.value, alpha))}
+      />
+      <input
+        type="range"
+        className="color-alpha"
+        min={0}
+        max={1}
+        step={0.01}
+        value={alpha}
+        tabIndex={-1}
+        onChange={(e) => onChange(combineColor(rgb, Number(e.target.value)))}
+      />
+    </label>
   );
 }
 

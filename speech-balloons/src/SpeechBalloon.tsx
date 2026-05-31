@@ -6,10 +6,14 @@ import {
   attachmentS,
   classicTailOffsetAt,
   buildBubbles,
+  buildCloudPuffs,
   buildLightning,
   buildZigzagLightningPolyline,
   buildTaperedPolygon,
   spikesOffsetAt,
+  lobesOffsetAt,
+  wobbleOffsetAt,
+  jitterOffsetAt,
   type BaseSampler,
   type PerimeterPoint,
 } from './geometry';
@@ -38,34 +42,20 @@ function measureTextWidth(text: string, fontPx: number, fontFamily: string): num
   return ctx.measureText(text).width;
 }
 
-// Natural width-to-length factor per tail shape. Multiplied by `weight` and
-// Base-width factor per shape, applied to the BODY's shorter dimension
-// (not the tail's own length). This decouples width from length —
-// scaling Length doesn't proportionally fatten the tail; scaling the
-// body does.
-const TAIL_WIDTH_FACTOR: Record<TailShape, number> = {
-  classic: 0.34,
-  bubbles: 0.10,
-  lightning: 0.24,
-};
-
-// Resolve a tail effect's params into the (length, baseWidth) the geometry
-// layer wants. baseWidth = bodyRef × factor × weight where bodyRef is the
-// shorter of the body's width/height.
+// baseWidth from `baseAngle` (degrees of arc subtended at body center):
+//   baseWidth = 2 × bodyRef × sin(deg/2)
+// bodyRef is the body's shorter dimension. Angle, not multiplier, so the
+// same value reads as the "same fatness" across body sizes.
 function tailDims(
   params: ParamBag,
-  shape: TailShape,
+  _shape: TailShape,
   bodyW: number,
   bodyH: number,
 ): { length: number; baseWidth: number } {
   const size = (params.size as number) ?? (params.length as number) ?? 60;
-  const weight = (params.weight as number) ?? 1;
-  const naturalFactor = TAIL_WIDTH_FACTOR[shape];
+  const deg = (params.baseAngle as number) ?? 12;
   const bodyRef = Math.min(bodyW, bodyH);
-  const derivedWidth = bodyRef * naturalFactor * weight;
-  const baseWidth = params.weight === undefined && typeof params.baseWidth === 'number'
-    ? (params.baseWidth as number)
-    : derivedWidth;
+  const baseWidth = 2 * bodyRef * Math.sin(Math.max(0, deg) * Math.PI / 360);
   return { length: size, baseWidth };
 }
 
@@ -283,10 +273,18 @@ export function SpeechBalloon({ design, runtime }: Props) {
   // Body dimensions: either design-time width/height or fit-to-content.
   const { W, H } = useMemo(() => {
     if (!runtime.fitToContent) return { W: design.width, H: design.height };
-    const textW = measureTextWidth(runtime.text || ' ', runtime.fontSize, runtime.fontFamily);
+    const lines = (runtime.text || ' ').split('\n');
+    let widest = 0;
+    for (const line of lines) widest = Math.max(widest, measureTextWidth(line || ' ', runtime.fontSize, runtime.fontFamily));
+    const lineHeight = runtime.fontSize * 1.1;
+    const textH = lineHeight * lines.length + runtime.fontSize * 0.1;
+    // Baseline breathing room added on top of the user's padX/padY so the
+    // text never visually touches the body edge even at pad sliders = 0.
+    const basePadX = 12;
+    const basePadY = 10;
     return {
-      W: Math.max(40, Math.ceil(textW + 2 * design.padX)),
-      H: Math.max(30, Math.ceil(runtime.fontSize * 1.2 + 2 * design.padY)),
+      W: Math.max(40, Math.ceil(widest + 2 * (design.padX + basePadX))),
+      H: Math.max(30, Math.ceil(textH + 2 * (design.padY + basePadY))),
     };
   }, [runtime.fitToContent, runtime.text, runtime.fontFamily, runtime.fontSize, design.width, design.height, design.padX, design.padY]);
 
@@ -364,6 +362,22 @@ export function SpeechBalloon({ design, runtime }: Props) {
     () => design.effects.filter((e) => e.kind === 'spikes'),
     [design.effects],
   );
+  const lobesEffects = useMemo(
+    () => design.effects.filter((e) => e.kind === 'lobes'),
+    [design.effects],
+  );
+  const wobbleEffects = useMemo(
+    () => design.effects.filter((e) => e.kind === 'wobble'),
+    [design.effects],
+  );
+  const jitterEffects = useMemo(
+    () => design.effects.filter((e) => e.kind === 'jitter'),
+    [design.effects],
+  );
+  const cloudEffects = useMemo(
+    () => design.effects.filter((e) => e.kind === 'cloud'),
+    [design.effects],
+  );
 
   // Body silhouette polygon — includes classic-tail offsets and spike
   // sunburst offsets baked into the perimeter via composeBodyPoints.
@@ -373,6 +387,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const bodyPolygon = useMemo<Polygon>(() => {
     const offsets: Array<(s: number) => { dx: number; dy: number }> = [];
     const tailRanges: Array<{ sc: number; halfBase: number }> = [];
+    const denseRanges: Array<{ sc: number; halfWidth: number; samples: number }> = [];
     for (const eff of tailEffects) {
       const shape = ((eff.params.shape as TailShape) ?? 'classic') as TailShape;
       const angle = (eff.params.angle as number) ?? 115;
@@ -381,11 +396,19 @@ export function SpeechBalloon({ design, runtime }: Props) {
       // Track the attach region for every tail shape — classic uses its
       // halfBase directly, bubbles/lightning use baseWidth as a buffer
       // so spikes don't poke out of their attach footprint either.
-      const halfBase = shape === 'classic'
+      // `wavy` is a classic-flavored bump with sinusoidal spine wave —
+      // use the same halfBase / dense-sample / offset machinery.
+      const classicLike = shape === 'classic' || shape === 'wavy';
+      const halfBase = classicLike
         ? dims.baseWidth / 2
         : Math.max(2, dims.baseWidth);
       tailRanges.push({ sc, halfBase });
-      if (shape !== 'classic') continue;
+      if (classicLike) {
+        // Resolve the arc edges densely regardless of how few uniform body
+        // samples land inside this thin range.
+        denseRanges.push({ sc, halfWidth: halfBase, samples: 96 });
+      }
+      if (!classicLike) continue;
       const cfg = {
         sc,
         halfBase: dims.baseWidth / 2,
@@ -393,8 +416,11 @@ export function SpeechBalloon({ design, runtime }: Props) {
         fillet: (eff.params.fillet as number) ?? 0.5,
         arc: (eff.params.arc as number) ?? 0,
         radial: (eff.params.radial as number) ?? 0,
+        outAngle: (eff.params.outAngle as number) ?? 0,
         totalLen: sampler.totalLen,
         perimeterAt: sampler.perimeterAt,
+        waveFreq: shape === 'wavy' ? ((eff.params.waveFreq as number) ?? 2) : undefined,
+        waveAmp: shape === 'wavy' ? ((eff.params.waveAmp as number) ?? 0.3) : undefined,
       };
       offsets.push((s) => classicTailOffsetAt(s, cfg));
     }
@@ -428,8 +454,47 @@ export function SpeechBalloon({ design, runtime }: Props) {
         return spikesOffsetAt(s, cfg);
       });
     }
-    return composeBodyPoints(sampler, offsets, pointTransform);
-  }, [tailEffects, spikesEffects, sampler, W, H, pointTransform]);
+    for (const eff of lobesEffects) {
+      const cfg = {
+        count: (eff.params.count as number) ?? 10,
+        depth: (eff.params.depth as number) ?? 12,
+        phase: (eff.params.phase as number) ?? 0,
+        totalLen: sampler.totalLen,
+        perimeterAt: sampler.perimeterAt,
+      };
+      offsets.push((s) => {
+        if (isInTailRange(s)) return { dx: 0, dy: 0 };
+        return lobesOffsetAt(s, cfg);
+      });
+    }
+    for (const eff of wobbleEffects) {
+      const cfg = {
+        frequency: (eff.params.frequency as number) ?? 3,
+        amplitude: (eff.params.amplitude as number) ?? 8,
+        phase: (eff.params.phase as number) ?? 0,
+        totalLen: sampler.totalLen,
+        perimeterAt: sampler.perimeterAt,
+      };
+      offsets.push((s) => {
+        if (isInTailRange(s)) return { dx: 0, dy: 0 };
+        return wobbleOffsetAt(s, cfg);
+      });
+    }
+    for (const eff of jitterEffects) {
+      const cfg = {
+        amount: (eff.params.amount as number) ?? 6,
+        density: (eff.params.density as number) ?? 12,
+        seed: (eff.params.seed as number) ?? 7,
+        totalLen: sampler.totalLen,
+        perimeterAt: sampler.perimeterAt,
+      };
+      offsets.push((s) => {
+        if (isInTailRange(s)) return { dx: 0, dy: 0 };
+        return jitterOffsetAt(s, cfg);
+      });
+    }
+    return composeBodyPoints(sampler, offsets, pointTransform, denseRanges);
+  }, [tailEffects, spikesEffects, lobesEffects, wobbleEffects, jitterEffects, sampler, W, H, pointTransform]);
 
   // Polygons after bubble-union — kept as polygons so per-heightmap-mode rasterizers can offset them.
   // Lightning ribbon polygons. Built here BEFORE bodyAndBubblesPolys so
@@ -486,10 +551,13 @@ export function SpeechBalloon({ design, runtime }: Props) {
     for (const rt of resolvedTails) {
       if (rt.shape !== 'bubbles') continue;
       const dims = tailDims(rt.params, 'bubbles', W, H);
+      // Bubbles size from explicit diameter (px) — largest bubble = the
+      // one attached to the body. Others fall off by `taper`.
+      const startRadius = ((rt.params.bubbleDiameter as number) ?? 30) / 2;
       const bubbles = buildBubbles(
         rt.attach,
         (rt.params.count as number) ?? 3,
-        dims.baseWidth,
+        startRadius,
         (rt.params.taper as number) ?? 0.7,
         (rt.params.gap as number) ?? 0.15,
         dims.length,
@@ -502,8 +570,23 @@ export function SpeechBalloon({ design, runtime }: Props) {
     for (const r of lightningRibbons) {
       for (const poly of r.polys) polys.push(poly);
     }
+    // Cloud-puff morph effects: union N small ovals around the body so
+    // the silhouette ends up as overlapping lobes — for thought-bubble
+    // and cloud-callout shapes built on top of any base.
+    for (const eff of cloudEffects) {
+      const puffs = buildCloudPuffs({
+        density: (eff.params.density as number) ?? 3,
+        puffSize: (eff.params.puffSize as number) ?? 18,
+        sizeJitter: (eff.params.sizeJitter as number) ?? 0.5,
+        posJitter: (eff.params.posJitter as number) ?? 0.5,
+        seed: (eff.params.seed as number) ?? 11,
+        totalLen: sampler.totalLen,
+        perimeterAt: sampler.perimeterAt,
+      });
+      for (const p of puffs) polys.push(circleToPolygon(p.cx, p.cy, p.r));
+    }
     return polys.length === 1 ? [bodyPolygon] : unionPolygons(polys);
-  }, [bodyPolygon, resolvedTails, lightningRibbons]);
+  }, [bodyPolygon, resolvedTails, lightningRibbons, cloudEffects, sampler]);
 
   const bodyPath = useMemo(() => polygonsToSvgPath(bodyAndBubblesPolys), [bodyAndBubblesPolys]);
 
@@ -517,10 +600,11 @@ export function SpeechBalloon({ design, runtime }: Props) {
     for (const rt of resolvedTails) {
       if (rt.shape !== 'bubbles') continue;
       const dims = tailDims(rt.params, 'bubbles', W, H);
+      const startRadius = ((rt.params.bubbleDiameter as number) ?? 30) / 2;
       const bubbles = buildBubbles(
         rt.attach,
         (rt.params.count as number) ?? 3,
-        dims.baseWidth,
+        startRadius,
         (rt.params.taper as number) ?? 0.7,
         (rt.params.gap as number) ?? 0.15,
         dims.length,
@@ -539,15 +623,38 @@ export function SpeechBalloon({ design, runtime }: Props) {
   const strokeColor = strokeEffect ? ((strokeEffect.params.color as string) ?? 'none') : 'none';
   const hasShadow = !!shadowEffect;
 
-  // Padding for the viewBox so tails / shadows / strokes don't get clipped.
+  // Padding for the viewBox so tails / spikes / shadows / strokes don't
+  // get clipped. Body apparent size stays constant — only the SVG's outer
+  // pixel dimensions grow when reach grows; zoom multiplies on top.
   const reach = useMemo(() => {
     let max = 60;
     for (const eff of tailEffects) {
+      const shape = (eff.params.shape as string) ?? 'classic';
       const size = (eff.params.size as number) ?? (eff.params.length as number) ?? 50;
       max = Math.max(max, size);
+      // Bubbles chain length isn't governed by `size` — it's the sum of
+      // bubble diameters + gaps, count many. Estimate so the viewBox
+      // padding accommodates the full chain.
+      if (shape === 'bubbles') {
+        const diam = (eff.params.bubbleDiameter as number) ?? 30;
+        const count = (eff.params.count as number) ?? 3;
+        const gap = (eff.params.gap as number) ?? 0.15;
+        max = Math.max(max, count * diam * (1 + gap));
+      }
+    }
+    for (const eff of design.effects) {
+      if (eff.kind === 'spikes') {
+        max = Math.max(max, (eff.params.length as number) ?? 18);
+      } else if (eff.kind === 'lobes') {
+        max = Math.max(max, (eff.params.depth as number) ?? 12);
+      } else if (eff.kind === 'wobble') {
+        max = Math.max(max, (eff.params.amplitude as number) ?? 8);
+      } else if (eff.kind === 'jitter') {
+        max = Math.max(max, (eff.params.amount as number) ?? 6);
+      }
     }
     return max + 30;
-  }, [tailEffects]);
+  }, [tailEffects, design.effects]);
 
   const uid = useId().replace(/:/g, '');
   const idPrefix = `sb-${uid}`;
@@ -846,12 +953,14 @@ export function SpeechBalloon({ design, runtime }: Props) {
     bodyAndBubblesPolys,
   ]);
 
+  const zoom = Math.max(0.1, runtime.zoom);
+  const pxW = (W + 2 * reach) * zoom;
+  const pxH = (H + 2 * reach) * zoom;
   return (
     <svg
       viewBox={`${-reach} ${-reach} ${W + 2 * reach} ${H + 2 * reach}`}
-      width="100%"
-      height="100%"
-      preserveAspectRatio="xMidYMid meet"
+      width={pxW}
+      height={pxH}
       style={{
         // Canvas fill behind the balloon at 70% alpha so the CMY nebula
         // bleeds through. Re-parsed from the hex `design.bg` on every
@@ -861,6 +970,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
           return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.7)`;
         })(),
         borderRadius: 8,
+        display: 'block',
       }}
     >
       <defs>
@@ -1015,21 +1125,32 @@ export function SpeechBalloon({ design, runtime }: Props) {
         )}
       </g>
 
-      <text
-        x={W / 2}
-        y={H / 2}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fill={design.textColor}
-        style={{
-          fontFamily: runtime.fontFamily,
-          fontSize: runtime.fontSize,
-          pointerEvents: 'none',
-          userSelect: 'none',
-        }}
-      >
-        {runtime.text}
-      </text>
+      {(() => {
+        const lines = (runtime.text || '').split('\n');
+        const lineHeight = runtime.fontSize * 1.1;
+        const blockHeight = (lines.length - 1) * lineHeight;
+        const firstY = H / 2 - blockHeight / 2;
+        // One <text> per line — more robust than <tspan dy> with
+        // dominant-baseline central, which some browsers collapse.
+        return lines.map((line, i) => (
+          <text
+            key={i}
+            x={W / 2}
+            y={firstY + i * lineHeight}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fill={design.textColor}
+            style={{
+              fontFamily: runtime.fontFamily,
+              fontSize: runtime.fontSize,
+              pointerEvents: 'none',
+              userSelect: 'none',
+            }}
+          >
+            {line || ' '}
+          </text>
+        ));
+      })()}
     </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { type Point } from './catmullRom';
 import { sampleByInterpolation, type InterpolationMode } from './interpolation';
 import { hitTestCurve, modelToPlot, plotToModel, type ModelRange } from './geometry';
@@ -12,6 +12,18 @@ export interface ControlPoint {
 export type CurveDomain = '1d' | '2d';
 export type EndpointMode = 'free' | 'pinned-x' | 'pinned-both';
 export type AddPointMode = 'click-curve' | 'click-empty' | 'never';
+
+/** Per-anchor render context passed to `renderAnchor`. Coordinates are in
+ *  plot (SVG) space, ready to drop into `cx/cy` or `transform`. */
+export interface AnchorRenderProps {
+  point: ControlPoint;
+  index: number;
+  cx: number;
+  cy: number;
+  isActive: boolean;
+  isPinnedEndpoint: boolean;
+  isEndpoint: boolean;
+}
 
 export interface GridSettings {
   /** Number of evenly-spaced internal grid lines per axis (excluding the
@@ -109,6 +121,16 @@ export interface CurveEditorProps {
   maxPoints?: number;
   /** How new anchors are added. Default 'click-curve'. */
   addPointMode?: AddPointMode;
+  /** Custom anchor renderer. Returned node is wrapped in a `<g
+   *  data-anchor-index>` that owns the pointerdown handler, so callers
+   *  don't have to wire gestures themselves. Returning `null` falls back
+   *  to the default visual. */
+  renderAnchor?: (info: AnchorRenderProps) => ReactNode;
+  /** Extra SVG content between the curve and the anchors. */
+  decorations?: ReactNode;
+  /** Suppress drawing the curve <path>; anchors and gestures stay
+   *  intact. PointPlotter uses this. */
+  hideCurve?: boolean;
   /** Extra class on the root SVG element. */
   className?: string;
   /** Inline style on the root SVG element. */
@@ -275,8 +297,16 @@ export function CurveEditor(props: CurveEditorProps) {
     }
 
     // Clamp to model range so vertices never leave the visible plot.
-    nx = Math.max(modelRange.xMin, Math.min(modelRange.xMax, nx));
-    ny = Math.max(modelRange.yMin, Math.min(modelRange.yMax, ny));
+    // Handle inverted ranges (yMin > yMax) — Plot2D supports flipping
+    // y so model and SVG space share their y-axis direction.
+    {
+      const xLo = Math.min(modelRange.xMin, modelRange.xMax);
+      const xHi = Math.max(modelRange.xMin, modelRange.xMax);
+      const yLo = Math.min(modelRange.yMin, modelRange.yMax);
+      const yHi = Math.max(modelRange.yMin, modelRange.yMax);
+      nx = Math.max(xLo, Math.min(xHi, nx));
+      ny = Math.max(yLo, Math.min(yHi, ny));
+    }
 
     next[d.index] = { x: nx, y: ny };
     d.lastNext = next;
@@ -463,13 +493,14 @@ export function CurveEditor(props: CurveEditorProps) {
           fill={props.fill && props.fill !== null ? props.fill.color : undefined}
         />
       )}
-      {pathD && (
+      {pathD && !props.hideCurve && (
         <path
           className={s.curve}
           d={pathD}
           fill="none"
         />
       )}
+      {props.decorations}
       {plotAnchors.map((a, i) => {
         const pinned = isPinnedEndpoint(i);
         // An anchor is non-interactive when it's a pinned endpoint
@@ -477,6 +508,28 @@ export function CurveEditor(props: CurveEditorProps) {
         if (pinned && props.hideNonInteractive) return null;
         const active = activeDragIndex === i;
         const isEndpoint = i === 0 || i === value.length - 1;
+        if (props.renderAnchor) {
+          const node = props.renderAnchor({
+            point: value[i],
+            index: i,
+            cx: a.x,
+            cy: a.y,
+            isActive: active,
+            isPinnedEndpoint: pinned,
+            isEndpoint,
+          });
+          if (node !== null && node !== undefined) {
+            return (
+              <g
+                key={i}
+                data-anchor-index={i}
+                onPointerDown={(e) => onPointerDownAnchor(i, e)}
+              >
+                {node}
+              </g>
+            );
+          }
+        }
         const anchorCls = [
           s.anchor,
           isEndpoint && s.endpoint,

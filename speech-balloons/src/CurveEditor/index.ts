@@ -8,7 +8,12 @@ export {
   type GridSettings,
   type AxesSettings,
   type FillSettings,
+  type AnchorRenderProps,
 } from './CurveEditor';
+export {
+  PointPlotter,
+  type PointPlotterProps,
+} from './PointPlotter';
 
 export {
   sampleByInterpolation,

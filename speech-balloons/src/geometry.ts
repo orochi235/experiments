@@ -149,6 +149,176 @@ export function buildEllipse(boxW: number, boxH: number): BaseSampler {
   return { bodyPath, perimeterAt, totalLen };
 }
 
+// --- Regular polygon -----------------------------------------------------
+
+// Inscribe an N-gon's vertices in the bounding-box ellipse (so the polygon
+// fills the box for any aspect ratio). Vertices sit at angles around the
+// box center; sides are straight. Sampled at uniform arc length so
+// perimeterAt(s) returns positions + outward normals exactly like the
+// ellipse builder. `roundness` is exposed for future arc-corner support
+// (currently ignored for v1).
+export function buildPolygon(boxW: number, boxH: number, sides: number, roundness: number): BaseSampler {
+  void roundness;
+  const N = Math.max(3, Math.min(48, Math.round(sides)));
+  const cx = boxW / 2;
+  const cy = boxH / 2;
+  const rx = boxW / 2;
+  const ry = boxH / 2;
+  // Top-aligned start angle (−π/2) gives a flat-bottom feel for even N and
+  // a vertex-on-top for odd N — matches typical polygon conventions.
+  const a0 = -Math.PI / 2;
+  const verts: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < N; i++) {
+    const a = a0 + (i / N) * 2 * Math.PI;
+    verts.push({ x: cx + rx * Math.cos(a), y: cy + ry * Math.sin(a) });
+  }
+  type Seg = { ax: number; ay: number; bx: number; by: number; len: number; nx: number; ny: number };
+  const segs: Seg[] = [];
+  for (let i = 0; i < N; i++) {
+    const a = verts[i];
+    const b = verts[(i + 1) % N];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Outward normal: perpendicular to (dx, dy) pointing away from center.
+    // For CW traversal (top→right→bottom→left), outward is (dy, -dx)/len.
+    let nx = dy / len;
+    let ny = -dx / len;
+    // Sanity: ensure it points away from center using midpoint − center.
+    const mx = (a.x + b.x) / 2 - cx;
+    const my = (a.y + b.y) / 2 - cy;
+    if (nx * mx + ny * my < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    segs.push({ ax: a.x, ay: a.y, bx: b.x, by: b.y, len, nx, ny });
+  }
+  const cum = [0];
+  for (const s of segs) cum.push(cum[cum.length - 1] + s.len);
+  const totalLen = cum[cum.length - 1] || 1;
+
+  const perimeterAt = (s: number): PerimeterPoint => {
+    const sm = ((s % totalLen) + totalLen) % totalLen;
+    let i = 0;
+    while (i < segs.length - 1 && sm > cum[i + 1]) i++;
+    const local = sm - cum[i];
+    const t = segs[i].len > 0 ? local / segs[i].len : 0;
+    const seg = segs[i];
+    return {
+      x: seg.ax + (seg.bx - seg.ax) * t,
+      y: seg.ay + (seg.by - seg.ay) * t,
+      nx: seg.nx,
+      ny: seg.ny,
+    };
+  };
+
+  let bodyPath = `M ${verts[0].x.toFixed(2)} ${verts[0].y.toFixed(2)}`;
+  for (let i = 1; i < N; i++) bodyPath += ` L ${verts[i].x.toFixed(2)} ${verts[i].y.toFixed(2)}`;
+  bodyPath += ' Z';
+
+  return { bodyPath, perimeterAt, totalLen };
+}
+
+// --- Cloud (lobed / scalloped silhouette) --------------------------------
+
+// Ellipse perimeter modulated by + cos(lobes * θ) * lobeDepth * radius.
+// The modulation is along the ellipse's outward normal direction, so each
+// lobe bulges out by up to `lobeDepth * min(rx,ry)`. Sampled densely and
+// integrated to arc length so perimeterAt(s) behaves like other samplers.
+export function buildCloud(boxW: number, boxH: number, lobes: number, lobeDepth: number): BaseSampler {
+  const N = Math.max(2, Math.round(lobes));
+  const depth = Math.max(0, lobeDepth);
+  const rxBase = boxW / 2;
+  const ryBase = boxH / 2;
+  const cx = boxW / 2;
+  const cy = boxH / 2;
+  // Amplitude is a fraction of the shorter axis so lobes look balanced for
+  // any aspect ratio. The base radii are pulled IN by half the amplitude so
+  // peak-out and peak-in stay symmetric around the inscribed ellipse.
+  const ampRef = Math.min(rxBase, ryBase);
+  const amp = depth * ampRef * 0.5;
+  const rxIn = rxBase - amp;
+  const ryIn = ryBase - amp;
+
+  // Build a dense parametric sample (t in [0, 2π)). Each sample displaces
+  // the inscribed ellipse point outward along its normal by
+  // amp * (1 + cos(N·t)) / 2 + something? — keep simple: amp * cos(N·t).
+  const K = 1024;
+  const pts: Array<{ x: number; y: number; nx: number; ny: number }> = [];
+  for (let i = 0; i < K; i++) {
+    const t = (i / K) * 2 * Math.PI;
+    const ex = cx + rxIn * Math.cos(t);
+    const ey = cy + ryIn * Math.sin(t);
+    // Ellipse outward normal (gradient of implicit form).
+    const gx = (ex - cx) / (rxIn * rxIn);
+    const gy = (ey - cy) / (ryIn * ryIn);
+    const gl = Math.hypot(gx, gy) || 1;
+    const nx0 = gx / gl;
+    const ny0 = gy / gl;
+    const r = amp * Math.cos(N * t);
+    pts.push({ x: ex + nx0 * r, y: ey + ny0 * r, nx: nx0, ny: ny0 });
+  }
+
+  // Arc-length table.
+  const cum = new Float64Array(K + 1);
+  for (let i = 1; i <= K; i++) {
+    const a = pts[i - 1];
+    const b = pts[i % K];
+    cum[i] = cum[i - 1] + Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  const totalLen = cum[K] || 1;
+
+  // Recompute outward normals from neighbor tangents so the sinusoidal
+  // displacement gives correct surface normals (not just ellipse normals).
+  const norms: Array<{ nx: number; ny: number }> = new Array(K);
+  for (let i = 0; i < K; i++) {
+    const a = pts[(i - 1 + K) % K];
+    const b = pts[(i + 1) % K];
+    const tx = b.x - a.x;
+    const ty = b.y - a.y;
+    const tl = Math.hypot(tx, ty) || 1;
+    // CW traversal: outward normal is (ty, -tx)/len. Check vs ellipse normal sign.
+    let nx = ty / tl;
+    let ny = -tx / tl;
+    if (nx * pts[i].nx + ny * pts[i].ny < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    norms[i] = { nx, ny };
+  }
+
+  const perimeterAt = (sArg: number): PerimeterPoint => {
+    const sm = ((sArg % totalLen) + totalLen) % totalLen;
+    let lo = 0;
+    let hi = K;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (cum[m] < sm) lo = m + 1;
+      else hi = m;
+    }
+    const i = Math.max(1, lo);
+    const seg = cum[i] - cum[i - 1] || 1;
+    const frac = (sm - cum[i - 1]) / seg;
+    const a = pts[i - 1];
+    const b = pts[i % K];
+    const x = a.x + (b.x - a.x) * frac;
+    const y = a.y + (b.y - a.y) * frac;
+    const na = norms[i - 1];
+    const nb = norms[i % K];
+    const nxRaw = na.nx + (nb.nx - na.nx) * frac;
+    const nyRaw = na.ny + (nb.ny - na.ny) * frac;
+    const nl = Math.hypot(nxRaw, nyRaw) || 1;
+    return { x, y, nx: nxRaw / nl, ny: nyRaw / nl };
+  };
+
+  // Body path: closed polyline through pts.
+  let bodyPath = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
+  for (let i = 1; i < K; i++) bodyPath += ` L ${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`;
+  bodyPath += ' Z';
+
+  return { bodyPath, perimeterAt, totalLen };
+}
+
 // --- Build sampler for a configured base ---------------------------------
 
 export function buildBaseSampler(base: BalloonBase, params: ParamBag, boxW: number, boxH: number): BaseSampler {
@@ -158,6 +328,16 @@ export function buildBaseSampler(base: BalloonBase, params: ParamBag, boxW: numb
     const roundness = Math.max(0, Math.min(1, (params.roundness as number) ?? 0.5));
     const r = (Math.min(boxW, boxH) / 2) * roundness;
     return buildRoundedRect(boxW, boxH, r);
+  }
+  if (base === 'polygon') {
+    const sides = (params.sides as number) ?? 6;
+    const roundness = (params.roundness as number) ?? 0;
+    return buildPolygon(boxW, boxH, sides, roundness);
+  }
+  if (base === 'cloud') {
+    const lobes = (params.lobes as number) ?? 8;
+    const lobeDepth = (params.lobeDepth as number) ?? 0.4;
+    return buildCloud(boxW, boxH, lobes, lobeDepth);
   }
   void params;
   return buildEllipse(boxW, boxH);
@@ -207,6 +387,16 @@ export interface ClassicTailConfig {
   radial: number; // outward translation of the bump along the normal (px)
   totalLen: number;
   perimeterAt: (s: number) => PerimeterPoint;
+  // Tilt of the tail's outward direction relative to the body's normal
+  // at the attach point (degrees). 0 = straight out; rotates the whole
+  // outward + perpendicular basis so the arc bend still reads perpendicular
+  // to the (rotated) tail spine.
+  outAngle?: number;
+  // Optional spine wave used by the `wavy` shape — lateral oscillation
+  // of magnitude `waveAmp * length * sin(2π · waveFreq · t)` (t = 0..1
+  // along the bump, base→tip), so the wave vanishes at the base.
+  waveFreq?: number;
+  waveAmp?: number;
 }
 
 export function classicTailOffsetAt(s: number, cfg: ClassicTailConfig): { dx: number; dy: number } {
@@ -233,17 +423,27 @@ export function classicTailOffsetAt(s: number, cfg: ClassicTailConfig): { dx: nu
   }
   t = Math.max(0, t);
   const p = cfg.perimeterAt(cfg.sc);
-  const perpX = -p.ny;
-  const perpY = p.nx;
+  // Rotate the outward + perpendicular basis by `outAngle` (deg) so the
+  // arc/wave bends still read perpendicular to the rotated tail spine.
+  const rot = ((cfg.outAngle ?? 0) * Math.PI) / 180;
+  const cR = Math.cos(rot);
+  const sR = Math.sin(rot);
+  const nx = p.nx * cR - p.ny * sR;
+  const ny = p.nx * sR + p.ny * cR;
+  const perpX = -ny;
+  const perpY = nx;
   const arcShift = cfg.arc * cfg.length * t * t;
   // Outward magnitude: the bump amplitude scales with t. `radial` extends
   // the TIP vertex outward (or pulls it inward) without affecting the rest
   // of the bump shape — i.e. radial scales with t so it vanishes at the
   // base (no pedestal) and is fully applied at the tip.
   const outward = (cfg.length + cfg.radial) * t;
+  const waveShift = cfg.waveFreq && cfg.waveAmp
+    ? cfg.waveAmp * cfg.length * t * Math.sin(2 * Math.PI * cfg.waveFreq * t)
+    : 0;
   return {
-    dx: p.nx * outward + perpX * arcShift,
-    dy: p.ny * outward + perpY * arcShift,
+    dx: nx * outward + perpX * (arcShift + waveShift),
+    dy: ny * outward + perpY * (arcShift + waveShift),
   };
 }
 
@@ -332,6 +532,101 @@ export function spikesOffsetAt(s: number, cfg: SpikesConfig): { dx: number; dy: 
   return { dx: dirX * lenCss, dy: dirY * lenCss };
 }
 
+// --- Lobes morph (scalloped perimeter) -----------------------------------
+
+export interface LobesConfig {
+  count: number;
+  depth: number;     // px, peak-to-trough/2
+  phase: number;     // 0..1 of one cycle
+  totalLen: number;
+  perimeterAt: (s: number) => PerimeterPoint;
+}
+
+export function lobesOffsetAt(s: number, cfg: LobesConfig): { dx: number; dy: number } {
+  const N = Math.max(1, cfg.count);
+  const u = s / cfg.totalLen + cfg.phase;
+  const r = cfg.depth * Math.cos(2 * Math.PI * N * u);
+  const p = cfg.perimeterAt(s);
+  return { dx: p.nx * r, dy: p.ny * r };
+}
+
+// --- Wobble morph (low-frequency tremor) ---------------------------------
+
+export interface WobbleConfig {
+  frequency: number; // cycles around the body
+  amplitude: number; // px
+  phase: number;     // 0..1
+  totalLen: number;
+  perimeterAt: (s: number) => PerimeterPoint;
+}
+
+export function wobbleOffsetAt(s: number, cfg: WobbleConfig): { dx: number; dy: number } {
+  const f = Math.max(0, cfg.frequency);
+  const u = s / cfg.totalLen + cfg.phase;
+  const r = cfg.amplitude * Math.sin(2 * Math.PI * f * u);
+  const p = cfg.perimeterAt(s);
+  return { dx: p.nx * r, dy: p.ny * r };
+}
+
+// --- Jitter morph (high-freq pseudo-random noise) ------------------------
+
+export interface JitterConfig {
+  amount: number;  // px peak
+  density: number; // sample count around the body
+  seed: number;
+  totalLen: number;
+  perimeterAt: (s: number) => PerimeterPoint;
+}
+
+export function jitterOffsetAt(s: number, cfg: JitterConfig): { dx: number; dy: number } {
+  const D = Math.max(1, Math.round(cfg.density));
+  const u = (((s / cfg.totalLen) % 1) + 1) % 1;
+  const f = u * D;
+  const i0 = Math.floor(f);
+  const frac = f - i0;
+  // Lerp between two adjacent prng samples for C0 continuity; wrap on D.
+  const a = prng(cfg.seed, i0 % D) - 0.5;
+  const b = prng(cfg.seed, (i0 + 1) % D) - 0.5;
+  const r = cfg.amount * 2 * (a + (b - a) * frac);
+  const p = cfg.perimeterAt(s);
+  return { dx: p.nx * r, dy: p.ny * r };
+}
+
+// --- Cloud morph (overlaid oval puffs around the perimeter) --------------
+
+export interface CloudPuffsConfig {
+  density: number;      // puffs per 100px of perimeter
+  puffSize: number;     // base radius
+  sizeJitter: number;   // 0..1 → puff radius variance
+  posJitter: number;    // 0..1 → along-perimeter position variance
+  seed: number;
+  totalLen: number;
+  perimeterAt: (s: number) => PerimeterPoint;
+}
+
+export interface Puff { cx: number; cy: number; r: number; }
+
+export function buildCloudPuffs(cfg: CloudPuffsConfig): Puff[] {
+  const out: Puff[] = [];
+  const n = Math.max(1, Math.round((cfg.density * cfg.totalLen) / 100));
+  const step = cfg.totalLen / n;
+  for (let i = 0; i < n; i++) {
+    const baseS = i * step;
+    const posJ = (prng(cfg.seed, i) - 0.5) * cfg.posJitter * step;
+    let s = baseS + posJ;
+    s = ((s % cfg.totalLen) + cfg.totalLen) % cfg.totalLen;
+    const sizeJ = 1 + (prng(cfg.seed + 17, i) - 0.5) * cfg.sizeJitter * 0.7;
+    const r = Math.max(2, cfg.puffSize * sizeJ);
+    const p = cfg.perimeterAt(s);
+    // Anchor puff so roughly half its radius sticks outside the body.
+    const inset = r * 0.5;
+    const cx = p.x - p.nx * inset;
+    const cy = p.y - p.ny * inset;
+    out.push({ cx, cy, r });
+  }
+  return out;
+}
+
 // --- Compose final body silhouette ----------------------------------------
 
 const COMPOSE_SAMPLES = 720;
@@ -340,10 +635,30 @@ export function composeBodyPoints(
   sampler: BaseSampler,
   offsets: Array<(s: number) => { dx: number; dy: number }>,
   pointTransform?: (x: number, y: number) => { x: number; y: number },
+  // Extra dense-sampling windows along s — used so a thin tail's arc edges
+  // get enough vertices to resolve the curve, regardless of how narrow
+  // the tail base is relative to the body perimeter.
+  denseRanges?: Array<{ sc: number; halfWidth: number; samples: number }>,
 ): Array<{ x: number; y: number }> {
+  const tl = sampler.totalLen;
+  const sValues: number[] = [];
+  for (let i = 0; i < COMPOSE_SAMPLES; i++) sValues.push((i / COMPOSE_SAMPLES) * tl);
+  if (denseRanges) {
+    for (const r of denseRanges) {
+      const span = 2 * r.halfWidth;
+      for (let i = 0; i <= r.samples; i++) {
+        let s = r.sc - r.halfWidth + (i / r.samples) * span;
+        s = ((s % tl) + tl) % tl;
+        sValues.push(s);
+      }
+    }
+  }
+  sValues.sort((a, b) => a - b);
   const out: Array<{ x: number; y: number }> = [];
-  for (let i = 0; i < COMPOSE_SAMPLES; i++) {
-    const s = (i / COMPOSE_SAMPLES) * sampler.totalLen;
+  let lastS = -Infinity;
+  for (const s of sValues) {
+    if (s - lastS < 1e-4) continue;
+    lastS = s;
     const p = sampler.perimeterAt(s);
     const base = pointTransform ? pointTransform(p.x, p.y) : { x: p.x, y: p.y };
     let dx = 0;
@@ -400,7 +715,10 @@ export function buildBubbles(
   // First bubble center sits just outside the body by half its diameter plus the gap.
   let dist = startSize + gapFrac * startSize;
   for (let i = 0; i < cnt; i++) {
-    const progress = reach > 0 ? Math.min(1, dist / reach) : 0;
+    // Progress along the chain by index (not distance) so `arc` bends
+    // every bubble in the chain regardless of `reach`. Reach is now an
+    // arc-magnitude hint only — count is strictly honored.
+    const progress = cnt > 1 ? i / (cnt - 1) : 0;
     const arcShift = arc * reach * progress * progress;
     const cx = attachPoint.x + dirX * dist + perpX * arcShift;
     const cy = attachPoint.y + dirY * dist + perpY * arcShift;
@@ -408,7 +726,6 @@ export function buildBubbles(
     const nextSize = size * falloff;
     dist += size + nextSize + gapFrac * (size + nextSize);
     size = nextSize;
-    if (dist > reach + startSize) break;
   }
   return out;
 }

@@ -11,6 +11,7 @@ export function initialSnapshot(): LabSnapshot {
       fontSize: 28,
       text: 'Hello!',
       fitToContent: false,
+      zoom: 1.2,
     },
     design: {
       base: 'rectangle',
@@ -40,9 +41,8 @@ export function loadSnapshot(): LabSnapshot {
     if (!raw) return initialSnapshot();
     const parsed = JSON.parse(raw) as LabSnapshot;
     if (!parsed.runtime || !parsed.design) return initialSnapshot();
-    // No legacy migration: schema bumped to v7 because the fill modes
-    // collapsed (bevel-blur/bevel-dt retired into a single bevel mode) and
-    // the contour curve dropped its fixed-length / labeled-stops shape.
+    // Default new fields on load so old snapshots keep working.
+    if (parsed.runtime.zoom === undefined) parsed.runtime.zoom = 1.2;
     return parsed;
   } catch {
     return initialSnapshot();
