@@ -78,6 +78,17 @@ function mixCss(a: RGB, b: RGB, t: number): string {
   return `rgb(${r} ${g} ${bl})`;
 }
 function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
+// Rotate an attach-point's outward normal by `outAngle` degrees in-plane.
+// Bubbles / lightning don't deform the body silhouette, so they don't go
+// through classicTailOffsetAt (which applies its own outAngle). Their
+// chain direction is derived from the attach normal, so we rotate it here.
+function rotateAttachByOutAngle(p: PerimeterPoint, outAngleDeg: number): PerimeterPoint {
+  if (!outAngleDeg) return p;
+  const r = (outAngleDeg * Math.PI) / 180;
+  const c = Math.cos(r);
+  const s = Math.sin(r);
+  return { x: p.x, y: p.y, nx: p.nx * c - p.ny * s, ny: p.nx * s + p.ny * c };
+}
 function rgbCss(rgb: RGB): string {
   return `rgb(${Math.round(rgb[0])} ${Math.round(rgb[1])} ${Math.round(rgb[2])})`;
 }
@@ -515,11 +526,12 @@ export function SpeechBalloon({ design, runtime }: Props) {
       const widthTaper = (rt.params.widthTaper as number) ?? 1;
       const tipWidth = Math.max(0, Math.min(0.8, (rt.params.tipWidth as number) ?? 0));
       const tuck = baseW * 0.35;
+      const aimed = rotateAttachByOutAngle(rt.attach, (rt.params.outAngle as number) ?? 0);
       const tuckedAttach: PerimeterPoint = {
-        x: rt.attach.x - rt.attach.nx * tuck,
-        y: rt.attach.y - rt.attach.ny * tuck,
-        nx: rt.attach.nx,
-        ny: rt.attach.ny,
+        x: aimed.x - aimed.nx * tuck,
+        y: aimed.y - aimed.ny * tuck,
+        nx: aimed.nx,
+        ny: aimed.ny,
       };
       const effectiveLength = dims.length + tuck;
       const zigs = (rt.params.zigs as number) ?? 2;
@@ -555,7 +567,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
       // one attached to the body. Others fall off by `taper`.
       const startRadius = ((rt.params.bubbleDiameter as number) ?? 30) / 2;
       const bubbles = buildBubbles(
-        rt.attach,
+        rotateAttachByOutAngle(rt.attach, (rt.params.outAngle as number) ?? 0),
         (rt.params.count as number) ?? 3,
         startRadius,
         (rt.params.taper as number) ?? 0.7,
@@ -602,7 +614,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
       const dims = tailDims(rt.params, 'bubbles', W, H);
       const startRadius = ((rt.params.bubbleDiameter as number) ?? 30) / 2;
       const bubbles = buildBubbles(
-        rt.attach,
+        rotateAttachByOutAngle(rt.attach, (rt.params.outAngle as number) ?? 0),
         (rt.params.count as number) ?? 3,
         startRadius,
         (rt.params.taper as number) ?? 0.7,

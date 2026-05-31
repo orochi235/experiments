@@ -25,6 +25,7 @@ export interface MinimapTail {
   angle: number;     // degrees, 0 = east, 90 = south (SVG convention)
   length: number;    // user units (px)
   arc: number;       // -1..1 lateral bend
+  outAngle: number;  // degrees, tip-angle offset from radial outward (-90..90)
   colorSlot: number; // palette index — sticky across removes
 }
 
@@ -36,7 +37,7 @@ interface TailMinimapProps {
   bodyH: number;
   bodyParams: ParamBag;
   tails: MinimapTail[];
-  onUpdateTail: (id: number, updates: { angle?: number; length?: number; arc?: number }) => void;
+  onUpdateTail: (id: number, updates: { angle?: number; length?: number; arc?: number; outAngle?: number }) => void;
   onCommitTail: (id: number) => void;
   onAddTail: (angle: number) => void;
   onRemoveTail: (id: number) => void;
@@ -80,8 +81,11 @@ export function TailMinimap(props: TailMinimapProps) {
     for (const t of tails) {
       const a = (t.angle * Math.PI) / 180;
       const b = perimeterAtAngle(a);
-      const ox = Math.cos(a);
-      const oy = Math.sin(a);
+      // Rotate the radial outward basis by outAngle so the visual reflects
+      // the slider state (and matches the inverse computation on tip drag).
+      const r = (t.outAngle * Math.PI) / 180;
+      const ox = Math.cos(a + r);
+      const oy = Math.sin(a + r);
       const px = -oy;
       const py = ox;
       const L = t.length * scale;
@@ -120,21 +124,25 @@ export function TailMinimap(props: TailMinimapProps) {
         const a = Math.atan2(newBase.y - cy, newBase.x - cx);
         onUpdateTail(t.id, { angle: normalizeDeg((a * 180) / Math.PI) });
       } else {
-        // Drag tip = re-derive angle from tip direction, set length to
-        // radial component, set arc to lateral fraction of length.
-        const dx = newTip.x - cx;
-        const dy = newTip.y - cy;
-        const a = Math.atan2(dy, dx);
+        // Drag tip = keep attach fixed; recompute outAngle + length from the
+        // vector (newTip - attach). With arc !== 0 the tail's drawn tip sits
+        // at angle (a + outAngle + atan(arc)) from attach with magnitude
+        // L · sqrt(1 + arc²), so invert that relationship.
+        const a = (t.angle * Math.PI) / 180;
         const b = perimeterAtAngle(a);
-        const vx = newTip.x - b.x;
-        const vy = newTip.y - b.y;
-        const ox = Math.cos(a);
-        const oy = Math.sin(a);
-        const radial = vx * ox + vy * oy;
-        const lateral = vx * -oy + vy * ox;
-        const length = Math.max(8, radial / scale);
-        const arc = Math.max(-1, Math.min(1, radial > 0 ? lateral / radial : 0));
-        onUpdateTail(t.id, { angle: normalizeDeg((a * 180) / Math.PI), length, arc });
+        const dx = newTip.x - b.x;
+        const dy = newTip.y - b.y;
+        const v = Math.hypot(dx, dy);
+        if (v < 1) continue;
+        const arcAng = Math.atan(t.arc);
+        const tipDir = Math.atan2(dy, dx);
+        let outAngle = ((tipDir - a - arcAng) * 180) / Math.PI;
+        // Wrap to (-180, 180] then clamp to the slider's range.
+        while (outAngle > 180) outAngle -= 360;
+        while (outAngle <= -180) outAngle += 360;
+        outAngle = Math.max(-90, Math.min(90, outAngle));
+        const length = Math.max(8, v / (scale * Math.sqrt(1 + t.arc * t.arc)));
+        onUpdateTail(t.id, { outAngle, length });
       }
     }
   };

@@ -324,13 +324,14 @@ export function Lab() {
     angle: (e.params.angle as number) ?? 115,
     length: (e.params.size as number) ?? 60,
     arc: (e.params.arc as number) ?? 0,
+    outAngle: (e.params.outAngle as number) ?? 0,
     colorSlot: tailColorSlotById.get(e.id) ?? 0,
   }));
-  const updateTailFromMinimap = (id: number, u: { angle?: number; length?: number; arc?: number }) => {
-    // Apply all three params in a single setDesign so React doesn't
-    // partially batch them — previously chaining three updateEffectParam
-    // calls in a row caused some props to lag, making the sliders appear
-    // out of sync with the minimap drag.
+  const updateTailFromMinimap = (id: number, u: { angle?: number; length?: number; arc?: number; outAngle?: number }) => {
+    // Apply all updates in a single setDesign so React doesn't partially
+    // batch them — previously chaining updateEffectParam calls in a row
+    // caused some props to lag, making the sliders appear out of sync with
+    // the minimap drag.
     setDesign((d) => ({
       ...d,
       effects: d.effects.map((e) => {
@@ -339,6 +340,7 @@ export function Lab() {
         if (u.angle !== undefined) params.angle = u.angle;
         if (u.length !== undefined) params.size = u.length;
         if (u.arc !== undefined) params.arc = u.arc;
+        if (u.outAngle !== undefined) params.outAngle = u.outAngle;
         return { ...e, params };
       }),
     }));
