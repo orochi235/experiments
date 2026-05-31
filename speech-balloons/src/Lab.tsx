@@ -2,6 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   CheckboxRow,
   ColorRow,
+  LayerStack as KitLayerStack,
+  type LayerStackItem,
   PropertyGroup,
   PropertyList,
   PropertyPanel,
@@ -49,9 +51,6 @@ export function Lab() {
   const [runtime, setRuntime] = useState<RuntimeState>(initial.runtime);
   const [design, setDesign] = useState<DesignState>(initial.design);
   const [nextId, setNextId] = useState<number>(initial.nextId);
-  // Per-effect expand/collapse state (UI-only, not persisted).
-  const [expandedIds, setExpandedIds] = useState<Set<number>>(() => new Set(initial.design.effects.map((e) => e.id)));
-  const [draggingId, setDraggingId] = useState<number | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
 
   const currentSnapshot = useCallback(
@@ -149,38 +148,9 @@ export function Lab() {
     const inst: EffectInstance = { id: nextId, kind, params };
     setNextId((n) => n + 1);
     setDesign((d) => ({ ...d, effects: [...d.effects, inst] }));
-    // Newly-added effects start expanded so the user can tweak right away.
-    setExpandedIds((s) => new Set(s).add(inst.id));
   };
   const removeEffect = (id: number) => {
     setDesign((d) => ({ ...d, effects: d.effects.filter((e) => e.id !== id) }));
-    setExpandedIds((s) => {
-      const n = new Set(s);
-      n.delete(id);
-      return n;
-    });
-  };
-  const reorderEffect = (dragId: number, targetId: number, position: 'before' | 'after') => {
-    if (dragId === targetId) return;
-    setDesign((d) => {
-      const out = d.effects.slice();
-      const fromIdx = out.findIndex((e) => e.id === dragId);
-      if (fromIdx < 0) return d;
-      const [moved] = out.splice(fromIdx, 1);
-      const targetIdx = out.findIndex((e) => e.id === targetId);
-      if (targetIdx < 0) return d;
-      const insertAt = position === 'before' ? targetIdx : targetIdx + 1;
-      out.splice(insertAt, 0, moved);
-      return { ...d, effects: out };
-    });
-  };
-  const toggleExpanded = (id: number) => {
-    setExpandedIds((s) => {
-      const n = new Set(s);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
   };
   const updateBaseParam = (key: string, value: ParamValue) => {
     setDesign((d) => ({ ...d, baseParams: { ...d.baseParams, [key]: value } }));
@@ -196,7 +166,6 @@ export function Lab() {
     applySnapshot(snap);
     undoRef.current = [snap];
     redoRef.current = [];
-    setExpandedIds(new Set(snap.design.effects.map((e) => e.id)));
     forceRerender((n) => n + 1);
   };
 
@@ -471,39 +440,121 @@ export function Lab() {
             </PropertyList>
           </PropertyPanel>
 
-          <LayerStack
-            title="Morph"
-            effects={morphEffects}
-            allKinds={MORPH_EFFECTS}
-            expandedIds={expandedIds}
-            draggingId={draggingId}
-            onAdd={addEffect}
-            onRemove={removeEffect}
-            onToggleExpanded={toggleExpanded}
-            onReorder={reorderEffect}
-            onChange={updateEffectParam}
-            onDragStart={setDraggingId}
-            onDragEnd={() => setDraggingId(null)}
-            bodyW={design.width}
-            bodyH={design.height}
-          />
+          {(() => {
+            const items: LayerStackItem[] = morphEffects.map((eff) => {
+              const allControls = EFFECT_CONTROLS[eff.kind];
+              const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+              const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+              return {
+                id: eff.id,
+                kind: eff.kind,
+                primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
+                primaryOptions: primary ? primary.options : undefined,
+                accent: undefined,
+                badge: undefined,
+              };
+            });
+            const orderedReorder = (ids: Array<number | string>) => {
+              setDesign((d) => {
+                const moved = ids as number[];
+                const otherEffects = d.effects.filter((e) => !MORPH_EFFECTS.includes(e.kind));
+                const byId = new Map(d.effects.map((e) => [e.id, e]));
+                const nextMorph = moved.map((id) => byId.get(id)!).filter(Boolean);
+                return { ...d, effects: [...otherEffects, ...nextMorph] };
+              });
+            };
+            return (
+              <KitLayerStack
+                title="Morph"
+                items={items}
+                paletteKinds={MORPH_EFFECTS}
+                onAdd={(k) => addEffect(k as EffectKind)}
+                onRemove={(id) => removeEffect(id as number)}
+                onReorder={orderedReorder}
+                onPrimaryChange={(id, value) => {
+                  const eff = morphEffects.find((e) => e.id === id);
+                  const primaryKey = eff && EFFECT_CONTROLS[eff.kind].find((c) => c.kind !== 'header' && c.kind === 'select');
+                  if (primaryKey && 'key' in primaryKey) updateEffectParam(id as number, primaryKey.key, value);
+                }}
+                renderBody={(item) => {
+                  const eff = morphEffects.find((e) => e.id === item.id)!;
+                  const allControls = EFFECT_CONTROLS[eff.kind];
+                  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+                  const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+                  const bodyControls = primary
+                    ? allControls.filter((c) => !('key' in c) || c.key !== primary.key)
+                    : allControls;
+                  return (
+                    <ControlList
+                      controls={bodyControls}
+                      params={eff.params}
+                      onChange={(k, v) => updateEffectParam(eff.id, k, v)}
+                      bodyW={design.width}
+                      bodyH={design.height}
+                    />
+                  );
+                }}
+              />
+            );
+          })()}
 
-          <LayerStack
-            title="Fill"
-            effects={leftEffects}
-            allKinds={LEFT_PANEL_EFFECTS}
-            expandedIds={expandedIds}
-            draggingId={draggingId}
-            onAdd={addEffect}
-            onRemove={removeEffect}
-            onToggleExpanded={toggleExpanded}
-            onReorder={reorderEffect}
-            onChange={updateEffectParam}
-            onDragStart={setDraggingId}
-            onDragEnd={() => setDraggingId(null)}
-            bodyW={design.width}
-            bodyH={design.height}
-          />
+          {(() => {
+            const items: LayerStackItem[] = leftEffects.map((eff) => {
+              const allControls = EFFECT_CONTROLS[eff.kind];
+              const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+              const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+              return {
+                id: eff.id,
+                kind: eff.kind,
+                primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
+                primaryOptions: primary ? primary.options : undefined,
+                accent: undefined,
+                badge: undefined,
+              };
+            });
+            const orderedReorder = (ids: Array<number | string>) => {
+              setDesign((d) => {
+                const moved = ids as number[];
+                const otherEffects = d.effects.filter((e) => !LEFT_PANEL_EFFECTS.includes(e.kind));
+                const byId = new Map(d.effects.map((e) => [e.id, e]));
+                const nextLeft = moved.map((id) => byId.get(id)!).filter(Boolean);
+                return { ...d, effects: [...otherEffects, ...nextLeft] };
+              });
+            };
+            return (
+              <KitLayerStack
+                title="Fill"
+                items={items}
+                paletteKinds={LEFT_PANEL_EFFECTS}
+                onAdd={(k) => addEffect(k as EffectKind)}
+                onRemove={(id) => removeEffect(id as number)}
+                onReorder={orderedReorder}
+                onPrimaryChange={(id, value) => {
+                  const eff = leftEffects.find((e) => e.id === id);
+                  const primaryKey = eff && EFFECT_CONTROLS[eff.kind].find((c) => c.kind !== 'header' && c.kind === 'select');
+                  if (primaryKey && 'key' in primaryKey) updateEffectParam(id as number, primaryKey.key, value);
+                }}
+                renderBody={(item) => {
+                  const eff = leftEffects.find((e) => e.id === item.id)!;
+                  const allControls = EFFECT_CONTROLS[eff.kind];
+                  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+                  const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+                  const bodyControls = primary
+                    ? allControls.filter((c) => !('key' in c) || c.key !== primary.key)
+                    : allControls;
+                  return (
+                    <ControlList
+                      controls={bodyControls}
+                      params={eff.params}
+                      onChange={(k, v) => updateEffectParam(eff.id, k, v)}
+                      bodyW={design.width}
+                      bodyH={design.height}
+                    />
+                  );
+                }}
+              />
+            );
+          })()}
         </aside>
 
         <section className="preview">
@@ -530,11 +581,6 @@ export function Lab() {
         </section>
 
         <aside className="side-panel right">
-          <LayerStackHead
-            title="Tails"
-            allKinds={RIGHT_PANEL_EFFECTS}
-            onAdd={addEffect}
-          />
           <div className="tail-minimap-wrap">
             <TailMinimap
               width={260}
@@ -550,299 +596,64 @@ export function Lab() {
               onRemoveTail={(id) => removeEffect(id)}
             />
           </div>
-          <LayerStack
-            title="Tails"
-            hideHead
-            effects={rightEffects}
-            allKinds={RIGHT_PANEL_EFFECTS}
-            expandedIds={expandedIds}
-            draggingId={draggingId}
-            onAdd={addEffect}
-            onRemove={removeEffect}
-            onToggleExpanded={toggleExpanded}
-            onReorder={reorderEffect}
-            onChange={updateEffectParam}
-            onDragStart={setDraggingId}
-            onDragEnd={() => setDraggingId(null)}
-            tailIndexById={tailIndexById}
-            tailColorSlotById={tailColorSlotById}
-          />
+          {(() => {
+            const items: LayerStackItem[] = rightEffects.map((eff) => {
+              const allControls = EFFECT_CONTROLS[eff.kind];
+              const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+              const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+              return {
+                id: eff.id,
+                kind: eff.kind,
+                primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
+                primaryOptions: primary ? primary.options : undefined,
+                accent: eff.kind === 'tail' ? tailColor(tailColorSlotById.get(eff.id) ?? 0) : undefined,
+                badge: eff.kind === 'tail' ? String((tailIndexById.get(eff.id) ?? 0) + 1) : undefined,
+              };
+            });
+            const orderedReorder = (ids: Array<number | string>) => {
+              setDesign((d) => {
+                const moved = ids as number[];
+                const otherEffects = d.effects.filter((e) => !RIGHT_PANEL_EFFECTS.includes(e.kind));
+                const byId = new Map(d.effects.map((e) => [e.id, e]));
+                const nextTails = moved.map((id) => byId.get(id)!).filter(Boolean);
+                return { ...d, effects: [...otherEffects, ...nextTails] };
+              });
+            };
+            return (
+              <KitLayerStack
+                title="Tails"
+                hideHead
+                items={items}
+                paletteKinds={RIGHT_PANEL_EFFECTS}
+                onAdd={(k) => addEffect(k as EffectKind)}
+                onRemove={(id) => removeEffect(id as number)}
+                onReorder={orderedReorder}
+                onPrimaryChange={(id, value) => {
+                  const eff = rightEffects.find((e) => e.id === id);
+                  const primaryKey = eff && EFFECT_CONTROLS[eff.kind].find((c) => c.kind !== 'header' && c.kind === 'select');
+                  if (primaryKey && 'key' in primaryKey) updateEffectParam(id as number, primaryKey.key, value);
+                }}
+                renderBody={(item) => {
+                  const eff = rightEffects.find((e) => e.id === item.id)!;
+                  const allControls = EFFECT_CONTROLS[eff.kind];
+                  const firstNonHeader = allControls.find((c) => c.kind !== 'header');
+                  const primary = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
+                  const bodyControls = primary
+                    ? allControls.filter((c) => !('key' in c) || c.key !== primary.key)
+                    : allControls;
+                  return (
+                    <ControlList
+                      controls={bodyControls}
+                      params={eff.params}
+                      onChange={(k, v) => updateEffectParam(eff.id, k, v)}
+                    />
+                  );
+                }}
+              />
+            );
+          })()}
         </aside>
       </main>
-    </div>
-  );
-}
-
-// --- Layer stack: add palette + draggable expandable cards ---------------
-
-interface LayerStackHeadProps {
-  title: string;
-  allKinds: EffectKind[];
-  onAdd: (kind: EffectKind) => void;
-}
-function LayerStackHead({ title, allKinds, onAdd }: LayerStackHeadProps) {
-  return (
-    <div className="layer-stack-head">
-      <h2 className="layer-stack-title">{title}</h2>
-      <div className="layers-add">
-        <span className="layers-add-label">+ Layer</span>
-        {allKinds.map((k) => (
-          <button key={k} onClick={() => onAdd(k)} className="add-layer-btn">
-            {k}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-interface LayerStackProps {
-  title: string;
-  effects: EffectInstance[];
-  allKinds: EffectKind[];
-  expandedIds: Set<number>;
-  draggingId: number | null;
-  onAdd: (kind: EffectKind) => void;
-  onRemove: (id: number) => void;
-  onToggleExpanded: (id: number) => void;
-  onReorder: (dragId: number, targetId: number, position: 'before' | 'after') => void;
-  onChange: (id: number, key: string, value: ParamValue) => void;
-  onDragStart: (id: number | null) => void;
-  onDragEnd: () => void;
-  bodyW?: number;
-  bodyH?: number;
-  tailIndexById?: Map<number, number>;
-  tailColorSlotById?: Map<number, number>;
-  hideHead?: boolean;
-}
-function LayerStack({
-  title,
-  effects,
-  allKinds,
-  expandedIds,
-  draggingId,
-  onAdd,
-  onRemove,
-  onToggleExpanded,
-  onReorder,
-  onChange,
-  onDragStart,
-  onDragEnd,
-  bodyW,
-  bodyH,
-  tailIndexById,
-  tailColorSlotById,
-  hideHead,
-}: LayerStackProps) {
-  // dropIndicator: { id, position } where `id` is the effect being hovered over
-  const [dropHint, setDropHint] = useState<{ id: number; position: 'before' | 'after' } | null>(null);
-
-  return (
-    <>
-      {!hideHead && <LayerStackHead title={title} allKinds={allKinds} onAdd={onAdd} />}
-      {effects.map((eff) => {
-        const isExpanded = expandedIds.has(eff.id);
-        const isDragging = draggingId === eff.id;
-        const showHintBefore = dropHint && dropHint.id === eff.id && dropHint.position === 'before';
-        const showHintAfter = dropHint && dropHint.id === eff.id && dropHint.position === 'after';
-        return (
-          <div key={eff.id} className="layer-wrap">
-            {showHintBefore && <div className="drop-hint" />}
-            <EffectCard
-              effect={eff}
-              expanded={isExpanded}
-              dragging={isDragging}
-              onToggleExpanded={() => onToggleExpanded(eff.id)}
-              onRemove={() => onRemove(eff.id)}
-              onChange={(key, value) => onChange(eff.id, key, value)}
-              onDragStart={() => onDragStart(eff.id)}
-              onDragEnd={() => {
-                onDragEnd();
-                setDropHint(null);
-              }}
-              onDragOver={(e) => {
-                if (draggingId === null || draggingId === eff.id) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-                setDropHint({ id: eff.id, position });
-              }}
-              onDragLeave={() => {
-                setDropHint((h) => (h && h.id === eff.id ? null : h));
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (draggingId === null || draggingId === eff.id) return;
-                const dragKind = effects.find((x) => x.id === draggingId)?.kind;
-                if (!dragKind) return;
-                const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                const position: 'before' | 'after' = e.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-                onReorder(draggingId, eff.id, position);
-                setDropHint(null);
-              }}
-              bodyW={bodyW}
-              bodyH={bodyH}
-              tailIndex={eff.kind === 'tail' ? tailIndexById?.get(eff.id) : undefined}
-              tailColorSlot={eff.kind === 'tail' ? tailColorSlotById?.get(eff.id) : undefined}
-            />
-            {showHintAfter && <div className="drop-hint" />}
-          </div>
-        );
-      })}
-      {effects.length === 0 && <div className="layers-empty">No layers — add one above.</div>}
-    </>
-  );
-}
-
-interface EffectCardProps {
-  effect: EffectInstance;
-  expanded: boolean;
-  dragging: boolean;
-  onToggleExpanded: () => void;
-  onRemove: () => void;
-  onChange: (key: string, value: ParamValue) => void;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-  onDragOver: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragLeave: () => void;
-  onDrop: (e: React.DragEvent<HTMLDivElement>) => void;
-  bodyW?: number;
-  bodyH?: number;
-  tailIndex?: number;
-  tailColorSlot?: number;
-}
-function EffectCard({
-  effect,
-  expanded,
-  dragging,
-  onToggleExpanded,
-  onRemove,
-  onChange,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  bodyW,
-  bodyH,
-  tailIndex,
-  tailColorSlot,
-}: EffectCardProps) {
-  const accent = tailColorSlot !== undefined ? tailColor(tailColorSlot) : undefined;
-  // Drag is opt-in: the card is only `draggable` while the user is pressing the
-  // ⋮⋮ handle. Without this, the whole card swallows pointer events to inner
-  // controls (sliders, color pickers) since `draggable` intercepts the drag start.
-  const [draggable, setDraggable] = useState(false);
-  return (
-    <div
-      className={`effect-card ${expanded ? 'is-expanded' : 'is-collapsed'} ${dragging ? 'is-dragging' : ''} ${accent ? 'has-accent' : ''}`}
-      style={accent ? ({ '--tail-accent': accent } as React.CSSProperties) : undefined}
-      draggable={draggable}
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(effect.id));
-        onDragStart();
-      }}
-      onDragEnd={() => {
-        setDraggable(false);
-        onDragEnd();
-      }}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
-      {(() => {
-        // Hoist the effect's primary mode/shape select into the title bar.
-        // We treat the first non-header control as primary when it's a
-        // select — that's `mode` on fill, `shape` on tail; spikes / stroke
-        // / shadow have none.
-        const allControls = EFFECT_CONTROLS[effect.kind];
-        const firstNonHeader = allControls.find((c) => c.kind !== 'header');
-        const primarySelect = firstNonHeader && firstNonHeader.kind === 'select' ? firstNonHeader : null;
-        const bodyControls = primarySelect
-          ? allControls.filter((c) => !('key' in c) || c.key !== primarySelect.key)
-          : allControls;
-        const primaryValue = primarySelect
-          ? String(effect.params[primarySelect.key] ?? primarySelect.default)
-          : '';
-        return (
-          <>
-            <div className="effect-head">
-              {tailIndex !== undefined ? (
-                <>
-                  <span
-                    className="effect-index-badge drag-handle"
-                    title="Drag to reorder · click to toggle"
-                    aria-label={`tail ${tailIndex + 1} — drag to reorder, click to toggle`}
-                    onMouseDown={() => setDraggable(true)}
-                    onMouseUp={() => setDraggable(false)}
-                    onClick={(e) => { e.stopPropagation(); onToggleExpanded(); }}
-                  >
-                    {tailIndex + 1}
-                  </span>
-                  {primarySelect ? (
-                    <select
-                      className="effect-kind-select"
-                      value={primaryValue}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => onChange(primarySelect.key, e.target.value)}
-                    >
-                      {primarySelect.options.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="effect-kind">{effect.kind}</span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <span
-                    className="drag-handle"
-                    aria-hidden="true"
-                    title="Drag to reorder"
-                    onMouseDown={() => setDraggable(true)}
-                    onMouseUp={() => setDraggable(false)}
-                  >
-                    <DragHandleIcon />
-                  </span>
-                  {primarySelect ? (
-                    <select
-                      className="effect-kind-select"
-                      value={primaryValue}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => onChange(primarySelect.key, e.target.value)}
-                    >
-                      {primarySelect.options.map((o) => (
-                        <option key={o} value={o}>{o}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="effect-kind">{effect.kind}</span>
-                  )}
-                </>
-              )}
-              <button
-                className="card-remove"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
-                title="Remove layer"
-                aria-label="Remove layer"
-              >
-                ✕
-              </button>
-            </div>
-            {(
-              <div className="effect-body">
-                <ControlList controls={bodyControls} params={effect.params} onChange={onChange} bodyW={bodyW} bodyH={bodyH} />
-              </div>
-            )}
-          </>
-        );
-      })()}
     </div>
   );
 }
@@ -1083,15 +894,3 @@ function combineColor(rgb: string, alpha: number): string {
   return `${rgb}${a.toString(16).padStart(2, '0')}`;
 }
 
-function DragHandleIcon() {
-  return (
-    <svg width="12" height="16" viewBox="0 0 8 16" fill="currentColor" aria-hidden="true">
-      <circle cx="2" cy="3" r="1.1" />
-      <circle cx="6" cy="3" r="1.1" />
-      <circle cx="2" cy="8" r="1.1" />
-      <circle cx="6" cy="8" r="1.1" />
-      <circle cx="2" cy="13" r="1.1" />
-      <circle cx="6" cy="13" r="1.1" />
-    </svg>
-  );
-}
