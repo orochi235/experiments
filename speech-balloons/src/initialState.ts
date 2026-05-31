@@ -23,7 +23,6 @@ export function initialRuntime(): RuntimeState {
     fontSize: 28,
     text: 'Hello!',
     fitToContent: false,
-    zoom: 1.2,
   };
 }
 

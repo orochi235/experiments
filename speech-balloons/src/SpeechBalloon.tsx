@@ -28,6 +28,7 @@ import { computeMatPlateau } from './plateauMat';
 interface Props {
   design: DesignState;
   runtime: RuntimeState;
+  zoom?: number;
 }
 
 // --- Text measurement (avoids a double-render bbox roundtrip) -------------
@@ -280,7 +281,7 @@ function autoOuterRoundness(W: number, H: number, baseR: number, bw: number): nu
 
 // --- Component -----------------------------------------------------------
 
-export function SpeechBalloon({ design, runtime }: Props) {
+export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   // Body dimensions: either design-time width/height or fit-to-content.
   const { W, H } = useMemo(() => {
     if (!runtime.fitToContent) return { W: design.width, H: design.height };
@@ -965,7 +966,7 @@ export function SpeechBalloon({ design, runtime }: Props) {
     bodyAndBubblesPolys,
   ]);
 
-  const zoom = Math.max(0.1, runtime.zoom);
+  const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
   const pxH = (H + 2 * reach) * zoom;
   return (

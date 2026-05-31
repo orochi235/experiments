@@ -75,6 +75,7 @@ export function Lab() {
   const store = useLabStore();
   const updateUndo = store.updateWorkspaceUndoStack;
   const currentUndoStack = store.workspaces.find((w) => w.id === 'balloon')?.undoStack ?? emptyStack();
+  const view = store.workspaces.find((w) => w.id === 'balloon')?.view ?? { zoom: 1.2, pan: { x: 0, y: 0 } };
 
   const setDesign: React.Dispatch<React.SetStateAction<DesignState>> = useCallback((next) => {
     const nextDesign = typeof next === 'function' ? (next as (d: DesignState) => DesignState)(design) : next;
@@ -273,8 +274,8 @@ export function Lab() {
     const fitW = (rect.width - pad * 2) / (design.width + 2 * reach);
     const fitH = (rect.height - pad * 2) / (design.height + 2 * reach);
     const fit = Math.max(0.1, Math.min(4, Math.min(fitW, fitH)));
-    setRuntime((r) => ({ ...r, zoom: fit }));
-  }, [design.width, design.height, reach]);
+    store.updateWorkspaceView('balloon', { ...view, zoom: fit });
+  }, [design.width, design.height, reach, store, view]);
   const tailEffects = design.effects.filter((e) => e.kind === 'tail');
   // Sticky palette slot per tail id. Explicit slots in params win; tails
   // missing one (legacy snapshots) get the next-available slot derived in
@@ -533,23 +534,23 @@ export function Lab() {
 
           <section className="sb-preview">
             <div className="sb-preview-stage" ref={stageRef}>
-              <SpeechBalloon design={design} runtime={runtime} />
+              <SpeechBalloon design={design} runtime={runtime} zoom={view.zoom} />
             </div>
             <div className="sb-zoom-bar">
               <span className="sb-zoom-label">Zoom</span>
-              <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.max(0.1, r.zoom - 0.1) }))} title="Zoom out">−</button>
+              <button type="button" onClick={() => store.updateWorkspaceView('balloon', { ...view, zoom: Math.max(0.1, view.zoom - 0.1) })} title="Zoom out">−</button>
               <input
                 className="sb-zoom-slider"
                 type="range"
                 min={0.1}
                 max={4}
                 step={0.05}
-                value={runtime.zoom}
-                onChange={(e) => setRuntime((r) => ({ ...r, zoom: Number(e.target.value) }))}
+                value={view.zoom}
+                onChange={(e) => store.updateWorkspaceView('balloon', { ...view, zoom: Number(e.target.value) })}
               />
-              <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: Math.min(4, r.zoom + 0.1) }))} title="Zoom in">+</button>
-              <span className="sb-zoom-readout">{Math.round(runtime.zoom * 100)}%</span>
-              <button type="button" onClick={() => setRuntime((r) => ({ ...r, zoom: 1 }))} title="Reset to 100%">1:1</button>
+              <button type="button" onClick={() => store.updateWorkspaceView('balloon', { ...view, zoom: Math.min(4, view.zoom + 0.1) })} title="Zoom in">+</button>
+              <span className="sb-zoom-readout">{Math.round(view.zoom * 100)}%</span>
+              <button type="button" onClick={() => store.updateWorkspaceView('balloon', { ...view, zoom: 1 })} title="Reset to 100%">1:1</button>
               <button type="button" onClick={fitZoomToStage} title="Fit content to viewport">Fit</button>
             </div>
           </section>

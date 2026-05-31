@@ -37,12 +37,14 @@ function migrateStorage() {
         }
       }
     }
+    const oldRuntime = old.runtime as Record<string, unknown>;
+    const oldZoom = typeof oldRuntime.zoom === 'number' ? oldRuntime.zoom : 1.2;
     const workspace = {
       id: 'balloon',
       instrumentName: '__singleton__',
       config: design,
       state: old.runtime,
-      view: { zoom: 1, pan: { x: 0, y: 0 } },
+      view: { zoom: oldZoom, pan: { x: 0, y: 0 } },
     };
     localStorage.setItem(NEW_WORKSPACES_KEY, JSON.stringify([workspace]));
     localStorage.removeItem(STORAGE_KEY);

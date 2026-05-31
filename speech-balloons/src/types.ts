@@ -19,9 +19,6 @@ export interface RuntimeState {
   fontSize: number;
   text: string;
   fitToContent: boolean;
-  /** Pixels per user-unit. Body apparent size = bodyW × zoom regardless
-   *  of tail / morph extents. */
-  zoom: number;
 }
 
 export interface DesignState {
