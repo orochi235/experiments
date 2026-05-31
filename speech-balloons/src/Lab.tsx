@@ -7,6 +7,7 @@ import {
   PropertyPanel,
   SelectRow,
   SliderRow,
+  TextRow,
 } from '@labkit/react';
 import { SpeechBalloon } from './SpeechBalloon';
 import { CurveEditor, type ControlPoint } from './CurveEditor';
@@ -1056,20 +1057,17 @@ function renderRow(
   }
   if (c.kind === 'text') {
     return (
-      <label key={c.key} className="field text">
-        <span>{label}</span>
-        <textarea
-          className="text-multiline"
-          rows={2}
-          value={String(value ?? c.default)}
-          onChange={(e) => onChange(c.key, e.target.value)}
-        />
-      </label>
+      <TextRow
+        key={c.key}
+        label={label}
+        value={String(value ?? c.default)}
+        onChange={(v) => onChange(c.key, v)}
+      />
     );
   }
   // Exhaustiveness check — every LabControl kind must be handled above.
-  // @ts-ignore
   const _exhaustive: never = c;
+  void _exhaustive;
   throw new Error(`[Lab] unhandled control kind: ${(c as { kind: string }).kind}`);
 }
 
