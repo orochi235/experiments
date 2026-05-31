@@ -25,7 +25,7 @@
   - [ ] Puffs (sinusoidal bumps — cloud-like outline)
   - [ ] Scallops (rounded bumps)
   - [ ] Bites (inverse Puffs, perimeter punches inward)
-  - [ ] Spikes (the multi-peak version of the classic tail)
+  - [x] Spikes (multi-peak tail variant) — lightning tails render this
 - [ ] **Component-zone decorations** (badge lab's `EffectModule.Component` + `zone: 'background' | 'foreground' | 'mask'`):
   - [ ] Bevel
   - [ ] Sheen
@@ -42,6 +42,7 @@
   highlight overlay.
 - [ ] **Anchor-point dragging for label position** inside the body (mentioned in
   the original HANDOFF). Today text always centers in the body box.
+  - (Labkit's `<LayerStack>` minimap supports drag handles; could adapt to text positioning.)
 - [ ] **Named presets / preset library** — save current snapshot as a named preset,
   load by name.
 - [ ] **Cross-panel single effect stack?** The current split (fill on left, others
