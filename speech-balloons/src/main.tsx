@@ -1,3 +1,8 @@
+// Weasel-theme tokens are required by weasel-ui's CurveEditor (and other
+// passthrough components). @labkit/react's bundled styles.css doesn't include
+// them, so the consumer pulls them in directly. Path resolved by vite via the
+// weasel monorepo's alias generator (see vite.config.ts → weaselAliases).
+import '@orochi235/weasel-theme/tokens.css';
 import '@labkit/react/styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
