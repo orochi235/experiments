@@ -210,7 +210,19 @@ export function Lab() {
       clone.style.visibility = 'hidden';
       document.body.appendChild(clone);
       try {
-        await inlineSvgTextAsPaths(clone);
+        // wawoff2's emscripten runtime can hang under vite dev's CJS shim
+        // (onRuntimeInitialized never fires). Cap the inline-paths step at
+        // 5s; if it hangs, fall back to keeping text as <text> elements so
+        // the download still works (consumers without the font will see a
+        // system fallback rather than getting a stuck button).
+        await Promise.race([
+          inlineSvgTextAsPaths(clone),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error('text-as-paths timeout')), 5000),
+          ),
+        ]).catch((e) => {
+          console.warn('[downloadSvg] text-as-paths failed, exporting with <text> elements:', e);
+        });
       } finally {
         document.body.removeChild(clone);
       }
