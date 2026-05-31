@@ -140,6 +140,20 @@ export function TailMinimap(props: TailMinimapProps) {
         const proj = perimeterAtAngle(a);
         snapped[i * 2] = { x: proj.x, y: proj.y };
         onUpdateTail(t.id, { angle: normalizeDeg((a * 180) / Math.PI) });
+        // Reproject the tip from the new base + current (outAngle, length, arc).
+        // Without this, the tip handle stays at its pre-drag screen position
+        // while the base orbits — the tail appears to stretch or fold weirdly.
+        const r = ((t.outAngle ?? 0) * Math.PI) / 180;
+        const ox = Math.cos(a + r);
+        const oy = Math.sin(a + r);
+        const px = -oy;
+        const py = ox;
+        const L = (t.length ?? 60) * scale;
+        const arcShift = (t.arc ?? 0) * L;
+        snapped[i * 2 + 1] = {
+          x: proj.x + ox * L + px * arcShift,
+          y: proj.y + oy * L + py * arcShift,
+        };
       } else if (tipMoved) {
         // Drag tip = keep attach fixed; recompute outAngle + length from the
         // vector (newTip - attach). With arc !== 0 the tail's drawn tip sits
