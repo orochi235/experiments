@@ -89,17 +89,23 @@ export function TailMinimap(props: TailMinimapProps) {
   };
 
   // Each tail contributes [base, tip] in plot coords (yRange flipped so
-  // model space == SVG space, no y-axis sign mental load).
+  // model space == SVG space, no y-axis sign mental load). The tip's outward
+  // direction is the perimeter NORMAL at the attach point rotated by outAngle
+  // — same basis SpeechBalloon uses via rotateAttachByOutAngle. For non-
+  // elliptical bodies (rounded rect, cloud, polygon) the normal differs from
+  // the radial, and using radial here causes the tip to visibly jump on
+  // drag-end as the live (normal-basis) drag is replaced by the (radial)
+  // derived position.
   const derivedPoints: ControlPoint[] = useMemo(() => {
     const out: ControlPoint[] = [];
     for (const t of tails) {
       const a = (t.angle * Math.PI) / 180;
       const b = perimeterAtAngle(a);
-      // Rotate the radial outward basis by outAngle so the visual reflects
-      // the slider state (and matches the inverse computation on tip drag).
       const r = (t.outAngle * Math.PI) / 180;
-      const ox = Math.cos(a + r);
-      const oy = Math.sin(a + r);
+      const cr = Math.cos(r);
+      const sr = Math.sin(r);
+      const ox = b.nx * cr - b.ny * sr;
+      const oy = b.nx * sr + b.ny * cr;
       const px = -oy;
       const py = ox;
       const L = t.length * scale;
@@ -160,18 +166,20 @@ export function TailMinimap(props: TailMinimapProps) {
         };
       } else if (tipMoved) {
         // Drag tip = keep attach fixed; recompute outAngle + length from the
-        // vector (newTip - attach). With arc !== 0 the tail's drawn tip sits
-        // at angle (a + outAngle + atan(arc)) from attach with magnitude
-        // L · sqrt(1 + arc²), so invert that relationship.
+        // vector (newTip - attach). The rendered tail's tip sits at
+        //   normalAngle + outAngle + atan(arc)
+        // from attach with magnitude L·sqrt(1 + arc²) (normalAngle =
+        // atan2(ny, nx) of the perimeter normal — radial only on ellipses).
         const a = (t.angle * Math.PI) / 180;
         const b = perimeterAtAngle(a);
         const dx = newTip.x - b.x;
         const dy = newTip.y - b.y;
         const v = Math.hypot(dx, dy);
         if (v < 1) continue;
+        const normalAngle = Math.atan2(b.ny, b.nx);
         const arcAng = Math.atan(t.arc);
         const tipDir = Math.atan2(dy, dx);
-        let outAngle = ((tipDir - a - arcAng) * 180) / Math.PI;
+        let outAngle = ((tipDir - normalAngle - arcAng) * 180) / Math.PI;
         // Wrap to (-180, 180] then clamp to the slider's range.
         while (outAngle > 180) outAngle -= 360;
         while (outAngle <= -180) outAngle += 360;
@@ -180,8 +188,10 @@ export function TailMinimap(props: TailMinimapProps) {
         // Reproject the tip onto the clamped (outAngle, length, arc) so the
         // visual handle doesn't drift past the slider clamps during drag.
         const r = (outAngle * Math.PI) / 180;
-        const ox = Math.cos(a + r);
-        const oy = Math.sin(a + r);
+        const cr = Math.cos(r);
+        const sr = Math.sin(r);
+        const ox = b.nx * cr - b.ny * sr;
+        const oy = b.nx * sr + b.ny * cr;
         const px = -oy;
         const py = ox;
         const L = length * scale;
