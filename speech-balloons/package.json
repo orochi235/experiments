@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@labkit/react": "file:../../labkit",
+    "@orochi235/weasel": "file:../../weasel",
     "clipper2-ts": "^2.0.1-17",
     "opentype.js": "^2.0.0",
     "react": "^18.3.1",
