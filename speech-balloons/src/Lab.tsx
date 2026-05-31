@@ -92,45 +92,50 @@ export function Lab() {
 
   const stageRef = useRef<HTMLDivElement | null>(null);
 
-  // Debounced undo snapshot: 300ms after the last change.
+  // Track the last "settled" state. On the next settle, push THIS into the
+  // past (matching labkit's undo semantics, where past contains history not
+  // including current). On restore, refresh this to the restored snapshot
+  // so we don't push it back into past on the per-key fan-out renders.
+  const prevSettledRef = useRef<{ design: DesignState; runtime: RuntimeState } | null>(null);
   const snapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isRestoringRef = useRef(false);
+
   useEffect(() => {
-    if (isRestoringRef.current) {
-      isRestoringRef.current = false;
+    if (prevSettledRef.current === null) {
+      // First mount — seed the previous-settled snapshot.
+      prevSettledRef.current = { design, runtime };
       return;
     }
     if (snapTimerRef.current) clearTimeout(snapTimerRef.current);
     snapTimerRef.current = setTimeout(() => {
-      updateUndo('balloon', (prev) => {
-        const stack = prev ?? emptyStack();
-        const last = stack.past[stack.past.length - 1];
-        const snap = { design, runtime };
-        // Skip the push when the most recent snapshot already equals this
-        // one. Prevents the multi-key setConfig fan-out (one render per
-        // top-level key change) from echoing a restored undo state back
-        // into the past stack as a new entry.
-        if (last && JSON.stringify(last) === JSON.stringify(snap)) return stack;
-        return pushSnapshot(stack, snap, 200);
-      });
+      const prev = prevSettledRef.current!;
+      const current = { design, runtime };
+      if (JSON.stringify(prev) === JSON.stringify(current)) {
+        // No real change since last settle. Common during multi-key
+        // setConfig fan-out after a restore.
+        return;
+      }
+      updateUndo('balloon', (stack) => pushSnapshot(stack ?? emptyStack(), prev, 200));
+      prevSettledRef.current = current;
     }, 300);
   }, [design, runtime, updateUndo]);
 
   const undo = useCallback(() => {
+    if (currentUndoStack.past.length === 0) return;
     const result = undoStackOp(currentUndoStack, { design, runtime });
     if (!result) return;
-    isRestoringRef.current = true;
     const snap = result.snapshot as { design: DesignState; runtime: RuntimeState };
+    prevSettledRef.current = snap;  // refresh guard so the post-restore renders don't push
     setDesign(snap.design);
     setRuntime(snap.runtime);
     updateUndo('balloon', result.stack);
   }, [design, runtime, currentUndoStack, updateUndo, setDesign, setRuntime]);
 
   const redo = useCallback(() => {
+    if (currentUndoStack.future.length === 0) return;
     const result = redoStackOp(currentUndoStack, { design, runtime });
     if (!result) return;
-    isRestoringRef.current = true;
     const snap = result.snapshot as { design: DesignState; runtime: RuntimeState };
+    prevSettledRef.current = snap;  // same — guard the post-restore fan-out
     setDesign(snap.design);
     setRuntime(snap.runtime);
     updateUndo('balloon', result.stack);
