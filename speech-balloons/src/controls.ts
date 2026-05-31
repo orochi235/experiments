@@ -3,7 +3,7 @@ import type { BalloonBase, EffectKind, ParamBag } from './types';
 export type LabControl =
   | { key: string; label?: string; kind: 'range'; min: number; max: number; step: number; default: number; hideWhen?: (params: ParamBag) => boolean; maxFn?: (ctx: { W: number; H: number }) => number; unit?: string; format?: (v: number) => string }
   | { key: string; label?: string; kind: 'select'; options: string[]; default: string; hideWhen?: (params: ParamBag) => boolean }
-  | { key: string; label?: string; kind: 'color'; default: string; hideWhen?: (params: ParamBag) => boolean }
+  | { key: string; label?: string; kind: 'color'; default: string; alpha?: boolean; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'text'; default: string; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'toggle'; default: boolean; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'curve'; min: number; max: number; step: number; defaults: number[]; hideWhen?: (params: ParamBag) => boolean }
@@ -139,7 +139,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
 
   stroke: [
     { key: 'width', label: 'Width', kind: 'range', min: 0.5, max: 12, step: 0.5, default: 2, unit: 'px' },
-    { key: 'color', label: 'Color', kind: 'color', default: '#161921' },
+    { key: 'color', label: 'Color', kind: 'color', default: '#161921', alpha: true },
   ],
 
   shadow: [

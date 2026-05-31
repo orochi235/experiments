@@ -82,7 +82,7 @@ body {
 .brand h1 {
   font: 700 1.15rem/1 var(--font-display);
   letter-spacing: 0.02em;
-  color: #fff;
+  color: var(--fg);
   white-space: nowrap;
 }
 
@@ -215,7 +215,7 @@ body {
 }
 .panel-section h2 {
   font: 300 1.05rem/1.2 var(--font-display);
-  color: #fff;
+  color: var(--fg);
   letter-spacing: 0.01em;
   margin: 0;
 }
@@ -295,7 +295,7 @@ body {
 .side-panel.right .subpanel { grid-template-columns: repeat(2, 1fr); }
 .subpanel-title {
   font: 400 0.72rem/1 var(--font-display);
-  color: #fff;
+  color: var(--fg);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 0;
@@ -470,6 +470,24 @@ body {
 .field.color > input[type=range].color-alpha::-moz-range-track {
   background: rgba(126, 200, 227, 0.10);
 }
+/* Slider is disabled when the consumer of this color drops alpha. Track
+ * dimmer, thumb hidden, no pointer affordance. */
+.field.color.alpha-disabled > input[type=range].color-alpha {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.field.color.alpha-disabled > input[type=range].color-alpha::-webkit-slider-runnable-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+.field.color.alpha-disabled > input[type=range].color-alpha::-moz-range-track {
+  background: rgba(255, 255, 255, 0.05);
+}
+.field.color.alpha-disabled > input[type=range].color-alpha::-webkit-slider-thumb {
+  background: transparent;
+}
+.field.color.alpha-disabled > input[type=range].color-alpha::-moz-range-thumb {
+  background: transparent;
+}
 
 /* ── Sliders ──────────────────────────────────────────────── */
 
@@ -516,7 +534,7 @@ input[type=range]::-moz-range-thumb {
 .side-panel > .panel-section + .layer-stack-head { margin-top: 14px; }
 .layer-stack-title {
   font: 300 1.85rem/1.1 var(--font-display);
-  color: #fff;
+  color: var(--fg);
   letter-spacing: 0.01em;
   padding: 0 4px;
   /* Indent so the header's left edge aligns with the body text below
@@ -663,7 +681,7 @@ input[type=range]::-moz-range-thumb {
 }
 .effect-kind {
   font: 500 0.9rem/1 var(--font-display);
-  color: #fff;
+  color: var(--fg);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -680,7 +698,7 @@ input[type=range]::-moz-range-thumb {
  * Same typography as .effect-kind so it visually replaces the kind label. */
 .effect-kind-select {
   font: 500 0.9rem/1 var(--font-display);
-  color: #fff;
+  color: var(--fg);
   /* Uppercase the collapsed anchor display — Chromium-based browsers
    * leave the open <option> menu in its natural case so the dropdown
    * items stay readable. */

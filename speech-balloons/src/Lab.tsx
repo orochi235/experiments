@@ -395,7 +395,7 @@ export function Lab() {
             label="Background"
             value={design.bg}
             onChange={(v) => setDesign((d) => ({ ...d, bg: v }))}
-          />
+          /> {/* canvas bg is re-parsed to rgba(...,0.7) — alpha intentionally not exposed */}
         </div>
         <div className="toolbar-group right">
           <button onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
@@ -476,6 +476,7 @@ export function Lab() {
             <ColorField
               label="Text color"
               value={design.textColor}
+              alphaSupported
               onChange={(v) => setDesign((d) => ({ ...d, textColor: v }))}
             />
           </Section>
@@ -1082,6 +1083,7 @@ function renderControl(
         key={c.key}
         label={label}
         value={String(value ?? c.default)}
+        alphaSupported={c.alpha === true}
         onChange={(v) => onChange(c.key, v)}
       />
     );
@@ -1166,16 +1168,20 @@ interface ColorFieldProps {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  // False (default) when the consumer of this color drops the alpha channel
+  // — the slider is rendered disabled so the user isn't misled into thinking
+  // they can tune opacity on it.
+  alphaSupported?: boolean;
 }
-function ColorField({ label, value, onChange }: ColorFieldProps) {
+function ColorField({ label, value, onChange, alphaSupported = false }: ColorFieldProps) {
   const { rgb, alpha } = splitColor(value);
   return (
-    <label className="field color">
+    <label className={`field color${alphaSupported ? '' : ' alpha-disabled'}`}>
       <span>{label}</span>
       <input
         type="color"
         value={rgb}
-        onChange={(e) => onChange(combineColor(e.target.value, alpha))}
+        onChange={(e) => onChange(combineColor(e.target.value, alphaSupported ? alpha : 1))}
       />
       <input
         type="range"
@@ -1183,8 +1189,10 @@ function ColorField({ label, value, onChange }: ColorFieldProps) {
         min={0}
         max={1}
         step={0.01}
-        value={alpha}
+        value={alphaSupported ? alpha : 1}
         tabIndex={-1}
+        disabled={!alphaSupported}
+        title={alphaSupported ? undefined : 'opacity not wired up for this color'}
         onChange={(e) => onChange(combineColor(rgb, Number(e.target.value)))}
       />
     </label>
