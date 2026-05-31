@@ -218,20 +218,23 @@ body {
 }
 
 .sb-field select,
-.sb-field input[type=text] {
+.sb-field input[type=text],
+.sb-field textarea {
   background: rgba(0, 0, 0, 0.35);
   color: var(--lk-text, var(--fg));
   border: 1px solid var(--lk-border, var(--panel-border));
   border-radius: var(--lk-radius, var(--radius-sm));
   padding: 6px 8px;
-  font: 400 0.85rem/1 var(--font-sans);
+  font-family: var(--lk-font, var(--font-sans));
+  font-size: 0.85rem;
+  font-weight: var(--lk-font-weight-light, 300);
+  line-height: 1;
 }
 .sb-field select:focus,
 .sb-field input[type=text]:focus { outline: 1px solid var(--accent); }
 
 .sb-field-text .sb-text-multiline {
   min-width: 200px;
-  font: inherit;
   background: rgba(0, 0, 0, 0.3);
   color: var(--lk-text, var(--fg));
   border: 1px solid var(--lk-border, var(--panel-border));
@@ -239,7 +242,8 @@ body {
   padding: 4px 6px;
   resize: vertical;
   line-height: 1.2;
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--lk-font, ui-sans-serif, system-ui, sans-serif);
+  font-size: 0.85rem;
 }
 
 /* ── Tail minimap ─────────────────────────────────────────── */
