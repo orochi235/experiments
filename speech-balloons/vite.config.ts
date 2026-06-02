@@ -21,6 +21,13 @@ export default defineConfig({
     alias: weaselAliases,
     dedupe: ['react', 'react-dom'],
   },
+  // Skip pre-bundling labkit. It's a file: workspace dep we rebuild often;
+  // pre-bundling caches stale and HMR can't replace the cached version.
+  // Excluding makes vite serve labkit's dist as-is, so a normal reload
+  // picks up rebuilds.
+  optimizeDeps: {
+    exclude: ['@labkit/react'],
+  },
   server: {
     port: 5180,
     open: true,
