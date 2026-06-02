@@ -61,6 +61,78 @@ function reorderWithinKindSet(
   return [...otherEffects, ...reordered];
 }
 
+// Module-scope so React preserves the component identity across Lab
+// re-renders. When this was defined inside Lab, every state change
+// produced a new function reference, which React treated as a brand-new
+// component type — remounting the entire layer-stack subtree (including
+// the contour CurveEditor) and breaking in-flight drags.
+interface EffectLayerStackProps {
+  title: string;
+  hideHead?: boolean;
+  effects: EffectInstance[];
+  kindSet: readonly EffectKind[];
+  bodyW?: number;
+  bodyH?: number;
+  decorate?: (eff: EffectInstance) => { accent?: string; badge?: string };
+  onAdd: (kind: EffectKind) => void;
+  onRemove: (id: number) => void;
+  onReorder: (kindSet: readonly EffectKind[], orderedIds: Array<number | string>) => void;
+  onPrimaryChange: (id: number, key: string, value: ParamValue) => void;
+  onUpdateParam: (id: number, key: string, value: ParamValue) => void;
+}
+function EffectLayerStack({
+  title, hideHead, effects, kindSet, bodyW, bodyH, decorate,
+  onAdd, onRemove, onReorder, onPrimaryChange, onUpdateParam,
+}: EffectLayerStackProps) {
+  const items: LayerStackItem[] = effects.map((eff) => {
+    const primary = getPrimarySelect(eff.kind);
+    const decoration = decorate ? decorate(eff) : {};
+    return {
+      id: eff.id,
+      kind: eff.kind,
+      primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
+      primaryOptions: primary ? primary.options : undefined,
+      ...decoration,
+    };
+  });
+  return (
+    <KitLayerStack
+      title={title}
+      hideHead={hideHead}
+      items={items}
+      paletteKinds={kindSet as unknown as string[]}
+      onAdd={(k) => onAdd(k as EffectKind)}
+      onRemove={(id) => onRemove(id as number)}
+      onReorder={(ids) => onReorder(kindSet, ids)}
+      onPrimaryChange={(id, value) => {
+        const eff = effects.find((e) => e.id === id);
+        if (!eff) return;
+        const primary = getPrimarySelect(eff.kind);
+        if (primary) onPrimaryChange(id as number, primary.key, value);
+      }}
+      renderBody={(item) => {
+        const eff = effects.find((e) => e.id === item.id);
+        if (!eff) return null;
+        const primary = getPrimarySelect(eff.kind);
+        const bodyControls = primary
+          ? EFFECT_CONTROLS[eff.kind].filter((c) => !('key' in c) || c.key !== primary.key)
+          : EFFECT_CONTROLS[eff.kind];
+        return (
+          <PropertyList pack="pairs">
+            <ControlList
+              controls={bodyControls}
+              params={eff.params}
+              onChange={(k, v) => onUpdateParam(eff.id, k, v)}
+              bodyW={bodyW}
+              bodyH={bodyH}
+            />
+          </PropertyList>
+        );
+      }}
+    />
+  );
+}
+
 const FONT_OPTIONS = [
   { label: 'Comic Neue', value: 'Comic Neue, system-ui, sans-serif' },
   { label: 'Bangers', value: 'Bangers, system-ui, sans-serif' },
@@ -387,64 +459,6 @@ export function Lab() {
 
   // --- Local panel component (captures Lab-scope handlers) -----------------
 
-  interface EffectLayerStackProps {
-    title: string;
-    hideHead?: boolean;
-    effects: EffectInstance[];
-    kindSet: readonly EffectKind[];
-    bodyW?: number;
-    bodyH?: number;
-    decorate?: (eff: EffectInstance) => { accent?: string; badge?: string };
-  }
-  function EffectLayerStack({ title, hideHead, effects, kindSet, bodyW, bodyH, decorate }: EffectLayerStackProps) {
-    const items: LayerStackItem[] = effects.map((eff) => {
-      const primary = getPrimarySelect(eff.kind);
-      const decoration = decorate ? decorate(eff) : {};
-      return {
-        id: eff.id,
-        kind: eff.kind,
-        primaryValue: primary ? String(eff.params[primary.key] ?? primary.default) : undefined,
-        primaryOptions: primary ? primary.options : undefined,
-        ...decoration,
-      };
-    });
-    return (
-      <KitLayerStack
-        title={title}
-        hideHead={hideHead}
-        items={items}
-        paletteKinds={kindSet as unknown as string[]}
-        onAdd={(k) => addEffect(k as EffectKind)}
-        onRemove={(id) => removeEffect(id as number)}
-        onReorder={(ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, kindSet, ids) }))}
-        onPrimaryChange={(id, value) => {
-          const eff = effects.find((e) => e.id === id);
-          if (!eff) return;
-          const primary = getPrimarySelect(eff.kind);
-          if (primary) updateEffectParam(id as number, primary.key, value);
-        }}
-        renderBody={(item) => {
-          const eff = effects.find((e) => e.id === item.id);
-          if (!eff) return null;
-          const primary = getPrimarySelect(eff.kind);
-          const bodyControls = primary
-            ? EFFECT_CONTROLS[eff.kind].filter((c) => !('key' in c) || c.key !== primary.key)
-            : EFFECT_CONTROLS[eff.kind];
-          return (
-            <PropertyList pack="pairs">
-              <ControlList
-                controls={bodyControls}
-                params={eff.params}
-                onChange={(k, v) => updateEffectParam(eff.id, k, v)}
-                bodyW={bodyW}
-                bodyH={bodyH}
-              />
-            </PropertyList>
-          );
-        }}
-      />
-    );
-  }
 
   return (
     <LabShell
@@ -580,6 +594,11 @@ export function Lab() {
               kindSet={MORPH_EFFECTS}
               bodyW={design.width}
               bodyH={design.height}
+              onAdd={addEffect}
+              onRemove={removeEffect}
+              onReorder={(ks, ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, ks, ids) }))}
+              onPrimaryChange={updateEffectParam}
+              onUpdateParam={updateEffectParam}
             />
 
             <EffectLayerStack
@@ -588,6 +607,11 @@ export function Lab() {
               kindSet={LEFT_PANEL_EFFECTS}
               bodyW={design.width}
               bodyH={design.height}
+              onAdd={addEffect}
+              onRemove={removeEffect}
+              onReorder={(ks, ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, ks, ids) }))}
+              onPrimaryChange={updateEffectParam}
+              onUpdateParam={updateEffectParam}
             />
           </aside>
 
@@ -644,6 +668,11 @@ export function Lab() {
                     }
                   : {}
               }
+              onAdd={addEffect}
+              onRemove={removeEffect}
+              onReorder={(ks, ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, ks, ids) }))}
+              onPrimaryChange={updateEffectParam}
+              onUpdateParam={updateEffectParam}
             />
           </aside>
         </div>
@@ -660,9 +689,10 @@ interface CurveBlockProps {
   min: number;
   max: number;
   step: number;
+  defaults?: readonly number[];
   onChange: (vals: number[]) => void;
 }
-function CurveBlock({ label, values, min, max, step, onChange }: CurveBlockProps) {
+function CurveBlock({ label, values, min, max, step, defaults, onChange }: CurveBlockProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
@@ -680,7 +710,7 @@ function CurveBlock({ label, values, min, max, step, onChange }: CurveBlockProps
     <div className="sb-curve-block lk-property-group__span" ref={wrapRef}>
       {label && <h3 className="sb-curve-label">{label}</h3>}
       {width > 0 && (
-        <KitCurveField values={values} min={min} max={max} step={step} width={width} onChange={onChange} />
+        <KitCurveField values={values} min={min} max={max} step={step} width={width} defaults={defaults} onChange={onChange} />
       )}
     </div>
   );
@@ -799,6 +829,7 @@ function renderRow(
         min={c.min}
         max={c.max}
         step={c.step}
+        defaults={c.defaults}
         onChange={(vals) => onChange(c.key, vals)}
       />
     );
