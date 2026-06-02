@@ -729,6 +729,38 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     };
   }, [sampler, W, H]);
 
+  // Convert the user's contour curve into N gradient stops along the lit
+  // axis (offset 0 = lit rim, 0.5 = centroid, 1 = far shadow). The contour
+  // runs from rim (t=0) to center (t=1); we map t ↦ offset = t/2 and use
+  // max(0, contour_y(t)) as the brightness multiplier — negative y values
+  // are "in shadow" and contribute nothing. Linear interp keeps it cheap.
+  const contourStops = useMemo(() => {
+    const flat = fillRender.contour;
+    const pts: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i + 1 < flat.length; i += 2) pts.push({ x: flat[i]!, y: flat[i + 1]! });
+    pts.sort((a, b) => a.x - b.x);
+    const interp = (x: number): number => {
+      if (pts.length === 0) return 0;
+      if (x <= pts[0]!.x) return pts[0]!.y;
+      if (x >= pts[pts.length - 1]!.x) return pts[pts.length - 1]!.y;
+      let i = 0;
+      while (i < pts.length - 1 && pts[i + 1]!.x < x) i++;
+      const a = pts[i]!;
+      const b = pts[i + 1]!;
+      const u = (x - a.x) / (b.x - a.x);
+      return a.y + (b.y - a.y) * u;
+    };
+    const N = 8;
+    const stops: Array<{ offset: number; brightness: number }> = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const y = interp(t);
+      stops.push({ offset: t / 2, brightness: Math.max(0, y) });
+    }
+    stops.push({ offset: 1, brightness: 0 });
+    return stops;
+  }, [fillRender.contour]);
+
   const domeLayers = useMemo(() => {
     if (fillRender.mode !== 'dome') return [];
     const bb = polysBBox(bodyAndBubblesPolys);
@@ -863,21 +895,14 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                         x1={layer.x1} y1={layer.y1}
                         x2={layer.x2} y2={layer.y2}
                       >
-                        <stop
-                          offset="0"
-                          stopColor={fillRender.highlightColor}
-                          stopOpacity={fillRender.amount * layer.intensity}
-                        />
-                        <stop
-                          offset="0.6"
-                          stopColor={fillRender.highlightColor}
-                          stopOpacity={fillRender.amount * layer.intensity * 0.45}
-                        />
-                        <stop
-                          offset="1"
-                          stopColor={fillRender.highlightColor}
-                          stopOpacity="0"
-                        />
+                        {contourStops.map((s, j) => (
+                          <stop
+                            key={j}
+                            offset={s.offset}
+                            stopColor={fillRender.highlightColor}
+                            stopOpacity={fillRender.amount * layer.intensity * s.brightness}
+                          />
+                        ))}
                       </linearGradient>
                     </Fragment>
                   ))}
