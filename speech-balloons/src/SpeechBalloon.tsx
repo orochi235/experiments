@@ -1013,13 +1013,15 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       }
       let lo = 0;
       let hi = Math.max(1, Math.max(mxX - mnX, mxY - mnY) / 2);
-      for (let i = 0; i < 18; i++) {
+      // Tight precision: we want a near-degenerate sliver so the stroked
+      // contour reads as a thin centerline rather than a filled ribbon.
+      for (let i = 0; i < 30; i++) {
         const mid = (lo + hi) / 2;
         if (offsetClosedPolygon(inner, -mid, 'miter').length === 0) hi = mid;
         else lo = mid;
-        if (hi - lo < 0.25) break;
+        if (hi - lo < 0.02) break;
       }
-      const innerMaxBw = Math.max(0, lo * 0.98);
+      const innerMaxBw = Math.max(0, lo - 0.005);
       if (innerMaxBw > 0) {
         innerMedialPath = polygonsToSvgPath(offsetClosedPolygon(inner, -innerMaxBw, 'miter'));
       }
@@ -1216,7 +1218,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
               <path
                 d={domeDebug.innerMedialPath}
                 fill="#ffcc00"
-                stroke="none"
+                stroke="#ffcc00"
+                strokeWidth={0.5}
                 opacity={0.95}
               />
             )}
