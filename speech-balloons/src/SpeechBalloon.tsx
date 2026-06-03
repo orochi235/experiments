@@ -264,59 +264,6 @@ function polysBBox(polys: Polygon[]): { x: number; y: number; w: number; h: numb
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
-// Auto outer-corner roundness so the corner-ray (centroid → bbox corner
-// direction) distance from centroid to the OUTER rounded-rect boundary
-// equals the corresponding distance to the INNER rounded-rect boundary
-// plus bevelWidth. The inner shape is the rectangle inset by bw on each
-// edge with the body's base roundness. Binary search numerically (no
-// closed form because both r and the direction interact through the
-// corner-arc circle equation).
-function autoOuterRoundness(W: number, H: number, baseR: number, bw: number): number {
-  const W_in = W - 2 * bw;
-  const H_in = H - 2 * bw;
-  if (W_in <= 0 || H_in <= 0) return baseR;
-  // Use the outer's corner-ray direction (toward the geometric corner of
-  // the outer bbox), shared by both shapes for the ray-cast.
-  const D = Math.sqrt(W * W + H * H);
-  const dx = W / D;
-  const dy = H / D;
-  // Inner corner-arc exit distance along d.
-  const r_in = (Math.min(W_in, H_in) / 2) * baseR;
-  const cx_in = W_in / 2 - r_in;
-  const cy_in = H_in / 2 - r_in;
-  const B_in = -2 * (dx * cx_in + dy * cy_in);
-  const C_in = cx_in * cx_in + cy_in * cy_in - r_in * r_in;
-  const disc_in = B_in * B_in - 4 * C_in;
-  if (disc_in < 0) return baseR;
-  const t_inner = (-B_in + Math.sqrt(disc_in)) / 2;
-  const t_target = t_inner + bw;
-  // Binary search r_o ∈ [0, min(W,H)/2]. Larger r_o → more rounded outer
-  // corner → smaller t_outer. So if computed t > target, r_o needs to
-  // grow.
-  let lo = 0;
-  let hi = Math.min(W, H) / 2;
-  for (let i = 0; i < 60; i++) {
-    const r_o = (lo + hi) / 2;
-    const cx_out = W / 2 - r_o;
-    const cy_out = H / 2 - r_o;
-    const B_out = -2 * (dx * cx_out + dy * cy_out);
-    const C_out = cx_out * cx_out + cy_out * cy_out - r_o * r_o;
-    const disc_out = B_out * B_out - 4 * C_out;
-    if (disc_out < 0) {
-      // ray misses the arc → r_o too small (ray exits via a straight
-      // edge before reaching the corner curve). Need larger r_o.
-      lo = r_o;
-      continue;
-    }
-    const t_outer = (-B_out + Math.sqrt(disc_out)) / 2;
-    if (t_outer > t_target) lo = r_o;
-    else hi = r_o;
-  }
-  const r_o = (lo + hi) / 2;
-  const halfShort = Math.min(W, H) / 2;
-  if (halfShort <= 0) return baseR;
-  return Math.max(0, Math.min(1, r_o / halfShort));
-}
 
 // --- Component -----------------------------------------------------------
 
@@ -351,25 +298,9 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   const strokeEffect = design.effects.find((e) => e.kind === 'stroke');
   const shadowEffect = design.effects.find((e) => e.kind === 'shadow');
 
-  // Outer body's effective sampler params. In dome mode on a rectangle
-  // body, the outer corner roundness is auto-computed so the corner-ray
-  // distance from centroid to the outer boundary exceeds the distance
-  // to the inner boundary by exactly bevelWidth (matching the uniform
-  // bw inset that already holds at edge midpoints).
-  const effectiveBaseParams = useMemo<ParamBag>(() => {
-    if (design.base !== 'rectangle') return design.baseParams;
-    const mode = (fillEffect?.params.mode as string) ?? 'dome';
-    if (mode !== 'dome') return design.baseParams;
-    const baseR = (design.baseParams.roundness as number) ?? 0.5;
-    const bw = (fillEffect?.params.bevelWidth as number) ?? 22;
-    const autoR = autoOuterRoundness(W, H, baseR, bw);
-    if (autoR === baseR) return design.baseParams;
-    return { ...design.baseParams, roundness: autoR };
-  }, [design.base, design.baseParams, fillEffect, W, H]);
-
   const sampler: BaseSampler = useMemo(
-    () => buildBaseSampler(design.base, effectiveBaseParams, W, H),
-    [design.base, effectiveBaseParams, W, H],
+    () => buildBaseSampler(design.base, design.baseParams, W, H),
+    [design.base, design.baseParams, W, H],
   );
 
   // Shear: skew about the body's x-center, baked into the body samples
