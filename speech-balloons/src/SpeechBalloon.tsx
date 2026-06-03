@@ -22,6 +22,7 @@ import {
   unionPolygons,
   polygonsToSvgPath,
   circleToPolygon,
+  offsetClosedPolygon,
   type Polygon,
 } from './clipping';
 interface Props {
@@ -966,8 +967,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   ]);
 
   // Debug overlay geometry. Body silhouette in red, bevel band inner
-  // boundary inset by bevelWidth along each perimeter point's outward
-  // normal in yellow, plus light azimuth rays from the centroid.
+  // boundary (geometrically-correct clipper miter inset) in yellow,
+  // plus light azimuth rays from the centroid.
   const domeDebug = useMemo(() => {
     if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
     const bb = bareBaseBBox(sampler);
@@ -976,18 +977,23 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const cy = bb.y + bb.h / 2;
     const bw = fillRender.bevelWidth;
 
-    const N = 96;
+    const N = 192;
+    const body: Polygon = [];
     const bodyPts: string[] = [];
-    const bevelPts: string[] = [];
     for (let i = 0; i < N; i++) {
       const p = sampler.perimeterAt((i / N) * sampler.totalLen);
+      body.push({ x: p.x, y: p.y });
       bodyPts.push(`${p.x},${p.y}`);
-      bevelPts.push(`${p.x - p.nx * bw},${p.y - p.ny * bw}`);
     }
+
+    // Geometrically correct inward offset (sharp corners stay sharp,
+    // rounded corners stay round, concavity overshoot disappears).
+    const insetPolys = bw > 0 ? offsetClosedPolygon(body, -bw, 'miter') : [body];
+    const bevelPath = polygonsToSvgPath(insetPolys);
 
     // Light azimuth rays — length runs to the actual rim in that direction.
     const lights = domeLights.map((l) => {
-      const sc = attachmentS(l.az, sampler, cx, cy);
+      const sc = angleToS(l.az, sampler, cx, cy);
       const rim = sampler.perimeterAt(sc);
       return { x2: rim.x, y2: rim.y, intensity: l.intensity };
     });
@@ -995,7 +1001,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       cx,
       cy,
       bodyRingPoints: bodyPts.join(' '),
-      bevelRingPoints: bevelPts.join(' '),
+      bevelPath,
       lights,
     };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
@@ -1149,9 +1155,12 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
               points={domeDebug.bodyRingPoints}
               fill="none" stroke="#ff3030" strokeWidth={1.5} opacity={0.9}
             />
-            <polygon
-              points={domeDebug.bevelRingPoints}
-              fill="none" stroke="#ffd54a" strokeWidth={1.5} opacity={0.9}
+            <path
+              d={domeDebug.bevelPath}
+              fill="none"
+              stroke="#ffcc00"
+              strokeWidth={1}
+              strokeOpacity={0.9}
             />
             {domeDebug.lights.map((l, i) => (
               <line
