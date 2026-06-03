@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, sampleLightStops, sampleSliceStops, type PerimeterSampler, type ContourFn } from './SpeechBalloon';
+import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, sampleLightStops, sampleSliceStops, bareBaseRadiusRange, type PerimeterSampler, type ContourFn } from './SpeechBalloon';
+import { buildBaseSampler } from './geometry';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
   x: cx + Math.cos(angle) * r,
@@ -356,5 +357,22 @@ describe('sampleSliceStops', () => {
     for (let i = 0; i < a.length; i++) {
       expect(b[i]!.opacity).toBeCloseTo(a[i]!.opacity * 0.5, 9);
     }
+  });
+});
+
+describe('bareBaseRadiusRange', () => {
+  it('returns equal Rmin and Rmax (within 1%) for a circle base', () => {
+    const sampler = buildBaseSampler('oval', {}, 100, 100);
+    const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
+    expect(Rmax).toBeGreaterThan(40);
+    expect(Rmax).toBeLessThan(60);
+    expect(Math.abs(Rmax - Rmin) / Rmax).toBeLessThan(0.01);
+  });
+
+  it('Rmax/Rmin ≈ 2 for a 200×100 oval', () => {
+    const sampler = buildBaseSampler('oval', {}, 200, 100);
+    const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
+    expect(Rmax / Rmin).toBeGreaterThan(1.9);
+    expect(Rmax / Rmin).toBeLessThan(2.1);
   });
 });

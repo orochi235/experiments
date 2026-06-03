@@ -4,6 +4,7 @@ import {
   buildBaseSampler,
   composeBodyPoints,
   attachmentS,
+  angleToS,
   pointedTailOffsetAt,
   buildBubbles,
   buildCloudPuffs,
@@ -364,7 +365,7 @@ function rotateAttachByOutAngle(p: PerimeterPoint, outAngleDeg: number): Perimet
 // bare body silhouette before any tail/spike/lobe/cloud effects deform
 // it. Sampling around totalLen avoids depending on the cooked
 // `bodyPolygon`, which bakes pointed/wavy tails into the silhouette.
-function bareBaseBBox(sampler: BaseSampler): { x: number; y: number; w: number; h: number } {
+export function bareBaseBBox(sampler: BaseSampler): { x: number; y: number; w: number; h: number } {
   const N = 96;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (let i = 0; i < N; i++) {
@@ -376,6 +377,29 @@ function bareBaseBBox(sampler: BaseSampler): { x: number; y: number; w: number; 
   }
   if (!isFinite(minX)) return { x: 0, y: 0, w: 1, h: 1 };
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+// Min/max distance from the bare-base bbox centroid to the perimeter,
+// sampled across 36 angles. Used by the contour-editor bevel-ridge band:
+// on non-circular bodies the bevel ridge sits at different x = bw/R for
+// different directions, so the band spans [bw/Rmax, bw/Rmin].
+export function bareBaseRadiusRange(sampler: BaseSampler): { Rmin: number; Rmax: number } {
+  const bb = bareBaseBBox(sampler);
+  const cx = bb.x + bb.w / 2;
+  const cy = bb.y + bb.h / 2;
+  const N = 36;
+  let Rmin = Infinity;
+  let Rmax = 0;
+  for (let i = 0; i < N; i++) {
+    const angleDeg = (i / N) * 360;
+    const sc = angleToS(angleDeg, sampler, cx, cy);
+    const p = sampler.perimeterAt(sc);
+    const r = Math.hypot(p.x - cx, p.y - cy);
+    if (r < Rmin) Rmin = r;
+    if (r > Rmax) Rmax = r;
+  }
+  if (!isFinite(Rmin)) return { Rmin: 0, Rmax: 0 };
+  return { Rmin, Rmax };
 }
 
 // --- Component -----------------------------------------------------------
