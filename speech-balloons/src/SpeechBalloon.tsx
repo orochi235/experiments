@@ -110,8 +110,10 @@ export function domeSurfaceTilt(
   const bw = Math.min(1, Math.max(0, bwNorm));
   const crownTilt = rimTiltRad + (Math.PI / 2 - rimTiltRad) * crownHeight;
   const rBevel = 1 - bw;
-  if (r >= rBevel && rBevel > 0) return rimTiltRad; // bevel face
-  const t = rBevel > 0 ? r / rBevel : r;             // 0 at centroid, 1 at inner edge
+  // rBevel === 0 when bwNorm === 1 — skip the bevel branch so the interior
+  // ramp covers all of [0, 1].
+  if (r >= rBevel && rBevel > 0) return rimTiltRad;
+  const t = rBevel > 0 ? r / rBevel : r;
   return crownTilt + (rimTiltRad - crownTilt) * t;
 }
 
