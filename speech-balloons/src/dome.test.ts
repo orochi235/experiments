@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLitArcs, domeSurfaceTilt, type PerimeterSampler } from './SpeechBalloon';
+import { computeLitArcs, domeSurfaceTilt, subdivideArc, type PerimeterSampler } from './SpeechBalloon';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
   x: cx + Math.cos(angle) * r,
@@ -203,5 +203,38 @@ describe('sampleLightStops', () => {
     const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
     expect(max.offset).toBeGreaterThan(0.55);
     expect(max.offset).toBeLessThan(0.78);
+  });
+});
+
+describe('subdivideArc', () => {
+  // Circle of radius 50 centered at origin; angleSampler returns the rim
+  // point in the centroid-radial direction `a`.
+  const circle: PerimeterSampler = (a) => ({
+    x: 50 * Math.cos(a),
+    y: 50 * Math.sin(a),
+    nx: Math.cos(a),
+    ny: Math.sin(a),
+  });
+
+  it('returns N+1 angles spanning [a0, a1] with N >= min', () => {
+    const out = subdivideArc(circle, 0, Math.PI / 4, [0, 0], 8, 4, 32);
+    // Arc length on a circle of r=50 over a π/4 span:
+    // s = 50 * (π/4) ≈ 39.27 → N = ceil(39.27 / 8) = 5; clamp to >=4 → 5.
+    expect(out.length).toBe(6);
+    expect(out[0]).toBeCloseTo(0, 9);
+    expect(out[out.length - 1]).toBeCloseTo(Math.PI / 4, 9);
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i] - out[i - 1]).toBeCloseTo((Math.PI / 4) / 5, 9);
+    }
+  });
+
+  it('clamps to min when the arc is very short', () => {
+    const out = subdivideArc(circle, 0, 0.01, [0, 0], 8, 4, 32);
+    expect(out.length).toBe(5); // N = 4 → 5 angles
+  });
+
+  it('clamps to max when the arc is very long', () => {
+    const out = subdivideArc(circle, 0, 2 * Math.PI, [0, 0], 1, 4, 32);
+    expect(out.length).toBe(33);
   });
 });

@@ -183,6 +183,34 @@ export function buildLightWedgePath(
   return parts.join(' ');
 }
 
+// Estimate the perimeter arc-length spanned by `angleSampler` between
+// centroid-radial angles a0 and a1, by summing chord distances across
+// 8 intermediate samples. Returns `N+1` evenly-spaced α boundaries with
+// `N = clamp(ceil(arcLen / targetPxPerSlice), min, max)`.
+export function subdivideArc(
+  angleSampler: PerimeterSampler,
+  a0: number,
+  a1: number,
+  _centroid: readonly [number, number],
+  targetPxPerSlice = 8,
+  min = 4,
+  max = 32,
+): number[] {
+  const PROBE = 8;
+  let prev = angleSampler(a0);
+  let arcLen = 0;
+  for (let i = 1; i <= PROBE; i++) {
+    const a = a0 + ((a1 - a0) * i) / PROBE;
+    const p = angleSampler(a);
+    arcLen += Math.hypot(p.x - prev.x, p.y - prev.y);
+    prev = p;
+  }
+  const N = Math.min(max, Math.max(min, Math.ceil(arcLen / Math.max(1e-6, targetPxPerSlice))));
+  const out: number[] = new Array(N + 1);
+  for (let i = 0; i <= N; i++) out[i] = a0 + ((a1 - a0) * i) / N;
+  return out;
+}
+
 export type ContourFn = (x: number) => number;
 
 export interface LightStopInput {
