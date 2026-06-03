@@ -73,6 +73,8 @@ interface EffectLayerStackProps {
   kindSet: readonly EffectKind[];
   bodyW?: number;
   bodyH?: number;
+  bodyShape?: BalloonBase;
+  bodyParams?: ParamBag;
   decorate?: (eff: EffectInstance) => { accent?: string; badge?: string };
   onAdd: (kind: EffectKind) => void;
   onRemove: (id: number) => void;
@@ -81,7 +83,7 @@ interface EffectLayerStackProps {
   onUpdateParam: (id: number, key: string, value: ParamValue) => void;
 }
 function EffectLayerStack({
-  title, hideHead, effects, kindSet, bodyW, bodyH, decorate,
+  title, hideHead, effects, kindSet, bodyW, bodyH, bodyShape, bodyParams, decorate,
   onAdd, onRemove, onReorder, onPrimaryChange, onUpdateParam,
 }: EffectLayerStackProps) {
   const items: LayerStackItem[] = effects.map((eff) => {
@@ -125,6 +127,8 @@ function EffectLayerStack({
               onChange={(k, v) => onUpdateParam(eff.id, k, v)}
               bodyW={bodyW}
               bodyH={bodyH}
+              bodyShape={bodyShape}
+              bodyParams={bodyParams}
             />
           </PropertyList>
         );
@@ -602,6 +606,8 @@ export function Lab() {
               kindSet={MORPH_EFFECTS}
               bodyW={design.width}
               bodyH={design.height}
+              bodyShape={design.base}
+              bodyParams={design.baseParams}
               onAdd={addEffect}
               onRemove={removeEffect}
               onReorder={(ks, ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, ks, ids) }))}
@@ -615,6 +621,8 @@ export function Lab() {
               kindSet={LEFT_PANEL_EFFECTS}
               bodyW={design.width}
               bodyH={design.height}
+              bodyShape={design.base}
+              bodyParams={design.baseParams}
               onAdd={addEffect}
               onRemove={removeEffect}
               onReorder={(ks, ids) => setDesign((d) => ({ ...d, effects: reorderWithinKindSet(d.effects, ks, ids) }))}
@@ -668,6 +676,10 @@ export function Lab() {
               hideHead
               effects={rightEffects}
               kindSet={RIGHT_PANEL_EFFECTS}
+              bodyW={design.width}
+              bodyH={design.height}
+              bodyShape={design.base}
+              bodyParams={design.baseParams}
               decorate={(eff) =>
                 eff.kind === 'tail'
                   ? {
@@ -730,9 +742,11 @@ interface ControlListProps {
   onChange: (key: string, value: ParamValue) => void;
   bodyW?: number;
   bodyH?: number;
+  bodyShape?: BalloonBase;
+  bodyParams?: ParamBag;
 }
 
-function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListProps) {
+function ControlList({ controls, params, onChange, bodyW, bodyH, bodyShape, bodyParams }: ControlListProps) {
   type Group = { header: string | null; hidden?: boolean; items: LabControl[] };
   const groups: Group[] = [{ header: null, items: [] }];
   for (const c of controls) {
@@ -747,7 +761,7 @@ function ControlList({ controls, params, onChange, bodyW, bodyH }: ControlListPr
       {groups.map((g, gi) => {
         const visible = g.items.filter((c) => !c.hideWhen || !c.hideWhen(params));
         if (visible.length === 0) return null;
-        const rows = visible.map((c) => renderRow(c, params, onChange, bodyW, bodyH));
+        const rows = visible.map((c) => renderRow(c, params, onChange, bodyW, bodyH, bodyShape, bodyParams));
         if (g.header === null) return rows;
         return (
           <PropertyGroup key={`grp-${gi}`} title={g.header} hidden={g.hidden} pack="pairs">
@@ -765,6 +779,8 @@ function renderRow(
   onChange: (key: string, value: ParamValue) => void,
   bodyW?: number,
   bodyH?: number,
+  _bodyShape?: BalloonBase,
+  _bodyParams?: ParamBag,
 ): React.ReactNode {
   if (c.kind === 'header') return null;
   const label = c.label ?? c.key;
