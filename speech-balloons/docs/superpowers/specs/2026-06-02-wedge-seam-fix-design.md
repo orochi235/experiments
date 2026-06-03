@@ -1,4 +1,4 @@
-# Fix Dome Wedge Seams via Angular Sub-Slicing
+# Dome Shading Polish: Seam Fix, Bevel Ridge Band, Vertical Flip
 
 ## Background
 
@@ -85,6 +85,43 @@ Visual verification (dev server):
 - v1 parity (`rimTilt=0, crownHeight=0`) on a circle and a long rectangle — indistinguishable from current build at the same params.
 - A long rectangle with `rimTilt=30°, crownHeight=0.4`, single key light from the side — the old visible spoke seams along the wedge edges should be gone or significantly attenuated.
 - Debug overlay still draws correctly; sub-slice clipPaths do not bleed past the body silhouette.
+
+## Companion UX changes (same branch)
+
+Two small contour-editor improvements land together with the seam fix.
+
+### Bevel ridge band on the contour editor
+
+The contour editor's x-axis maps `0 = rim → 1 = center`. The bevel ridge sits at `x = bevelWidth / R`. Because R varies per direction on non-circular bodies, the ridge is a *band*, not a line:
+
+- Compute `Rmin` and `Rmax` by sweeping `radiusAt(angleDeg)` (centroid → perimeter distance) over a coarse angle grid (e.g. 36 samples).
+- Band x-range: `[bevelWidth / Rmax, bevelWidth / Rmin]`. Clamped to `[0, 1]`. Collapses to a thin line on circular bodies.
+- Yellow translucent fill (matches the existing dome-debug overlay yellow).
+
+Implementation surface:
+
+- `labkit/src/ui/properties/CurveField.tsx` — add an optional `marks?: Array<{ kind: 'band' | 'line'; x: number | [number, number]; color?: string }>` prop and pass it through to the underlying weasel-ui `CurveEditor` (which needs a matching pass-through prop or an SVG overlay layered on top of the editor). If weasel-ui's `CurveEditor` doesn't expose an annotation slot, render an absolutely-positioned SVG overlay inside `lk-curve-field__plot` using the same width/height the editor uses; CSS already gives the plot a known box.
+- `src/Lab.tsx` `CurveBlock` — receives a new optional `marks` prop and forwards it.
+- `src/Lab.tsx` `renderRow` for `kind === 'curve'` — for the contour control specifically (key `contour` on a dome fill effect), compute the band from `bevelWidth` and the live sampler bbox-derived `Rmin`/`Rmax`. Passing the sampler down requires plumbing — the simpler path is to compute Rmin/Rmax at the `Lab.tsx` level where the design state already lives. We compute the **bare base bbox** the same way `bareBaseBBox` does in `SpeechBalloon.tsx`; the helper should be exported from there to avoid duplication.
+
+For controls other than the contour (or non-dome fills), `marks` is omitted and the editor renders as today.
+
+### Flip vertically button
+
+Mirror the existing "Flip horizontally" button. y → `(min + max) − y` for each point. With contour range `[0, 1]`, this flips through `y = 0.5`; with `[-1, 1]`, through `y = 0`.
+
+Implementation surface:
+
+- `labkit/src/ui/properties/CurveField.tsx` — add `handleFlipVertical` and a second button next to "Flip horizontally". Uses the `min`/`max` props already on `CurveFieldProps`.
+
+No consumer changes needed.
+
+### Testing for the UX changes
+
+- `labkit/src/ui/properties/CurveField.test.tsx` — add tests:
+  - Click "Flip vertically" reflects each y across `(min + max) / 2`.
+  - When `marks` includes a band `{ kind: 'band', x: [0.2, 0.4] }`, the overlay rect is positioned at the right x range within the plot box.
+- Visual verification: drag `bevelWidth` and watch the yellow band on the contour editor widen/narrow. On a circle (W = H = 100), band collapses to a thin line. On a 200×40 rectangle, band visibly spans an x-range.
 
 ## Open questions
 
