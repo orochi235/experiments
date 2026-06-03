@@ -11,6 +11,19 @@
 
 v2 of the multi-light dome shading. v1 (shipped 2026-05-31) treated the rim normal as if it lay entirely in the SVG plane — elevation barely did anything, and the contour curve had to fake a 3D look by painting the rim dark. v2 lifts the math to a real 3D body-of-revolution model with three new controls and the contour now only modulates physics rather than defining the dome shape.
 
+## Update: 2026-06-02 — Dome polish shipped
+
+The following items from the open-issues list are now closed (pending Mike's visual sign-off on the screenshots in `.playwright-mcp/dome-screenshots/`):
+
+- **(1) Wedge seams fixed** via angular sub-slicing of each per-light wedge so adjacent wedges share the same sub-sample boundary rather than diverging at the seam ray. Commit `7a95d98`.
+- **Contour editor gained bevel-ridge band + flip-vertically button** — the yellow `lk-curve-field__marks` band now shows the bevel-width region on the contour x-axis, and a "Flip vertically" button was added alongside the existing "Flip horizontally". Relevant labkit commits: `90a404e`, `acaa049`, `bae1d22`, `f4c5fae`; speech-balloons wiring: `4f95c2c`.
+- **Bevel-width slider caps at geometric medial-axis distance** so it cannot exceed the largest inscribed circle radius of the body. Commit `24b6aeb`. Observed max on cloud shape: 16 px.
+- **Debug overlay uses clipper miter inset for the bevel ring** so the yellow inset polygon follows the body outline with correct sharp/rounded corners rather than a simple offset. Commit `5c1abb2`.
+
+Remaining open items: **(2)** rename `crownHeight` (tilt-blend factor, not a height); **(3)** strip / wire `domeGloss`/`specStrength`/`specSize`. Item **(4)** visual sign-off is captured in the screenshots above and awaits Mike's review.
+
+---
+
 ## Controls
 
 All on the `dome` fill effect. The control labels in `controls.ts` still use the original names.
