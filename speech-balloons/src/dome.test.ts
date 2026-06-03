@@ -126,3 +126,58 @@ describe('computeLitArcs with rimTilt', () => {
     expect(arcs).toHaveLength(0);
   });
 });
+
+import { sampleLightStops, type ContourFn } from './SpeechBalloon';
+
+describe('sampleLightStops', () => {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const unitContour: ContourFn = () => 1;     // no painterly modulation
+
+  it('peaks at lit rim for a horizontal light, flat surface', () => {
+    const stops = sampleLightStops({
+      azimuthDeg: 0,
+      elevationDeg: 0,
+      rimTiltRad: 0,
+      crownHeight: 0,
+      bwNorm: 0,
+      contour: unitContour,
+      samples: 16,
+    });
+    const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
+    expect(max.offset).toBeCloseTo(0, 5);    // s=0 == lit rim
+    expect(stops[stops.length - 1]!.opacity).toBeCloseTo(0, 5); // far rim dark
+  });
+
+  it('shifts the bright spot toward centroid for an overhead light + dome crown', () => {
+    const stops = sampleLightStops({
+      azimuthDeg: 0,
+      elevationDeg: 90,                       // straight down
+      rimTiltRad: 0,
+      crownHeight: 1,
+      bwNorm: 1,                              // full ramp, no bevel face
+      contour: unitContour,
+      samples: 16,
+    });
+    const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
+    // Surface at r=0 has tilt=90° (N3 = +z). Light is straight down (L=+z).
+    // Peak should be at the centroid (offset = 0.5).
+    expect(max.offset).toBeGreaterThan(0.4);
+    expect(max.offset).toBeLessThan(0.6);
+  });
+
+  it('emits SAMPLES+1 stops with strictly increasing offsets', () => {
+    const stops = sampleLightStops({
+      azimuthDeg: 45,
+      elevationDeg: 30,
+      rimTiltRad: rad(20),
+      crownHeight: 0.4,
+      bwNorm: 0.2,
+      contour: unitContour,
+      samples: 16,
+    });
+    expect(stops).toHaveLength(17);
+    for (let i = 1; i < stops.length; i++) {
+      expect(stops[i]!.offset).toBeGreaterThan(stops[i - 1]!.offset);
+    }
+  });
+});

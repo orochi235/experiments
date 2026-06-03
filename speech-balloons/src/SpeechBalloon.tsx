@@ -183,6 +183,60 @@ export function buildLightWedgePath(
   return parts.join(' ');
 }
 
+export type ContourFn = (x: number) => number;
+
+export interface LightStopInput {
+  azimuthDeg: number;
+  elevationDeg: number;
+  rimTiltRad: number;
+  crownHeight: number;
+  bwNorm: number;          // bevelWidth / R, already clamped if caller wants
+  contour: ContourFn;      // x=0 (rim) → x=1 (center); y is brightness multiplier
+  samples?: number;        // default 16
+}
+
+export interface GradientStop {
+  offset: number;
+  opacity: number;
+}
+
+// Sample the per-light brightness along the gradient axis (s ∈ [0,1] going
+// lit-rim → centroid → far-rim). For each sample, recover the radial
+// position on the body of revolution, compute the 3D normal via
+// domeSurfaceTilt, and multiply max(0, N3·L) by the painterly contour.
+export function sampleLightStops(input: LightStopInput): GradientStop[] {
+  const SAMPLES = input.samples ?? 16;
+  const azRad = (input.azimuthDeg * Math.PI) / 180;
+  const elRad = (input.elevationDeg * Math.PI) / 180;
+  const cosAz = Math.cos(azRad);
+  const sinAz = Math.sin(azRad);
+  const cosEl = Math.cos(elRad);
+  const sinEl = Math.sin(elRad);
+  const Lx = cosAz * cosEl;
+  const Ly = sinAz * cosEl;
+  const Lz = sinEl;
+
+  const out: GradientStop[] = [];
+  for (let i = 0; i <= SAMPLES; i++) {
+    const s = i / SAMPLES;
+    const dNorm = 0.5 - s;                              // +1/2 at lit rim, −1/2 at far rim
+    const r = Math.min(1, Math.abs(dNorm) * 2);
+    const tilt = domeSurfaceTilt(r, input.rimTiltRad, input.crownHeight, input.bwNorm);
+    const cosTilt = Math.cos(tilt);
+    const sinTilt = Math.sin(tilt);
+    const sgn = dNorm >= 0 ? 1 : -1;
+    const N3x = sgn * cosAz * cosTilt;
+    const N3y = sgn * sinAz * cosTilt;
+    const N3z = sinTilt;
+    const phys = Math.max(0, N3x * Lx + N3y * Ly + N3z * Lz);
+    // Gradient s 0→0.5→1 maps to radial r=1→0→1. Contour x=0 is rim,
+    // x=1 is centroid. So contour_x = 1 − r.
+    const paint = Math.max(0, input.contour(1 - r));
+    out.push({ offset: s, opacity: phys * paint });
+  }
+  return out;
+}
+
 // Rotate an attach-point's outward normal by `outAngle` degrees in-plane.
 // Bubbles / lightning don't deform the body silhouette, so they don't go
 // through pointedTailOffsetAt (which applies its own outAngle). Their
@@ -757,60 +811,68 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     };
   }, [sampler, W, H]);
 
-  // Convert the user's contour curve into N gradient stops along the lit
-  // axis (offset 0 = lit rim, 0.5 = centroid, 1 = far shadow). The contour
-  // runs from rim (t=0) to center (t=1); we map t ↦ offset = t/2 and use
-  // max(0, contour_y(t)) as the brightness multiplier — negative y values
-  // are "in shadow" and contribute nothing. Linear interp keeps it cheap.
-  const contourStops = useMemo(() => {
-    const flat = fillRender.contour;
-    const pts: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i + 1 < flat.length; i += 2) pts.push({ x: flat[i]!, y: flat[i + 1]! });
-    pts.sort((a, b) => a.x - b.x);
-    const interp = (x: number): number => {
-      if (pts.length === 0) return 0;
-      if (x <= pts[0]!.x) return pts[0]!.y;
-      if (x >= pts[pts.length - 1]!.x) return pts[pts.length - 1]!.y;
-      let i = 0;
-      while (i < pts.length - 1 && pts[i + 1]!.x < x) i++;
-      const a = pts[i]!;
-      const b = pts[i + 1]!;
-      const u = (x - a.x) / (b.x - a.x);
-      return a.y + (b.y - a.y) * u;
-    };
-    const N = 8;
-    const stops: Array<{ offset: number; brightness: number }> = [];
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      const y = interp(t);
-      stops.push({ offset: t / 2, brightness: Math.max(0, y) });
-    }
-    stops.push({ offset: 1, brightness: 0 });
-    return stops;
-  }, [fillRender.contour]);
-
   const domeLayers = useMemo(() => {
     if (fillRender.mode !== 'dome') return [];
     const bb = polysBBox(bodyAndBubblesPolys);
     if (bb.w <= 0 || bb.h <= 0) return [];
     const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
-    const r = Math.hypot(bb.w, bb.h) / 2;
+    const R = Math.max(bb.w, bb.h) / 2;
+    const rimTiltRad = (fillRender.rimTilt * Math.PI) / 180;
+    const bwNorm = R > 0 ? Math.min(1, fillRender.bevelWidth / R) : 0;
+
+    // Build a linear-interp contour function once per render.
+    const flatContour = fillRender.contour;
+    const cpts: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i + 1 < flatContour.length; i += 2) {
+      cpts.push({ x: flatContour[i]!, y: flatContour[i + 1]! });
+    }
+    cpts.sort((a, b) => a.x - b.x);
+    const contour = (x: number): number => {
+      if (cpts.length === 0) return 0;
+      if (x <= cpts[0]!.x) return cpts[0]!.y;
+      if (x >= cpts[cpts.length - 1]!.x) return cpts[cpts.length - 1]!.y;
+      let i = 0;
+      while (i < cpts.length - 1 && cpts[i + 1]!.x < x) i++;
+      const a = cpts[i]!;
+      const b = cpts[i + 1]!;
+      const u = (x - a.x) / (b.x - a.x);
+      return a.y + (b.y - a.y) * u;
+    };
+
     return domeLights.map((light) => {
-      const arcs = computeLitArcs(angleSampler, light.az, light.el, 240);
+      const arcs = computeLitArcs(angleSampler, light.az, light.el, 240, rimTiltRad);
       const clipD = buildLightWedgePath(angleSampler, arcs, centroid);
       const azRad = (light.az * Math.PI) / 180;
-      const dx = Math.cos(azRad);
-      const dy = Math.sin(azRad);
+      const cosAz = Math.cos(azRad);
+      const sinAz = Math.sin(azRad);
+      const stops = sampleLightStops({
+        azimuthDeg: light.az,
+        elevationDeg: light.el,
+        rimTiltRad,
+        crownHeight: fillRender.crownHeight,
+        bwNorm,
+        contour,
+      });
       return {
         clipD,
-        x1: centroid[0] + dx * r,
-        y1: centroid[1] + dy * r,
-        x2: centroid[0] - dx * r,
-        y2: centroid[1] - dy * r,
+        x1: centroid[0] + cosAz * R,
+        y1: centroid[1] + sinAz * R,
+        x2: centroid[0] - cosAz * R,
+        y2: centroid[1] - sinAz * R,
         intensity: light.intensity,
+        stops,
       };
     });
-  }, [fillRender.mode, bodyAndBubblesPolys, angleSampler, domeLights]);
+  }, [
+    fillRender.mode,
+    fillRender.rimTilt,
+    fillRender.crownHeight,
+    fillRender.bevelWidth,
+    fillRender.contour,
+    bodyAndBubblesPolys,
+    angleSampler,
+    domeLights,
+  ]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
@@ -923,12 +985,12 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                         x1={layer.x1} y1={layer.y1}
                         x2={layer.x2} y2={layer.y2}
                       >
-                        {contourStops.map((s, j) => (
+                        {layer.stops.map((s, j) => (
                           <stop
                             key={j}
                             offset={s.offset}
                             stopColor={fillRender.highlightColor}
-                            stopOpacity={fillRender.amount * layer.intensity * s.brightness}
+                            stopOpacity={fillRender.amount * layer.intensity * s.opacity}
                           />
                         ))}
                       </linearGradient>
