@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLitArcs, domeSurfaceTilt, subdivideArc, type PerimeterSampler } from './SpeechBalloon';
+import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, type PerimeterSampler } from './SpeechBalloon';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
   x: cx + Math.cos(angle) * r,
@@ -236,5 +236,30 @@ describe('subdivideArc', () => {
   it('clamps to max when the arc is very long', () => {
     const out = subdivideArc(circle, 0, 2 * Math.PI, [0, 0], 1, 4, 32);
     expect(out.length).toBe(33);
+  });
+});
+
+describe('buildSliceWedgePath', () => {
+  const circle: PerimeterSampler = (a) => ({
+    x: 100 + 50 * Math.cos(a),
+    y: 100 + 50 * Math.sin(a),
+    nx: Math.cos(a),
+    ny: Math.sin(a),
+  });
+
+  it('starts at centroid, samples along the arc, closes the path', () => {
+    const d = buildSliceWedgePath(circle, 0, Math.PI / 6, [100, 100], Math.PI / 60);
+    expect(d.startsWith('M 100 100')).toBe(true);
+    expect(d.endsWith('Z')).toBe(true);
+    // π/6 / (π/60) = 10 → at least 10 L segments to perimeter.
+    const lCount = (d.match(/ L /g) ?? []).length;
+    expect(lCount).toBeGreaterThanOrEqual(10);
+  });
+
+  it('first perimeter sample is at angle a0', () => {
+    const d = buildSliceWedgePath(circle, 0, Math.PI / 6, [100, 100], Math.PI / 60);
+    // After "M 100 100", the next "L x y" should be the rim point at a=0:
+    // (100 + 50, 100 + 0) = (150, 100).
+    expect(d).toMatch(/M 100 100 L 150 100/);
   });
 });

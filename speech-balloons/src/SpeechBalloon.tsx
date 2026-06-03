@@ -214,6 +214,28 @@ export function subdivideArc(
   return out;
 }
 
+// Pie-wedge SVG-d for a single angular slice on the body silhouette:
+// centroid → arc(a0, a1) → centroid. Step density determined by
+// `arcResolutionRad` so curved silhouettes don't visibly polygonize.
+export function buildSliceWedgePath(
+  angleSampler: PerimeterSampler,
+  a0: number,
+  a1: number,
+  centroid: readonly [number, number],
+  arcResolutionRad: number = Math.PI / 60,
+): string {
+  const span = a1 - a0;
+  const steps = Math.max(2, Math.ceil(Math.abs(span) / arcResolutionRad));
+  let d = `M ${centroid[0]} ${centroid[1]}`;
+  for (let i = 0; i <= steps; i++) {
+    const a = a0 + (span * i) / steps;
+    const p = angleSampler(a);
+    d += ` L ${p.x} ${p.y}`;
+  }
+  d += ' Z';
+  return d;
+}
+
 export type ContourFn = (x: number) => number;
 
 export interface LightStopInput {
