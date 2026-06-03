@@ -1,4 +1,4 @@
-import type { BaseSampler } from './geometry';
+import { bareBaseMaxBevel, type BaseSampler } from './geometry';
 import type { BalloonBase, EffectKind, ParamBag } from './types';
 
 export type LabControl =
@@ -45,7 +45,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'dome' },
 
     { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' },
-    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H }) => Math.floor(Math.min(W, H) / 3), unit: 'px' },
+    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H, sampler }) => sampler ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler))) : Math.floor(Math.min(W, H) / 3), unit: 'px' },
     { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
     { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
     { key: 'rimTilt', label: 'Rim tilt', kind: 'range', min: 0, max: 90, step: 1, default: 0, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
