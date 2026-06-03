@@ -909,7 +909,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
 
     const out: Array<{
       clipD: string;
-      x1: number; y1: number; x2: number; y2: number;
+      cx: number; cy: number; r: number;
       intensity: number;
       stops: GradientStop[];
     }> = [];
@@ -943,10 +943,9 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
           });
           out.push({
             clipD,
-            x1: centroid[0],
-            y1: centroid[1],
-            x2: centroid[0] + Math.cos(aMid) * rLocal,
-            y2: centroid[1] + Math.sin(aMid) * rLocal,
+            cx: centroid[0],
+            cy: centroid[1],
+            r: rLocal,
             intensity: 1, // already folded into per-stop opacity
             stops,
           });
@@ -1100,8 +1099,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
         ) : (
           // Dome: solid base color + N additive light layers, each clipped
           // to its lit region (centroid-to-perimeter wedge across the lit
-          // arc) and painted with a linear gradient along its azimuth.
-          // Plateau emerges naturally where every light's wedge covers it.
+          // arc) and painted with a radial gradient from centroid out to the
+          // slice's rim. Plateau emerges naturally where every light's wedge covers it.
           <>
             {domeLayers.length > 0 && (
               <>
@@ -1111,11 +1110,11 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                       <clipPath id={`${idPrefix}-dome-clip-${i}`}>
                         <path d={layer.clipD} />
                       </clipPath>
-                      <linearGradient
+                      <radialGradient
                         id={`${idPrefix}-dome-grad-${i}`}
                         gradientUnits="userSpaceOnUse"
-                        x1={layer.x1} y1={layer.y1}
-                        x2={layer.x2} y2={layer.y2}
+                        cx={layer.cx} cy={layer.cy} r={layer.r}
+                        fx={layer.cx} fy={layer.cy}
                       >
                         {layer.stops.map((s, j) => (
                           <stop
@@ -1125,7 +1124,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                             stopOpacity={fillRender.amount * layer.intensity * s.opacity}
                           />
                         ))}
-                      </linearGradient>
+                      </radialGradient>
                     </Fragment>
                   ))}
                 </defs>
