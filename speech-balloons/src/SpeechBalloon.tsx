@@ -886,12 +886,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
     const rimTiltRad = (fillRender.rimTilt * Math.PI) / 180;
     const bevelWidthPx = fillRender.bevelWidth;
-    // Distance from centroid to body perimeter in a given direction.
-    const radiusAt = (angleDeg: number): number => {
-      const sc = attachmentS(angleDeg, sampler, centroid[0], centroid[1]);
-      const p = sampler.perimeterAt(sc);
-      return Math.hypot(p.x - centroid[0], p.y - centroid[1]);
-    };
 
     // Build a linear-interp contour function once per render.
     const flatContour = fillRender.contour;
@@ -912,34 +906,54 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       return a.y + (b.y - a.y) * u;
     };
 
-    return domeLights.map((light) => {
+    const out: Array<{
+      clipD: string;
+      x1: number; y1: number; x2: number; y2: number;
+      intensity: number;
+      stops: GradientStop[];
+    }> = [];
+
+    for (const light of domeLights) {
       const arcs = computeLitArcs(angleSampler, light.az, light.el, 240, rimTiltRad);
-      const clipD = buildLightWedgePath(angleSampler, arcs, centroid);
-      const azRad = (light.az * Math.PI) / 180;
-      const cosAz = Math.cos(azRad);
-      const sinAz = Math.sin(azRad);
-      const rLit = radiusAt(light.az);
-      const rFar = radiusAt(light.az + 180);
-      const stops = sampleLightStops({
-        azimuthDeg: light.az,
-        elevationDeg: light.el,
-        rimTiltRad,
-        crownHeight: fillRender.crownHeight,
-        rLit,
-        rFar,
-        bevelWidthPx,
-        contour,
-      });
-      return {
-        clipD,
-        x1: centroid[0] + cosAz * rLit,
-        y1: centroid[1] + sinAz * rLit,
-        x2: centroid[0] - cosAz * rFar,
-        y2: centroid[1] - sinAz * rFar,
-        intensity: light.intensity,
-        stops,
-      };
-    });
+      for (const arc of arcs) {
+        // computeLitArcs may return wrapped arcs (end < start). Normalize.
+        let a0 = arc.start;
+        let a1 = arc.end;
+        if (a1 <= a0) a1 += 2 * Math.PI;
+        const boundaries = subdivideArc(angleSampler, a0, a1, centroid, 8, 4, 32);
+        for (let k = 0; k + 1 < boundaries.length; k++) {
+          const aStart = boundaries[k]!;
+          const aEnd = boundaries[k + 1]!;
+          const aMid = (aStart + aEnd) / 2;
+          const rimPoint = angleSampler(aMid);
+          const rLocal = Math.hypot(rimPoint.x - centroid[0], rimPoint.y - centroid[1]);
+          if (rLocal < 1e-6) continue;
+          const clipD = buildSliceWedgePath(angleSampler, aStart, aEnd, centroid);
+          const stops = sampleSliceStops({
+            axisAngleRad: aMid,
+            rLocal,
+            rimTiltRad,
+            crownHeight: fillRender.crownHeight,
+            bevelWidthPx,
+            lightAzimuthDeg: light.az,
+            lightElevationDeg: light.el,
+            lightIntensity: light.intensity,
+            contour,
+          });
+          out.push({
+            clipD,
+            x1: centroid[0],
+            y1: centroid[1],
+            x2: centroid[0] + Math.cos(aMid) * rLocal,
+            y2: centroid[1] + Math.sin(aMid) * rLocal,
+            intensity: 1, // already folded into per-stop opacity
+            stops,
+          });
+        }
+      }
+    }
+
+    return out;
   }, [
     fillRender.mode,
     fillRender.rimTilt,
