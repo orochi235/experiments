@@ -805,6 +805,26 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     domeLights,
   ]);
 
+  // Debug overlay geometry. Recomputes the same bbox/centroid/R/rBevel
+  // that domeLayers uses, plus an axis line for each light. Cheap; only
+  // built when the overlay is on. The shapes are layered ABOVE the dome
+  // fill so the user can see where the math lands relative to the body.
+  const domeDebug = useMemo(() => {
+    if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
+    const bb = polysBBox(bodyAndBubblesPolys);
+    if (bb.w <= 0 || bb.h <= 0) return null;
+    const cx = bb.x + bb.w / 2;
+    const cy = bb.y + bb.h / 2;
+    const R = Math.max(bb.w, bb.h) / 2;
+    const bwNorm = R > 0 ? Math.min(1, fillRender.bevelWidth / R) : 0;
+    const rBevelPx = (1 - bwNorm) * R;
+    const lights = domeLights.map((l) => {
+      const az = (l.az * Math.PI) / 180;
+      return { x2: cx + Math.cos(az) * R, y2: cy + Math.sin(az) * R, intensity: l.intensity };
+    });
+    return { bb, cx, cy, R, rBevelPx, lights };
+  }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, bodyAndBubblesPolys, domeLights]);
+
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
   const pxH = (H + 2 * reach) * zoom;
@@ -947,6 +967,32 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
         {/* Outline last so it sits on top of the lit fill. */}
         {strokeW > 0 && (
           <path d={bodyPath} fill="none" stroke={strokeColor} strokeWidth={strokeW} strokeLinejoin="round" />
+        )}
+        {domeDebug && (
+          <g style={{ pointerEvents: 'none' }}>
+            <rect
+              x={domeDebug.bb.x} y={domeDebug.bb.y}
+              width={domeDebug.bb.w} height={domeDebug.bb.h}
+              fill="none" stroke="#ff5050" strokeWidth={1} strokeDasharray="4 4" opacity={0.7}
+            />
+            <circle
+              cx={domeDebug.cx} cy={domeDebug.cy} r={domeDebug.R}
+              fill="none" stroke="#ff5050" strokeWidth={1} strokeDasharray="2 4" opacity={0.6}
+            />
+            <circle
+              cx={domeDebug.cx} cy={domeDebug.cy} r={domeDebug.rBevelPx}
+              fill="none" stroke="#ffd54a" strokeWidth={1.5} opacity={0.9}
+            />
+            {domeDebug.lights.map((l, i) => (
+              <line
+                key={i}
+                x1={domeDebug.cx} y1={domeDebug.cy}
+                x2={l.x2} y2={l.y2}
+                stroke="#ffd54a" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
+              />
+            ))}
+            <circle cx={domeDebug.cx} cy={domeDebug.cy} r={4} fill="#ff3030" />
+          </g>
         )}
       </g>
 

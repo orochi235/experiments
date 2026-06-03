@@ -539,6 +539,14 @@ export function Lab() {
             />
             <span>Size to content</span>
           </label>
+          <label className="sb-checkbox">
+            <input
+              type="checkbox"
+              checked={!!runtime.domeDebug}
+              onChange={(e) => setRuntime((r) => ({ ...r, domeDebug: e.target.checked }))}
+            />
+            <span>Dome debug overlay</span>
+          </label>
           <ColorRow
             label="Background"
             value={splitColor(design.bg).rgb}

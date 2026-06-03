@@ -18,6 +18,7 @@ export interface RuntimeState {
   fontSize: number;
   text: string;
   fitToContent: boolean;
+  domeDebug?: boolean;
 }
 
 export interface DesignState {
