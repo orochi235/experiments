@@ -825,38 +825,37 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     domeLights,
   ]);
 
-  // Debug overlay geometry. Renders concentric scaled-down copies of the
-  // body's bare perimeter, plus light azimuth rays from the centroid.
+  // Debug overlay geometry. Body silhouette in red, bevel band inner
+  // boundary inset by bevelWidth along each perimeter point's outward
+  // normal in yellow, plus light azimuth rays from the centroid.
   const domeDebug = useMemo(() => {
     if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
     const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return null;
     const cx = bb.x + bb.w / 2;
     const cy = bb.y + bb.h / 2;
-    const R = Math.max(bb.w, bb.h) / 2;
-    const bwNorm = R > 0 ? Math.min(1, fillRender.bevelWidth / R) : 0;
+    const bw = fillRender.bevelWidth;
 
-    // Sample the base perimeter once, then scale each point about the
-    // centroid for each requested ring.
     const N = 96;
-    const perim: Array<{ x: number; y: number }> = [];
+    const bodyPts: string[] = [];
+    const bevelPts: string[] = [];
     for (let i = 0; i < N; i++) {
       const p = sampler.perimeterAt((i / N) * sampler.totalLen);
-      perim.push({ x: p.x, y: p.y });
+      bodyPts.push(`${p.x},${p.y}`);
+      bevelPts.push(`${p.x - p.nx * bw},${p.y - p.ny * bw}`);
     }
-    const scaledRingPoints = (scale: number): string => perim
-      .map(({ x, y }) => `${cx + (x - cx) * scale},${cy + (y - cy) * scale}`)
-      .join(' ');
 
+    // Light azimuth rays — length runs to the actual rim in that direction.
     const lights = domeLights.map((l) => {
-      const az = (l.az * Math.PI) / 180;
-      return { x2: cx + Math.cos(az) * R, y2: cy + Math.sin(az) * R, intensity: l.intensity };
+      const sc = attachmentS(l.az, sampler, cx, cy);
+      const rim = sampler.perimeterAt(sc);
+      return { x2: rim.x, y2: rim.y, intensity: l.intensity };
     });
     return {
       cx,
       cy,
-      bevelRingPoints: scaledRingPoints(1 - bwNorm),
-      halfRingPoints: scaledRingPoints(0.5),
+      bodyRingPoints: bodyPts.join(' '),
+      bevelRingPoints: bevelPts.join(' '),
       lights,
     };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
@@ -1007,8 +1006,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
         {domeDebug && (
           <g style={{ pointerEvents: 'none' }}>
             <polygon
-              points={domeDebug.halfRingPoints}
-              fill="none" stroke="#ff5050" strokeWidth={1} strokeDasharray="3 4" opacity={0.5}
+              points={domeDebug.bodyRingPoints}
+              fill="none" stroke="#ff3030" strokeWidth={1.5} opacity={0.9}
             />
             <polygon
               points={domeDebug.bevelRingPoints}
