@@ -688,6 +688,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       highlightColor: (p.highlightColor as string) ?? '#ffffff',
       lightAzimuth: (p.lightAzimuth as number) ?? 270,
       lightElevation: (p.lightElevation as number) ?? 55,
+      rimTilt: (p.rimTilt as number) ?? 0,
+      crownHeight: (p.crownHeight as number) ?? 0,
       bevelWidth: (p.bevelWidth as number) ?? 22,
       domeGloss: (p.domeGloss as number) ?? 0.35,
       specStrength: (p.specStrength as number) ?? 0.5,

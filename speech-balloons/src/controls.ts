@@ -47,6 +47,8 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H }) => Math.floor(Math.min(W, H) / 3), unit: 'px' },
     { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
     { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
+    { key: 'rimTilt', label: 'Rim tilt', kind: 'range', min: 0, max: 90, step: 1, default: 0, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
+    { key: 'crownHeight', label: 'Crown height', kind: 'range', min: 0, max: 1, step: 0.02, default: 0, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'domeGloss', label: 'Gloss', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.35, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'specStrength', label: 'Specular', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'specSize', label: 'Specular size', kind: 'range', min: 2, max: 80, step: 0.5, default: 18, hideWhen: (p) => p.mode !== 'dome', unit: 'px' },
