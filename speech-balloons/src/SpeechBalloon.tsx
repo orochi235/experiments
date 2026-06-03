@@ -247,13 +247,20 @@ export function detectPolygonCorners(
     }
     turn[i] = Math.abs(total);
   }
+  // Non-maximum suppression: within a window of W indices, keep only the
+  // vertex with the largest `turn` value. Otherwise a single physical
+  // corner spread across several adjacent samples (or with ties at the
+  // peak) produces multiple "corners".
+  const suppressed = new Array<boolean>(N).fill(false);
   const corners: number[] = [];
-  for (let i = 0; i < N; i++) {
-    if (turn[i]! < threshold) continue;
-    const prev = turn[(i - 1 + N) % N]!;
-    const next = turn[(i + 1) % N]!;
-    if (turn[i]! >= prev && turn[i]! >= next) corners.push(i);
+  const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => turn[b]! - turn[a]!);
+  for (const i of order) {
+    if (turn[i]! < threshold) break;
+    if (suppressed[i]) continue;
+    corners.push(i);
+    for (let k = -W; k <= W; k++) suppressed[((i + k) % N + N) % N] = true;
   }
+  corners.sort((a, b) => a - b);
   return corners;
 }
 
