@@ -84,3 +84,45 @@ describe('domeSurfaceTilt', () => {
     expect(deg(domeSurfaceTilt(0.5, rad(20), 1, -1))).toBeCloseTo(55, 1);
   });
 });
+
+describe('computeLitArcs with rimTilt', () => {
+  const rad = (d: number) => (d * Math.PI) / 180;
+
+  it('matches v1 behavior when rimTilt is 0 (backwards compat)', () => {
+    const sampler = unitCircleAt(0, 0, 50);
+    const v1 = computeLitArcs(sampler, 0, 0, 240);                    // implicit rimTilt=0
+    const tilted = computeLitArcs(sampler, 0, 0, 240, 0);              // explicit 0
+    expect(tilted).toEqual(v1);
+  });
+
+  it('rimTilt = 90° + any positive elevation lights the whole rim', () => {
+    const sampler = unitCircleAt(0, 0, 50);
+    const arcs = computeLitArcs(sampler, 0, 30, 240, rad(90));
+    const total = arcs.reduce(
+      (sum, a) => sum + ((a.end - a.start + 2 * Math.PI) % (2 * Math.PI) || 2 * Math.PI),
+      0,
+    );
+    expect(total).toBeCloseTo(2 * Math.PI, 1);
+  });
+
+  it('rimTilt = 45° widens the lit arc beyond half for elevated light', () => {
+    // Light from +x, elevation 30°. With rimTilt=0 the lit arc is ~π.
+    // With rimTilt=45° the upward component of N catches more rim.
+    const sampler = unitCircleAt(0, 0, 50);
+    const flat = computeLitArcs(sampler, 0, 30, 240, 0);
+    const tilted = computeLitArcs(sampler, 0, 30, 240, rad(45));
+    const sumOf = (arcs: { start: number; end: number }[]) =>
+      arcs.reduce(
+        (s, a) => s + ((a.end - a.start + 2 * Math.PI) % (2 * Math.PI) || 2 * Math.PI),
+        0,
+      );
+    expect(sumOf(tilted)).toBeGreaterThan(sumOf(flat));
+  });
+
+  it('rimTilt = 90° + elevation 0 leaves the rim dark', () => {
+    // Normal points straight up; light is horizontal → N·L = 0.
+    const sampler = unitCircleAt(0, 0, 50);
+    const arcs = computeLitArcs(sampler, 0, 0, 240, rad(90));
+    expect(arcs).toHaveLength(0);
+  });
+});

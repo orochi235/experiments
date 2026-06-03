@@ -118,21 +118,27 @@ export function domeSurfaceTilt(
 }
 
 // Sample the perimeter at `samples` angles and return the contiguous arcs
-// where the 2D outward normal has a positive dot with the light's in-plane
-// direction. v1 approximation: rim's outward normal treated as if it lies
-// in-plane (no contour-driven tilt). Refines later.
+// where the lifted 3D normal N3 = (nx·cos θ, ny·cos θ, sin θ) has a
+// positive dot product with the light direction L. θ here is the rim
+// tilt (the tilt at r=1); interior tilts only matter for the gradient
+// sampler downstream.
 export function computeLitArcs(
   sampler: PerimeterSampler,
   azimuthDeg: number,
   elevationDeg: number,
   samples: number = 240,
+  rimTiltRad: number = 0,
 ): LitArc[] {
   const L = lightDirection(azimuthDeg, elevationDeg);
+  const cosT = Math.cos(rimTiltRad);
+  const sinT = Math.sin(rimTiltRad);
   const lit: boolean[] = new Array(samples);
   for (let i = 0; i < samples; i++) {
     const a = (i / samples) * 2 * Math.PI;
     const p = sampler(a);
-    lit[i] = p.nx * L[0] + p.ny * L[1] > 1e-9;
+    const Lxy = p.nx * L[0] + p.ny * L[1];
+    const NdotL = cosT * Lxy + sinT * L[2];
+    lit[i] = NdotL > 1e-9;
   }
   if (lit.every((x) => x)) return [{ start: 0, end: 2 * Math.PI }];
   if (lit.every((x) => !x)) return [];
