@@ -97,6 +97,24 @@ function lightDirection(azimuthDeg: number, elevationDeg: number): [number, numb
   return [Math.cos(az) * ce, Math.sin(az) * ce, Math.sin(el)];
 }
 
+// Surface tilt θ(r) for the implicit body of revolution. r ∈ [0,1] where
+// r=0 is the centroid and r=1 is the rim. θ is the angle the outward
+// normal lifts above the SVG plane. See spec
+// docs/superpowers/specs/2026-06-02-contour-driven-normal-tilt-design.md
+export function domeSurfaceTilt(
+  r: number,
+  rimTiltRad: number,
+  crownHeight: number,
+  bwNorm: number,
+): number {
+  const bw = Math.min(1, Math.max(0, bwNorm));
+  const crownTilt = rimTiltRad + (Math.PI / 2 - rimTiltRad) * crownHeight;
+  const rBevel = 1 - bw;
+  if (r >= rBevel && rBevel > 0) return rimTiltRad; // bevel face
+  const t = rBevel > 0 ? r / rBevel : r;             // 0 at centroid, 1 at inner edge
+  return crownTilt + (rimTiltRad - crownTilt) * t;
+}
+
 // Sample the perimeter at `samples` angles and return the contiguous arcs
 // where the 2D outward normal has a positive dot with the light's in-plane
 // direction. v1 approximation: rim's outward normal treated as if it lies

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLitArcs, type PerimeterSampler } from './SpeechBalloon';
+import { computeLitArcs, domeSurfaceTilt, type PerimeterSampler } from './SpeechBalloon';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
   x: cx + Math.cos(angle) * r,
@@ -39,5 +39,48 @@ describe('computeLitArcs', () => {
     const sampler: PerimeterSampler = () => ({ x: 0, y: 0, nx: -1, ny: 0 });
     const arcs = computeLitArcs(sampler, 0, 0, 240);
     expect(arcs).toHaveLength(0);
+  });
+});
+
+describe('domeSurfaceTilt', () => {
+  const deg = (rad: number) => (rad * 180) / Math.PI;
+  const rad = (d: number) => (d * Math.PI) / 180;
+
+  it('returns rimTilt at the rim regardless of crown/bw', () => {
+    expect(deg(domeSurfaceTilt(1, rad(30), 0.5, 0.2))).toBeCloseTo(30, 5);
+    expect(deg(domeSurfaceTilt(1, rad(0), 1, 1))).toBeCloseTo(0, 5);
+    expect(deg(domeSurfaceTilt(1, rad(45), 0, 0.1))).toBeCloseTo(45, 5);
+  });
+
+  it('is uniform at rimTilt when crownHeight is 0', () => {
+    expect(deg(domeSurfaceTilt(0.5, rad(20), 0, 0.3))).toBeCloseTo(20, 5);
+    expect(deg(domeSurfaceTilt(0, rad(20), 0, 0.3))).toBeCloseTo(20, 5);
+  });
+
+  it('reaches 90° at the centroid for full crown + no bevel band', () => {
+    // crownHeight=1, bwNorm=1 → pure ramp from rimTilt at r=1 to 90° at r=0.
+    expect(deg(domeSurfaceTilt(0, rad(0), 1, 1))).toBeCloseTo(90, 5);
+    expect(deg(domeSurfaceTilt(0.5, rad(0), 1, 1))).toBeCloseTo(45, 5);
+  });
+
+  it('holds rimTilt across the bevel band', () => {
+    // bwNorm=0.1 → rBevel=0.9. r in [0.9, 1] is bevel face at rimTilt.
+    expect(deg(domeSurfaceTilt(0.95, rad(0), 1, 0.1))).toBeCloseTo(0, 5);
+    expect(deg(domeSurfaceTilt(0.9, rad(0), 1, 0.1))).toBeCloseTo(0, 5);
+  });
+
+  it('ramps inside the interior band', () => {
+    // rimTilt=0, crown=1, bwNorm=0.1 → crownTilt=90°, rBevel=0.9.
+    // Interior: θ = lerp(crownTilt, rimTilt, r/rBevel).
+    // r=0.5 → θ = lerp(90°, 0°, 0.5/0.9) = 90° · 4/9 = 40°.
+    expect(deg(domeSurfaceTilt(0.5, rad(0), 1, 0.1))).toBeCloseTo(40, 1);
+    // r=0 → 90°.
+    expect(deg(domeSurfaceTilt(0, rad(0), 1, 0.1))).toBeCloseTo(90, 5);
+  });
+
+  it('clamps bwNorm to [0,1]', () => {
+    expect(deg(domeSurfaceTilt(0.5, rad(0), 1, 5))).toBeCloseTo(45, 5); // same as bwNorm=1
+    // bwNorm=-1 clamps to 0 → rBevel=1, interior ramp: lerp(90°, 20°, 0.5) = 55°
+    expect(deg(domeSurfaceTilt(0.5, rad(20), 1, -1))).toBeCloseTo(55, 1);
   });
 });
