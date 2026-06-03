@@ -858,11 +858,13 @@ function renderRow(
       typeof params.bevelWidth === 'number' &&
       sampler !== undefined
     ) {
-      const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
-      if (Rmin > 1e-3 && Rmax > 1e-3) {
+      const { Rmin } = bareBaseRadiusRange(sampler);
+      if (Rmin > 1e-3) {
+        // Contour x: 0 = rim, 1 = center. The bevel face occupies [0, bw/R]
+        // and R varies per direction; use Rmin (the narrowest direction) so
+        // the band covers every direction's bevel face.
         const xMax = Math.min(1, params.bevelWidth / Rmin);
-        const xMin = Math.min(1, params.bevelWidth / Rmax);
-        marks = [{ kind: 'band', x: [xMin, xMax], color: '#ffcc00' }];
+        marks = [{ kind: 'band', x: [0, xMax], color: '#ffcc00' }];
       }
     }
     return (
