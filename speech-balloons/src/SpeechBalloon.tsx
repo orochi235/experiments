@@ -299,6 +299,55 @@ export function sampleLightStops(input: LightStopInput): GradientStop[] {
   return out;
 }
 
+export interface SliceStopInput {
+  /** In-plane radial direction (centroid → rim) of this slice. */
+  axisAngleRad: number;
+  /** Body radius from centroid to perimeter at axisAngleRad, in px. */
+  rLocal: number;
+  rimTiltRad: number;
+  crownHeight: number;
+  bevelWidthPx: number;
+  lightAzimuthDeg: number;
+  lightElevationDeg: number;
+  lightIntensity: number;
+  contour: ContourFn;
+  samples?: number;
+}
+
+// Per-slice brightness stops along a half-axis (s=0 centroid, s=1 rim) for a
+// single sub-wedge. The in-plane normal points radially outward along
+// `axisAngleRad`, so the gradient is correct for the slice's own direction
+// rather than the light's azimuth — this is what kills the wedge seams.
+export function sampleSliceStops(input: SliceStopInput): GradientStop[] {
+  const SAMPLES = input.samples ?? 16;
+  const azRad = (input.lightAzimuthDeg * Math.PI) / 180;
+  const elRad = (input.lightElevationDeg * Math.PI) / 180;
+  const Lx = Math.cos(azRad) * Math.cos(elRad);
+  const Ly = Math.sin(azRad) * Math.cos(elRad);
+  const Lz = Math.sin(elRad);
+
+  const cosA = Math.cos(input.axisAngleRad);
+  const sinA = Math.sin(input.axisAngleRad);
+  const rLocal = Math.max(1e-6, input.rLocal);
+  const bwNorm = Math.min(1, Math.max(0, input.bevelWidthPx / rLocal));
+
+  const out: GradientStop[] = [];
+  for (let i = 0; i <= SAMPLES; i++) {
+    const s = i / SAMPLES;
+    const r = s;                                           // 0 = centroid, 1 = rim
+    const tilt = domeSurfaceTilt(r, input.rimTiltRad, input.crownHeight, bwNorm);
+    const cosTilt = Math.cos(tilt);
+    const sinTilt = Math.sin(tilt);
+    const N3x = cosA * cosTilt;
+    const N3y = sinA * cosTilt;
+    const N3z = sinTilt;
+    const phys = Math.max(0, N3x * Lx + N3y * Ly + N3z * Lz);
+    const paint = Math.max(0, input.contour(1 - r));
+    out.push({ offset: s, opacity: input.lightIntensity * phys * paint });
+  }
+  return out;
+}
+
 // Rotate an attach-point's outward normal by `outAngle` degrees in-plane.
 // Bubbles / lightning don't deform the body silhouette, so they don't go
 // through pointedTailOffsetAt (which applies its own outAngle). Their

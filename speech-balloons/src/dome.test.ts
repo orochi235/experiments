@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, type PerimeterSampler } from './SpeechBalloon';
+import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, sampleLightStops, sampleSliceStops, type PerimeterSampler, type ContourFn } from './SpeechBalloon';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
   x: cx + Math.cos(angle) * r,
@@ -126,8 +126,6 @@ describe('computeLitArcs with rimTilt', () => {
     expect(arcs).toHaveLength(0);
   });
 });
-
-import { sampleLightStops, type ContourFn } from './SpeechBalloon';
 
 describe('sampleLightStops', () => {
   const rad = (d: number) => (d * Math.PI) / 180;
@@ -261,5 +259,102 @@ describe('buildSliceWedgePath', () => {
     // After "M 100 100", the next "L x y" should be the rim point at a=0:
     // (100 + 50, 100 + 0) = (150, 100).
     expect(d).toMatch(/M 100 100 L 150 100/);
+  });
+});
+
+describe('sampleSliceStops', () => {
+  const flatContour = () => 1;
+
+  it('matches the lit half of sampleLightStops on a circular body', () => {
+    // Unit-radius circular case: rLit = rFar = 1, sCentroid = 0.5.
+    // axisAngleRad = light.az (rim direction = light direction).
+    const sliceStops = sampleSliceStops({
+      axisAngleRad: 0,
+      rLocal: 1,
+      rimTiltRad: 0,
+      crownHeight: 0,
+      bevelWidthPx: 0.1,
+      lightAzimuthDeg: 0,
+      lightElevationDeg: 30,
+      lightIntensity: 1,
+      contour: flatContour,
+      samples: 16,
+    });
+    const lightStops = sampleLightStops({
+      azimuthDeg: 0,
+      elevationDeg: 30,
+      rimTiltRad: 0,
+      crownHeight: 0,
+      rLit: 1,
+      rFar: 1,
+      bevelWidthPx: 0.1,
+      contour: flatContour,
+      samples: 16,
+    });
+    // sliceStops at offset s_new=r matches lightStops at s_old=(1-r)/2.
+    for (let i = 0; i <= 8; i++) {
+      const r = i / 8;
+      const sNew = r;
+      const sOld = (1 - r) / 2;
+      const slice = sliceStops.find((s) => Math.abs(s.offset - sNew) < 1e-9);
+      const light = lightStops.find((s) => Math.abs(s.offset - sOld) < 1e-9);
+      expect(slice).toBeDefined();
+      expect(light).toBeDefined();
+      expect(slice!.opacity).toBeCloseTo(light!.opacity, 6);
+    }
+  });
+
+  it('emits samples+1 stops with strictly increasing offsets from 0 to 1', () => {
+    const stops = sampleSliceStops({
+      axisAngleRad: 0,
+      rLocal: 50,
+      rimTiltRad: 0,
+      crownHeight: 0.4,
+      bevelWidthPx: 10,
+      lightAzimuthDeg: 30,
+      lightElevationDeg: 45,
+      lightIntensity: 1,
+      contour: flatContour,
+      samples: 16,
+    });
+    expect(stops).toHaveLength(17);
+    expect(stops[0]!.offset).toBe(0);
+    expect(stops[stops.length - 1]!.offset).toBe(1);
+    for (let i = 1; i < stops.length; i++) {
+      expect(stops[i]!.offset).toBeGreaterThan(stops[i - 1]!.offset);
+    }
+  });
+
+  it('contour multiplier is applied: zero contour produces zero opacity', () => {
+    const zero = () => 0;
+    const stops = sampleSliceStops({
+      axisAngleRad: 0,
+      rLocal: 50,
+      rimTiltRad: 0,
+      crownHeight: 0.5,
+      bevelWidthPx: 10,
+      lightAzimuthDeg: 0,
+      lightElevationDeg: 30,
+      lightIntensity: 1,
+      contour: zero,
+      samples: 8,
+    });
+    for (const s of stops) expect(s.opacity).toBe(0);
+  });
+
+  it('applies lightIntensity multiplicatively', () => {
+    const a = sampleSliceStops({
+      axisAngleRad: 0, rLocal: 50, rimTiltRad: 0, crownHeight: 0,
+      bevelWidthPx: 10, lightAzimuthDeg: 0, lightElevationDeg: 30,
+      lightIntensity: 1, contour: flatContour, samples: 8,
+    });
+    const b = sampleSliceStops({
+      axisAngleRad: 0, rLocal: 50, rimTiltRad: 0, crownHeight: 0,
+      bevelWidthPx: 10, lightAzimuthDeg: 0, lightElevationDeg: 30,
+      lightIntensity: 0.5, contour: flatContour, samples: 8,
+    });
+    for (let i = 0; i < a.length; i++) {
+      expect(b[i]!.opacity).toBeCloseTo(a[i]!.opacity * 0.5, 9);
+    }
   });
 });
