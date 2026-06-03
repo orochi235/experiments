@@ -10,6 +10,7 @@
 // that attach at the same perimeter point but don't deform the body silhouette.
 
 import type { BalloonBase, ParamBag } from './types';
+import { offsetClosedPolygon, type Polygon } from './clipping';
 
 export interface PerimeterPoint {
   x: number;
@@ -807,6 +808,39 @@ export function buildZigzagLightningPolyline(
   }
   out.push({ x: endX, y: endY });
   return out;
+}
+
+// Largest inward offset distance (in px) at which clipper's miter-join
+// inset still returns at least one closed polygon. Used to cap the
+// bevelWidth slider so the user cannot push past the body's geometric
+// medial-axis distance. Returns the lower bound of a binary search with
+// a small safety margin so the rendered inset never disappears at the
+// slider's max.
+export function bareBaseMaxBevel(sampler: BaseSampler): number {
+  const N = 192;
+  const body: Polygon = [];
+  for (let i = 0; i < N; i++) {
+    const p = sampler.perimeterAt((i / N) * sampler.totalLen);
+    body.push({ x: p.x, y: p.y });
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of body) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (!isFinite(minX)) return 0;
+  let lo = 0;
+  let hi = Math.max(1, Math.max(maxX - minX, maxY - minY) / 2);
+  for (let iter = 0; iter < 18; iter++) {
+    const mid = (lo + hi) / 2;
+    const result = offsetClosedPolygon(body, -mid, 'miter');
+    if (result.length === 0) hi = mid;
+    else lo = mid;
+    if (hi - lo < 0.25) break;
+  }
+  return Math.max(0, lo * 0.98);
 }
 
 // Build a tapered closed polygon by sweeping the perpendicular bisector

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, sampleLightStops, sampleSliceStops, bareBaseRadiusRange, type PerimeterSampler, type ContourFn } from './SpeechBalloon';
-import { buildBaseSampler } from './geometry';
+import { bareBaseMaxBevel, buildBaseSampler } from './geometry';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
   x: cx + Math.cos(angle) * r,
@@ -374,5 +374,39 @@ describe('bareBaseRadiusRange', () => {
     const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
     expect(Rmax / Rmin).toBeGreaterThan(1.9);
     expect(Rmax / Rmin).toBeLessThan(2.1);
+  });
+});
+
+describe('bareBaseMaxBevel', () => {
+  it('sharp 100×100 rectangle ≈ 49 px', () => {
+    const sampler = buildBaseSampler('rectangle', { roundness: 0 }, 100, 100);
+    const cap = bareBaseMaxBevel(sampler);
+    expect(cap).toBeGreaterThan(47);
+    expect(cap).toBeLessThan(50);
+  });
+
+  it('200×60 sharp rectangle ≈ 29 px', () => {
+    const sampler = buildBaseSampler('rectangle', { roundness: 0 }, 200, 60);
+    const cap = bareBaseMaxBevel(sampler);
+    expect(cap).toBeGreaterThan(27);
+    expect(cap).toBeLessThan(30);
+  });
+
+  it('100×100 oval ≈ 49 px', () => {
+    const sampler = buildBaseSampler('oval', {}, 100, 100);
+    const cap = bareBaseMaxBevel(sampler);
+    expect(cap).toBeGreaterThan(47);
+    expect(cap).toBeLessThan(50);
+  });
+
+  it('cloud with deep lobes caps below min(W,H)/3', () => {
+    const sampler = buildBaseSampler(
+      'cloud',
+      { lobes: 8, lobeDepth: 0.6 },
+      200,
+      100,
+    );
+    const cap = bareBaseMaxBevel(sampler);
+    expect(cap).toBeLessThan(33);
   });
 });
