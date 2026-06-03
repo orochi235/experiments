@@ -1,4 +1,4 @@
-# Dome Shading Polish: Seam Fix, Bevel Ridge Band, Vertical Flip
+# Dome Shading Polish: Seam Fix, Bevel Ridge Band, Vertical Flip, Bevel Cap & Inset
 
 ## Background
 
@@ -122,6 +122,62 @@ No consumer changes needed.
   - Click "Flip vertically" reflects each y across `(min + max) / 2`.
   - When `marks` includes a band `{ kind: 'band', x: [0.2, 0.4] }`, the overlay rect is positioned at the right x range within the plot box.
 - Visual verification: drag `bevelWidth` and watch the yellow band on the contour editor widen/narrow. On a circle (W = H = 100), band collapses to a thin line. On a 200×40 rectangle, band visibly spans an x-range.
+
+## Companion correctness work: bevel cap & inset polygon
+
+The existing `bevelWidth` slider caps at `min(W, H)/3` and the debug overlay's "bevel ring" is a naïve per-vertex normal-offset polyline. Both cheats break down on real shapes:
+
+- Naïve normal-offset chamfers sharp rectangle corners (the geometrically correct inset of a square is a smaller square — sharp corners stay sharp until they collapse at the medial axis).
+- On rounded rects with corner radius `r`, the corner radius drops to `r − bw`, then inverts past `bw = r` — the ring crosses itself with no detection.
+- On concave shapes (cloud lobes), inward offset crosses itself well before `min(W, H)/3` — the slider lets you slide right past the visibly broken case.
+
+The codebase already depends on `clipper2-ts` and exposes `offsetClosedPolygon(poly, delta, joinType)` in `src/clipping.ts`. Clipper's miter-join inward inset gives the correct geometry for free: sharp corners stay sharp, rounded corners (sampled densely enough) effectively shrink their radii, and over-offset returns an empty polygon set when the offset exceeds the medial-axis distance.
+
+### Helper: `bareBaseMaxBevel`
+
+In `src/SpeechBalloon.tsx` (or `src/geometry.ts` — wherever fits best with surrounding code; `geometry.ts` is preferred since the helper is shape-only):
+
+```
+bareBaseMaxBevel(sampler: BaseSampler): number
+```
+
+Algorithm:
+
+1. Sample the perimeter at `N = 192` points → closed polygon `body`.
+2. Binary search `bw` in `[0, maxRange]` where `maxRange = max(bb.w, bb.h) / 2`.
+3. At each `bw`, run `offsetClosedPolygon(body, -bw, 'miter')`. If the result is empty (no closed polygon survives), `bw` is too large; tighten upper bound. Otherwise tighten lower bound.
+4. Stop when bounds are within `~0.25 px` of each other (~10 iterations).
+5. Return `lowerBound * 0.98` (small safety margin so the rendered inset never disappears at the slider's max).
+
+### Widening `maxFn` to consume the sampler
+
+Currently `maxFn?: (ctx: { W: number; H: number }) => number`. Extend to `maxFn?: (ctx: { W: number; H: number; sampler?: BaseSampler }) => number`. `Lab.tsx`'s `renderRow` builds the sampler once (via `buildBaseSampler(bodyShape, bodyParams, W, H)`) when both shape and params are available, and passes it into both the bevel-ridge-band computation (already planned) and the new `maxFn` call.
+
+`controls.ts` updates `bevelWidth` to:
+
+```
+maxFn: ({ W, H, sampler }) => sampler
+  ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler)))
+  : Math.floor(Math.min(W, H) / 3),
+```
+
+When no sampler is present (early render / fit-to-content not yet measured) we fall back to the cheap heuristic.
+
+### Debug overlay inset polygon
+
+Replace the naïve per-vertex inset computed inside `domeDebug` with `offsetClosedPolygon(body, -bw, 'miter')`. Render as a compound SVG path (clipper may emit multiple disjoint polygons for shapes that fragment at large `bw`). If the result is empty, omit the bevel ring (or render a degenerate marker at the centroid).
+
+The shading math itself is unchanged — it does not consume the inset polygon; only the debug overlay does.
+
+### Testing for the cap & inset
+
+`src/dome.test.ts` extensions:
+
+1. `bareBaseMaxBevel(sharp 100×100 rectangle)` ≈ `49 ± 1` px (medial-axis distance is 50, less the safety margin).
+2. `bareBaseMaxBevel(200×60 sharp rectangle)` ≈ `29 ± 1` px.
+3. `bareBaseMaxBevel(100×100 oval)` ≈ `49 ± 1` px.
+4. `bareBaseMaxBevel(cloud shape with deep lobes)` is significantly less than `min(W,H)/3` — verifies the concavity case where the old heuristic over-allows.
+5. Visual: debug overlay on a sharp 200×60 rectangle with `bw = 20` shows the inset polygon with sharp corners (a smaller centered rectangle), not the diagonal chamfer the old code drew.
 
 ## Open questions
 
