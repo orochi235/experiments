@@ -217,64 +217,66 @@ export function subdivideArc(
   return out;
 }
 
-// For each of ~`count` evenly-spaced perimeter vertices, ray-cast inward
-// along the local outward normal, find the first hit on the polygon
-// (excluding nearby neighbors), and return the inward segment that ends
-// at the midpoint — i.e. on the medial axis. Used as a debug overlay so
-// you can see which perimeter span each medial-axis point is equidistant
-// from. Assumes the polygon is visually CW in SVG y-down screen coords.
+// Detect "corner" vertices on a sampled polygon — vertices where the
+// cumulative edge-direction turn over a small window exceeds `threshold`
+// (default ~30°). Returns the local-maximum vertex index in each cluster
+// so a single sharp corner spread across several adjacent samples produces
+// one representative.
+export function detectPolygonCorners(
+  poly: ReadonlyArray<{ x: number; y: number }>,
+  threshold: number = Math.PI / 6,
+): number[] {
+  const N = poly.length;
+  if (N < 8) return [];
+  const W = Math.max(2, Math.floor(N / 32));
+  const dirs: number[] = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const a = poly[i]!, b = poly[(i + 1) % N]!;
+    dirs[i] = Math.atan2(b.y - a.y, b.x - a.x);
+  }
+  const turn: number[] = new Array(N);
+  for (let i = 0; i < N; i++) {
+    let total = 0;
+    for (let k = 0; k < W; k++) {
+      const j = (i - Math.floor(W / 2) + k + N) % N;
+      const jn = (j + 1) % N;
+      let d = dirs[jn]! - dirs[j]!;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      total += d;
+    }
+    turn[i] = Math.abs(total);
+  }
+  const corners: number[] = [];
+  for (let i = 0; i < N; i++) {
+    if (turn[i]! < threshold) continue;
+    const prev = turn[(i - 1 + N) % N]!;
+    const next = turn[(i + 1) % N]!;
+    if (turn[i]! >= prev && turn[i]! >= next) corners.push(i);
+  }
+  return corners;
+}
+
+// One straight-skeleton wing per polygon corner: a line from the corner
+// to its closest point on the medial polygon. On a sharp rectangle this
+// produces four diagonals (one per corner); on an oval the corner
+// detector returns nothing and no wings render.
 export function medialWingsForPolygon(
   poly: ReadonlyArray<{ x: number; y: number }>,
-  count: number = 16,
+  medial: ReadonlyArray<{ x: number; y: number }>,
 ): Array<{ x1: number; y1: number; x2: number; y2: number }> {
-  const N = poly.length;
-  if (N < 6 || count < 1) return [];
-  const minGap = Math.max(4, Math.floor(N / 8));
-  // Outward normal at each vertex = average of perpendiculars of the two
-  // adjacent edges. For CW-screen (math-CCW) traversal, outward = (edge_y, -edge_x).
-  const norms: Array<{ nx: number; ny: number }> = new Array(N);
-  for (let i = 0; i < N; i++) {
-    const prev = poly[(i - 1 + N) % N]!;
-    const curr = poly[i]!;
-    const next = poly[(i + 1) % N]!;
-    const e1x = curr.x - prev.x, e1y = curr.y - prev.y;
-    const e2x = next.x - curr.x, e2y = next.y - curr.y;
-    const nx = e1y + e2y;
-    const ny = -(e1x + e2x);
-    const len = Math.hypot(nx, ny) || 1;
-    norms[i] = { nx: nx / len, ny: ny / len };
-  }
+  if (poly.length < 8 || medial.length === 0) return [];
+  const corners = detectPolygonCorners(poly);
   const wings: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-  const stride = Math.max(1, Math.floor(N / count));
-  for (let i = 0; i < N; i += stride) {
-    const p = poly[i]!;
-    const n = norms[i]!;
-    let bestT = Infinity;
-    for (let j = 0; j < N; j++) {
-      const dArc = Math.min((j - i + N) % N, (i - j + N) % N);
-      if (dArc < minGap) continue;
-      const k = (j + 1) % N;
-      const a = poly[j]!, b = poly[k]!;
-      const sx = b.x - a.x, sy = b.y - a.y;
-      // Ray: P + t*(-n) hits segment [A, A+s] at t,u; solve:
-      //   t*(-n.x) - u*s.x = a.x - p.x
-      //   t*(-n.y) - u*s.y = a.y - p.y
-      // det = (-n.x)(-s.y) - (-s.x)(-n.y) = n.x*s.y - s.x*n.y
-      const det = n.nx * sy - sx * n.ny;
-      if (Math.abs(det) < 1e-9) continue;
-      const t = (-sy * (a.x - p.x) + sx * (a.y - p.y)) / det;
-      const u = (-n.nx * (a.y - p.y) + n.ny * (a.x - p.x)) / det;
-      if (t > 0.5 && t < bestT && u >= 0 && u <= 1) bestT = t;
+  for (const ci of corners) {
+    const c = poly[ci]!;
+    let bx = medial[0]!.x, by = medial[0]!.y;
+    let bestD = Infinity;
+    for (const m of medial) {
+      const d = (m.x - c.x) * (m.x - c.x) + (m.y - c.y) * (m.y - c.y);
+      if (d < bestD) { bestD = d; bx = m.x; by = m.y; }
     }
-    if (bestT < Infinity) {
-      const halfT = bestT / 2;
-      wings.push({
-        x1: p.x,
-        y1: p.y,
-        x2: p.x - n.nx * halfT,
-        y2: p.y - n.ny * halfT,
-      });
-    }
+    wings.push({ x1: c.x, y1: c.y, x2: bx, y2: by });
   }
   return wings;
 }
@@ -1095,10 +1097,33 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       const rim = sampler.perimeterAt(sc);
       return { x2: rim.x, y2: rim.y, intensity: l.intensity };
     });
-    const bodyWings = medialWingsForPolygon(body, 16);
-    const innerWings = insetPolys.length > 0
-      ? medialWingsForPolygon(insetPolys[0]!, 16)
+    const bodyWings = medialPolys.length > 0
+      ? medialWingsForPolygon(body, medialPolys[0]!)
       : [];
+    let innerWings: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    if (insetPolys.length > 0 && innerMedialPath) {
+      // Re-derive the inner medial polygon for wing endpoints.
+      const inner = insetPolys[0]!;
+      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      for (const p of inner) {
+        if (p.x < mnX) mnX = p.x;
+        if (p.y < mnY) mnY = p.y;
+        if (p.x > mxX) mxX = p.x;
+        if (p.y > mxY) mxY = p.y;
+      }
+      let lo = 0;
+      let hi = Math.max(1, Math.max(mxX - mnX, mxY - mnY) / 2);
+      for (let i = 0; i < 30; i++) {
+        const mid = (lo + hi) / 2;
+        if (offsetClosedPolygon(inner, -mid, 'miter').length === 0) hi = mid;
+        else lo = mid;
+        if (hi - lo < 0.02) break;
+      }
+      const innerMedialPolys = offsetClosedPolygon(inner, -Math.max(0, lo - 0.005), 'miter');
+      if (innerMedialPolys.length > 0) {
+        innerWings = medialWingsForPolygon(inner, innerMedialPolys[0]!);
+      }
+    }
 
     return {
       cx,
