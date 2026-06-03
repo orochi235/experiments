@@ -744,7 +744,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
 
   const domeLayers = useMemo(() => {
     if (fillRender.mode !== 'dome') return [];
-    const bb = polysBBox(bodyAndBubblesPolys);
+    const bb = polysBBox([bodyPolygon]);
     if (bb.w <= 0 || bb.h <= 0) return [];
     const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
     const R = Math.max(bb.w, bb.h) / 2;
@@ -800,7 +800,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     fillRender.crownHeight,
     fillRender.bevelWidth,
     fillRender.contour,
-    bodyAndBubblesPolys,
+    bodyPolygon,
     angleSampler,
     domeLights,
   ]);
@@ -811,7 +811,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   // fill so the user can see where the math lands relative to the body.
   const domeDebug = useMemo(() => {
     if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
-    const bb = polysBBox(bodyAndBubblesPolys);
+    const bb = polysBBox([bodyPolygon]);
     if (bb.w <= 0 || bb.h <= 0) return null;
     const cx = bb.x + bb.w / 2;
     const cy = bb.y + bb.h / 2;
@@ -823,7 +823,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       return { x2: cx + Math.cos(az) * R, y2: cy + Math.sin(az) * R, intensity: l.intensity };
     });
     return { bb, cx, cy, R, rBevelPx, lights };
-  }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, bodyAndBubblesPolys, domeLights]);
+  }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, bodyPolygon, domeLights]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
