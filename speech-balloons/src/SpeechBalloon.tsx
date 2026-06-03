@@ -217,77 +217,6 @@ export function subdivideArc(
   return out;
 }
 
-// Detect "corner" vertices on a sampled polygon — vertices where the
-// cumulative edge-direction turn over a small window exceeds `threshold`
-// (default ~30°). Returns the local-maximum vertex index in each cluster
-// so a single sharp corner spread across several adjacent samples produces
-// one representative.
-export function detectPolygonCorners(
-  poly: ReadonlyArray<{ x: number; y: number }>,
-  threshold: number = Math.PI / 6,
-): number[] {
-  const N = poly.length;
-  if (N < 8) return [];
-  const W = Math.max(2, Math.floor(N / 32));
-  const dirs: number[] = new Array(N);
-  for (let i = 0; i < N; i++) {
-    const a = poly[i]!, b = poly[(i + 1) % N]!;
-    dirs[i] = Math.atan2(b.y - a.y, b.x - a.x);
-  }
-  const turn: number[] = new Array(N);
-  for (let i = 0; i < N; i++) {
-    let total = 0;
-    for (let k = 0; k < W; k++) {
-      const j = (i - Math.floor(W / 2) + k + N) % N;
-      const jn = (j + 1) % N;
-      let d = dirs[jn]! - dirs[j]!;
-      while (d > Math.PI) d -= 2 * Math.PI;
-      while (d < -Math.PI) d += 2 * Math.PI;
-      total += d;
-    }
-    turn[i] = Math.abs(total);
-  }
-  // Non-maximum suppression: within a window of W indices, keep only the
-  // vertex with the largest `turn` value. Otherwise a single physical
-  // corner spread across several adjacent samples (or with ties at the
-  // peak) produces multiple "corners".
-  const suppressed = new Array<boolean>(N).fill(false);
-  const corners: number[] = [];
-  const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => turn[b]! - turn[a]!);
-  for (const i of order) {
-    if (turn[i]! < threshold) break;
-    if (suppressed[i]) continue;
-    corners.push(i);
-    for (let k = -W; k <= W; k++) suppressed[((i + k) % N + N) % N] = true;
-  }
-  corners.sort((a, b) => a - b);
-  return corners;
-}
-
-// One straight-skeleton wing per polygon corner: a line from the corner
-// to its closest point on the medial polygon. On a sharp rectangle this
-// produces four diagonals (one per corner); on an oval the corner
-// detector returns nothing and no wings render.
-export function medialWingsForPolygon(
-  poly: ReadonlyArray<{ x: number; y: number }>,
-  medial: ReadonlyArray<{ x: number; y: number }>,
-): Array<{ x1: number; y1: number; x2: number; y2: number }> {
-  if (poly.length < 8 || medial.length === 0) return [];
-  const corners = detectPolygonCorners(poly);
-  const wings: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-  for (const ci of corners) {
-    const c = poly[ci]!;
-    let bx = medial[0]!.x, by = medial[0]!.y;
-    let bestD = Infinity;
-    for (const m of medial) {
-      const d = (m.x - c.x) * (m.x - c.x) + (m.y - c.y) * (m.y - c.y);
-      if (d < bestD) { bestD = d; bx = m.x; by = m.y; }
-    }
-    wings.push({ x1: c.x, y1: c.y, x2: bx, y2: by });
-  }
-  return wings;
-}
-
 // Pie-wedge SVG-d for a single angular slice on the body silhouette:
 // centroid → arc(a0, a1) → centroid. Step density determined by
 // `arcResolutionRad` so curved silhouettes don't visibly polygonize.
@@ -1104,34 +1033,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       const rim = sampler.perimeterAt(sc);
       return { x2: rim.x, y2: rim.y, intensity: l.intensity };
     });
-    const bodyWings = medialPolys.length > 0
-      ? medialWingsForPolygon(body, medialPolys[0]!)
-      : [];
-    let innerWings: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-    if (insetPolys.length > 0 && innerMedialPath) {
-      // Re-derive the inner medial polygon for wing endpoints.
-      const inner = insetPolys[0]!;
-      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
-      for (const p of inner) {
-        if (p.x < mnX) mnX = p.x;
-        if (p.y < mnY) mnY = p.y;
-        if (p.x > mxX) mxX = p.x;
-        if (p.y > mxY) mxY = p.y;
-      }
-      let lo = 0;
-      let hi = Math.max(1, Math.max(mxX - mnX, mxY - mnY) / 2);
-      for (let i = 0; i < 30; i++) {
-        const mid = (lo + hi) / 2;
-        if (offsetClosedPolygon(inner, -mid, 'miter').length === 0) hi = mid;
-        else lo = mid;
-        if (hi - lo < 0.02) break;
-      }
-      const innerMedialPolys = offsetClosedPolygon(inner, -Math.max(0, lo - 0.005), 'miter');
-      if (innerMedialPolys.length > 0) {
-        innerWings = medialWingsForPolygon(inner, innerMedialPolys[0]!);
-      }
-    }
-
     return {
       cx,
       cy,
@@ -1139,8 +1040,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       bevelPath,
       medialPath,
       innerMedialPath,
-      bodyWings,
-      innerWings,
       lights,
     };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
@@ -1307,20 +1206,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                 x1={domeDebug.cx} y1={domeDebug.cy}
                 x2={l.x2} y2={l.y2}
                 stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
-              />
-            ))}
-            {domeDebug.bodyWings.map((w, i) => (
-              <line
-                key={`bw${i}`}
-                x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
-                stroke="#ff3030" strokeWidth={0.8} strokeDasharray="3 3" opacity={0.7}
-              />
-            ))}
-            {domeDebug.innerWings.map((w, i) => (
-              <line
-                key={`iw${i}`}
-                x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
-                stroke="#ffcc00" strokeWidth={0.6} strokeDasharray="2 2" opacity={0.85}
               />
             ))}
             <path
