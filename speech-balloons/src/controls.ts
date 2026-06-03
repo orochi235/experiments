@@ -1,7 +1,8 @@
+import type { BaseSampler } from './geometry';
 import type { BalloonBase, EffectKind, ParamBag } from './types';
 
 export type LabControl =
-  | { key: string; label?: string; kind: 'range'; min: number; max: number; step: number; default: number; hideWhen?: (params: ParamBag) => boolean; maxFn?: (ctx: { W: number; H: number }) => number; unit?: string; format?: (v: number) => string }
+  | { key: string; label?: string; kind: 'range'; min: number; max: number; step: number; default: number; hideWhen?: (params: ParamBag) => boolean; maxFn?: (ctx: { W: number; H: number; sampler?: BaseSampler }) => number; unit?: string; format?: (v: number) => string }
   | { key: string; label?: string; kind: 'select'; options: string[]; default: string; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'color'; default: string; alpha?: boolean; hideWhen?: (params: ParamBag) => boolean }
   | { key: string; label?: string; kind: 'text'; default: string; hideWhen?: (params: ParamBag) => boolean }

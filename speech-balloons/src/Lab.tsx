@@ -18,7 +18,7 @@ import {
 } from '@labkit/react';
 import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@labkit/react/undo';
 import { bareBaseRadiusRange, SpeechBalloon } from './SpeechBalloon';
-import { buildBaseSampler } from './geometry';
+import { buildBaseSampler, type BaseSampler } from './geometry';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import {
   BASE_CONTROLS,
@@ -788,9 +788,13 @@ function renderRow(
   if (c.kind === 'header') return null;
   const label = c.label ?? c.key;
   const value = params[c.key];
+  const sampler: BaseSampler | undefined =
+    bodyShape && bodyParams && bodyW !== undefined && bodyH !== undefined
+      ? buildBaseSampler(bodyShape, bodyParams, bodyW, bodyH)
+      : undefined;
   if (c.kind === 'range') {
     const dynMax = c.maxFn && bodyW !== undefined && bodyH !== undefined
-      ? c.maxFn({ W: bodyW, H: bodyH })
+      ? c.maxFn({ W: bodyW, H: bodyH, sampler })
       : c.max;
     const clampedValue = Math.min(Number(value ?? c.default), dynMax);
     return (
@@ -852,12 +856,8 @@ function renderRow(
     if (
       c.key === 'contour' &&
       typeof params.bevelWidth === 'number' &&
-      bodyW !== undefined &&
-      bodyH !== undefined &&
-      bodyShape !== undefined &&
-      bodyParams !== undefined
+      sampler !== undefined
     ) {
-      const sampler = buildBaseSampler(bodyShape, bodyParams, bodyW, bodyH);
       const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
       if (Rmin > 1e-3 && Rmax > 1e-3) {
         const xMax = Math.min(1, params.bevelWidth / Rmin);
