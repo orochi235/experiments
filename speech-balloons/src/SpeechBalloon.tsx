@@ -807,10 +807,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     domeLights,
   ]);
 
-  // Debug overlay geometry. Recomputes the same bbox/centroid/R/rBevel
-  // that domeLayers uses, plus an axis line for each light. Cheap; only
-  // built when the overlay is on. The shapes are layered ABOVE the dome
-  // fill so the user can see where the math lands relative to the body.
+  // Debug overlay geometry. Renders concentric scaled-down copies of the
+  // body's bare perimeter, plus light azimuth rays from the centroid.
   const domeDebug = useMemo(() => {
     if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
     const bb = bareBaseBBox(sampler);
@@ -819,12 +817,30 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const cy = bb.y + bb.h / 2;
     const R = Math.max(bb.w, bb.h) / 2;
     const bwNorm = R > 0 ? Math.min(1, fillRender.bevelWidth / R) : 0;
-    const rBevelPx = (1 - bwNorm) * R;
+
+    // Sample the base perimeter once, then scale each point about the
+    // centroid for each requested ring.
+    const N = 96;
+    const perim: Array<{ x: number; y: number }> = [];
+    for (let i = 0; i < N; i++) {
+      const p = sampler.perimeterAt((i / N) * sampler.totalLen);
+      perim.push({ x: p.x, y: p.y });
+    }
+    const scaledRingPoints = (scale: number): string => perim
+      .map(({ x, y }) => `${cx + (x - cx) * scale},${cy + (y - cy) * scale}`)
+      .join(' ');
+
     const lights = domeLights.map((l) => {
       const az = (l.az * Math.PI) / 180;
       return { x2: cx + Math.cos(az) * R, y2: cy + Math.sin(az) * R, intensity: l.intensity };
     });
-    return { bb, cx, cy, R, rBevelPx, lights };
+    return {
+      cx,
+      cy,
+      bevelRingPoints: scaledRingPoints(1 - bwNorm),
+      halfRingPoints: scaledRingPoints(0.5),
+      lights,
+    };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
@@ -972,17 +988,12 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
         )}
         {domeDebug && (
           <g style={{ pointerEvents: 'none' }}>
-            <rect
-              x={domeDebug.bb.x} y={domeDebug.bb.y}
-              width={domeDebug.bb.w} height={domeDebug.bb.h}
-              fill="none" stroke="#ff5050" strokeWidth={1} strokeDasharray="4 4" opacity={0.7}
+            <polygon
+              points={domeDebug.halfRingPoints}
+              fill="none" stroke="#ff5050" strokeWidth={1} strokeDasharray="3 4" opacity={0.5}
             />
-            <circle
-              cx={domeDebug.cx} cy={domeDebug.cy} r={domeDebug.R}
-              fill="none" stroke="#ff5050" strokeWidth={1} strokeDasharray="2 4" opacity={0.6}
-            />
-            <circle
-              cx={domeDebug.cx} cy={domeDebug.cy} r={domeDebug.rBevelPx}
+            <polygon
+              points={domeDebug.bevelRingPoints}
               fill="none" stroke="#ffd54a" strokeWidth={1.5} opacity={0.9}
             />
             {domeDebug.lights.map((l, i) => (
