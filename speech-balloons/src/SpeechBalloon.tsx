@@ -217,6 +217,68 @@ export function subdivideArc(
   return out;
 }
 
+// For each of ~`count` evenly-spaced perimeter vertices, ray-cast inward
+// along the local outward normal, find the first hit on the polygon
+// (excluding nearby neighbors), and return the inward segment that ends
+// at the midpoint — i.e. on the medial axis. Used as a debug overlay so
+// you can see which perimeter span each medial-axis point is equidistant
+// from. Assumes the polygon is visually CW in SVG y-down screen coords.
+export function medialWingsForPolygon(
+  poly: ReadonlyArray<{ x: number; y: number }>,
+  count: number = 16,
+): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+  const N = poly.length;
+  if (N < 6 || count < 1) return [];
+  const minGap = Math.max(4, Math.floor(N / 8));
+  // Outward normal at each vertex = average of perpendiculars of the two
+  // adjacent edges. For CW-screen (math-CCW) traversal, outward = (edge_y, -edge_x).
+  const norms: Array<{ nx: number; ny: number }> = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const prev = poly[(i - 1 + N) % N]!;
+    const curr = poly[i]!;
+    const next = poly[(i + 1) % N]!;
+    const e1x = curr.x - prev.x, e1y = curr.y - prev.y;
+    const e2x = next.x - curr.x, e2y = next.y - curr.y;
+    const nx = e1y + e2y;
+    const ny = -(e1x + e2x);
+    const len = Math.hypot(nx, ny) || 1;
+    norms[i] = { nx: nx / len, ny: ny / len };
+  }
+  const wings: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+  const stride = Math.max(1, Math.floor(N / count));
+  for (let i = 0; i < N; i += stride) {
+    const p = poly[i]!;
+    const n = norms[i]!;
+    let bestT = Infinity;
+    for (let j = 0; j < N; j++) {
+      const dArc = Math.min((j - i + N) % N, (i - j + N) % N);
+      if (dArc < minGap) continue;
+      const k = (j + 1) % N;
+      const a = poly[j]!, b = poly[k]!;
+      const sx = b.x - a.x, sy = b.y - a.y;
+      // Ray: P + t*(-n) hits segment [A, A+s] at t,u; solve:
+      //   t*(-n.x) - u*s.x = a.x - p.x
+      //   t*(-n.y) - u*s.y = a.y - p.y
+      // det = (-n.x)(-s.y) - (-s.x)(-n.y) = n.x*s.y - s.x*n.y
+      const det = n.nx * sy - sx * n.ny;
+      if (Math.abs(det) < 1e-9) continue;
+      const t = (-sy * (a.x - p.x) + sx * (a.y - p.y)) / det;
+      const u = (-n.nx * (a.y - p.y) + n.ny * (a.x - p.x)) / det;
+      if (t > 0.5 && t < bestT && u >= 0 && u <= 1) bestT = t;
+    }
+    if (bestT < Infinity) {
+      const halfT = bestT / 2;
+      wings.push({
+        x1: p.x,
+        y1: p.y,
+        x2: p.x - n.nx * halfT,
+        y2: p.y - n.ny * halfT,
+      });
+    }
+  }
+  return wings;
+}
+
 // Pie-wedge SVG-d for a single angular slice on the body silhouette:
 // centroid → arc(a0, a1) → centroid. Step density determined by
 // `arcResolutionRad` so curved silhouettes don't visibly polygonize.
@@ -1033,6 +1095,11 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       const rim = sampler.perimeterAt(sc);
       return { x2: rim.x, y2: rim.y, intensity: l.intensity };
     });
+    const bodyWings = medialWingsForPolygon(body, 16);
+    const innerWings = insetPolys.length > 0
+      ? medialWingsForPolygon(insetPolys[0]!, 16)
+      : [];
+
     return {
       cx,
       cy,
@@ -1040,6 +1107,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       bevelPath,
       medialPath,
       innerMedialPath,
+      bodyWings,
+      innerWings,
       lights,
     };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
@@ -1206,6 +1275,20 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                 x1={domeDebug.cx} y1={domeDebug.cy}
                 x2={l.x2} y2={l.y2}
                 stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
+              />
+            ))}
+            {domeDebug.bodyWings.map((w, i) => (
+              <line
+                key={`bw${i}`}
+                x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
+                stroke="#ff3030" strokeWidth={0.8} strokeDasharray="3 3" opacity={0.7}
+              />
+            ))}
+            {domeDebug.innerWings.map((w, i) => (
+              <line
+                key={`iw${i}`}
+                x1={w.x1} y1={w.y1} x2={w.x2} y2={w.y2}
+                stroke="#ffcc00" strokeWidth={0.6} strokeDasharray="2 2" opacity={0.85}
               />
             ))}
             <path
