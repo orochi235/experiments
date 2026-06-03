@@ -187,6 +187,9 @@ export function buildLightWedgePath(
 // centroid-radial angles a0 and a1, by summing chord distances across
 // 8 intermediate samples. Returns `N+1` evenly-spaced α boundaries with
 // `N = clamp(ceil(arcLen / targetPxPerSlice), min, max)`.
+// _centroid is unused here (the sampler already returns world-space points)
+// but is kept in the signature for symmetry with buildLightWedgePath and
+// for future callers that may need to derive radial info from centroid.
 export function subdivideArc(
   angleSampler: PerimeterSampler,
   a0: number,
