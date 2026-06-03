@@ -139,28 +139,30 @@ describe('sampleLightStops', () => {
       elevationDeg: 0,
       rimTiltRad: 0,
       crownHeight: 0,
-      bwNorm: 0,
+      rLit: 100,
+      rFar: 100,
+      bevelWidthPx: 0,
       contour: unitContour,
       samples: 16,
     });
     const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
-    expect(max.offset).toBeCloseTo(0, 5);    // s=0 == lit rim
-    expect(stops[stops.length - 1]!.opacity).toBeCloseTo(0, 5); // far rim dark
+    expect(max.offset).toBeCloseTo(0, 5);
+    expect(stops[stops.length - 1]!.opacity).toBeCloseTo(0, 5);
   });
 
   it('shifts the bright spot toward centroid for an overhead light + dome crown', () => {
     const stops = sampleLightStops({
       azimuthDeg: 0,
-      elevationDeg: 90,                       // straight down
+      elevationDeg: 90,
       rimTiltRad: 0,
       crownHeight: 1,
-      bwNorm: 1,                              // full ramp, no bevel face
+      rLit: 100,
+      rFar: 100,
+      bevelWidthPx: 100,                       // full ramp, no bevel face
       contour: unitContour,
       samples: 16,
     });
     const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
-    // Surface at r=0 has tilt=90° (N3 = +z). Light is straight down (L=+z).
-    // Peak should be at the centroid (offset = 0.5).
     expect(max.offset).toBeGreaterThan(0.4);
     expect(max.offset).toBeLessThan(0.6);
   });
@@ -171,7 +173,9 @@ describe('sampleLightStops', () => {
       elevationDeg: 30,
       rimTiltRad: rad(20),
       crownHeight: 0.4,
-      bwNorm: 0.2,
+      rLit: 100,
+      rFar: 100,
+      bevelWidthPx: 20,
       contour: unitContour,
       samples: 16,
     });
@@ -179,5 +183,25 @@ describe('sampleLightStops', () => {
     for (let i = 1; i < stops.length; i++) {
       expect(stops[i]!.offset).toBeGreaterThan(stops[i - 1]!.offset);
     }
+  });
+
+  it('shifts the centroid offset for asymmetric rLit/rFar', () => {
+    // Wide-on-lit-side body: rLit much larger than rFar. The centroid
+    // (peak brightness for an overhead light + full dome) should sit at
+    // s ≈ rLit / (rLit + rFar) = 200 / 300 ≈ 0.67.
+    const stops = sampleLightStops({
+      azimuthDeg: 0,
+      elevationDeg: 90,
+      rimTiltRad: 0,
+      crownHeight: 1,
+      rLit: 200,
+      rFar: 100,
+      bevelWidthPx: 300,
+      contour: unitContour,
+      samples: 32,
+    });
+    const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
+    expect(max.offset).toBeGreaterThan(0.55);
+    expect(max.offset).toBeLessThan(0.78);
   });
 });

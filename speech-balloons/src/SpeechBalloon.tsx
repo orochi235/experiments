@@ -190,9 +190,11 @@ export interface LightStopInput {
   elevationDeg: number;
   rimTiltRad: number;
   crownHeight: number;
-  bwNorm: number;          // bevelWidth / R, already clamped if caller wants
-  contour: ContourFn;      // x=0 (rim) → x=1 (center); y is brightness multiplier
-  samples?: number;        // default 16
+  rLit: number;             // centroid→perimeter distance along the lit direction
+  rFar: number;             // centroid→perimeter distance along the opposite direction
+  bevelWidthPx: number;     // in the same units as rLit/rFar
+  contour: ContourFn;       // x=0 (rim) → x=1 (center); y is brightness multiplier
+  samples?: number;         // default 16
 }
 
 export interface GradientStop {
@@ -201,9 +203,9 @@ export interface GradientStop {
 }
 
 // Sample the per-light brightness along the gradient axis (s ∈ [0,1] going
-// lit-rim → centroid → far-rim). For each sample, recover the radial
-// position on the body of revolution, compute the 3D normal via
-// domeSurfaceTilt, and multiply max(0, N3·L) by the painterly contour.
+// lit-rim → centroid → far-rim). The centroid sits at s_centroid =
+// rLit/(rLit+rFar), so the lit and far halves can have different physical
+// lengths — this is how non-square bodies get a faithful gradient.
 export function sampleLightStops(input: LightStopInput): GradientStop[] {
   const SAMPLES = input.samples ?? 16;
   const azRad = (input.azimuthDeg * Math.PI) / 180;
@@ -216,21 +218,28 @@ export function sampleLightStops(input: LightStopInput): GradientStop[] {
   const Ly = sinAz * cosEl;
   const Lz = sinEl;
 
+  const rLit = Math.max(1e-6, input.rLit);
+  const rFar = Math.max(1e-6, input.rFar);
+  const sCentroid = rLit / (rLit + rFar);
+  const bwNormLit = Math.min(1, Math.max(0, input.bevelWidthPx / rLit));
+  const bwNormFar = Math.min(1, Math.max(0, input.bevelWidthPx / rFar));
+
   const out: GradientStop[] = [];
   for (let i = 0; i <= SAMPLES; i++) {
     const s = i / SAMPLES;
-    const dNorm = 0.5 - s;                              // +1/2 at lit rim, −1/2 at far rim
-    const r = Math.min(1, Math.abs(dNorm) * 2);
-    const tilt = domeSurfaceTilt(r, input.rimTiltRad, input.crownHeight, input.bwNorm);
+    const litSide = s <= sCentroid;
+    const r = litSide
+      ? 1 - s / sCentroid                                    // 1 at lit rim, 0 at centroid
+      : (s - sCentroid) / Math.max(1e-6, 1 - sCentroid);     // 0 at centroid, 1 at far rim
+    const bwNorm = litSide ? bwNormLit : bwNormFar;
+    const tilt = domeSurfaceTilt(r, input.rimTiltRad, input.crownHeight, bwNorm);
     const cosTilt = Math.cos(tilt);
     const sinTilt = Math.sin(tilt);
-    const sgn = dNorm >= 0 ? 1 : -1;
+    const sgn = litSide ? 1 : -1;
     const N3x = sgn * cosAz * cosTilt;
     const N3y = sgn * sinAz * cosTilt;
     const N3z = sinTilt;
     const phys = Math.max(0, N3x * Lx + N3y * Ly + N3z * Lz);
-    // Gradient s 0→0.5→1 maps to radial r=1→0→1. Contour x=0 is rim,
-    // x=1 is centroid. So contour_x = 1 − r.
     const paint = Math.max(0, input.contour(1 - r));
     out.push({ offset: s, opacity: phys * paint });
   }
@@ -749,9 +758,14 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return [];
     const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
-    const R = Math.max(bb.w, bb.h) / 2;
     const rimTiltRad = (fillRender.rimTilt * Math.PI) / 180;
-    const bwNorm = R > 0 ? Math.min(1, fillRender.bevelWidth / R) : 0;
+    const bevelWidthPx = fillRender.bevelWidth;
+    // Distance from centroid to body perimeter in a given direction.
+    const radiusAt = (angleDeg: number): number => {
+      const sc = attachmentS(angleDeg, sampler, centroid[0], centroid[1]);
+      const p = sampler.perimeterAt(sc);
+      return Math.hypot(p.x - centroid[0], p.y - centroid[1]);
+    };
 
     // Build a linear-interp contour function once per render.
     const flatContour = fillRender.contour;
@@ -778,20 +792,24 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       const azRad = (light.az * Math.PI) / 180;
       const cosAz = Math.cos(azRad);
       const sinAz = Math.sin(azRad);
+      const rLit = radiusAt(light.az);
+      const rFar = radiusAt(light.az + 180);
       const stops = sampleLightStops({
         azimuthDeg: light.az,
         elevationDeg: light.el,
         rimTiltRad,
         crownHeight: fillRender.crownHeight,
-        bwNorm,
+        rLit,
+        rFar,
+        bevelWidthPx,
         contour,
       });
       return {
         clipD,
-        x1: centroid[0] + cosAz * R,
-        y1: centroid[1] + sinAz * R,
-        x2: centroid[0] - cosAz * R,
-        y2: centroid[1] - sinAz * R,
+        x1: centroid[0] + cosAz * rLit,
+        y1: centroid[1] + sinAz * rLit,
+        x2: centroid[0] - cosAz * rFar,
+        y2: centroid[1] - sinAz * rFar,
         intensity: light.intensity,
         stops,
       };
