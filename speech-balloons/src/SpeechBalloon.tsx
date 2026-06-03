@@ -663,7 +663,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const rawMode = (p.mode as string) ?? 'dome';
     const mode: FillMode = rawMode === 'aqua' ? 'aqua' : 'dome';
     const base = (p.base as string) ?? '#ffffff';
-    const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, -0.5, 0.5, 0, 1, 0.5];
+    const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, 1, 1, 1];
     return {
       mode,
       base,

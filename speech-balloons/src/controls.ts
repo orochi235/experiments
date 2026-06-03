@@ -60,10 +60,10 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
       min: -1,
       max: 1,
       step: 0.02,
-      // 3 default anchors: a dome cross-section — steep wall at the rim
-      // (dark, profile_y rising fast) flattening toward the center
-      // (bright top, slope ≈ 0). Interleaved [x0,y0,x1,y1,x2,y2].
-      defaults: [0, -1, 0.5, 0.5, 1, 0.7],
+      // Flat at y=1: neutral painterly multiplier. The dome shape comes
+      // from physics (rimTilt/crownHeight/bevelWidth); the contour is an
+      // optional override on top. Interleaved [x0,y0,x1,y1].
+      defaults: [0, 1, 1, 1],
       hideWhen: (p) => p.mode !== 'dome',
     },
   ],
