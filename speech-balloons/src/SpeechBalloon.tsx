@@ -1,6 +1,7 @@
 import { Fragment, useId, useMemo } from 'react';
 import type { DesignState, FillMode, ParamBag, RuntimeState, TailShape } from './types';
 import {
+  bareBaseMaxBevel,
   buildBaseSampler,
   composeBodyPoints,
   attachmentS,
@@ -990,6 +991,13 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const insetPolys = bw > 0 ? offsetClosedPolygon(body, -bw, 'miter') : [body];
     const bevelPath = polygonsToSvgPath(insetPolys);
 
+    // Medial axis approximation: the thinnest non-empty inset polygon clipper
+    // returns at the body's geometric cap. With the cap's 0.98 safety margin
+    // this still has a couple-of-pixel thickness, which works as a thick line.
+    const maxBw = bareBaseMaxBevel(sampler);
+    const medialPolys = maxBw > 0 ? offsetClosedPolygon(body, -maxBw, 'miter') : [];
+    const medialPath = polygonsToSvgPath(medialPolys);
+
     // Light azimuth rays — length runs to the actual rim in that direction.
     const lights = domeLights.map((l) => {
       const sc = angleToS(l.az, sampler, cx, cy);
@@ -1001,6 +1009,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       cy,
       bodyRingPoints: bodyPts.join(' '),
       bevelPath,
+      medialPath,
       lights,
     };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
@@ -1169,6 +1178,14 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                 stroke="#ffd54a" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
               />
             ))}
+            <path
+              d={domeDebug.medialPath}
+              fill="#ff3030"
+              stroke="#ff3030"
+              strokeWidth={3}
+              strokeLinejoin="round"
+              opacity={0.85}
+            />
             <circle cx={domeDebug.cx} cy={domeDebug.cy} r={4} fill="#ff3030" />
           </g>
         )}
