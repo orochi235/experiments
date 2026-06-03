@@ -991,12 +991,39 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     const insetPolys = bw > 0 ? offsetClosedPolygon(body, -bw, 'miter') : [body];
     const bevelPath = polygonsToSvgPath(insetPolys);
 
-    // Medial axis approximation: the thinnest non-empty inset polygon clipper
-    // returns at the body's geometric cap. With the cap's 0.98 safety margin
-    // this still has a couple-of-pixel thickness, which works as a thick line.
+    // Medial axis approximation: clipper's deepest non-empty inset on the
+    // body. The 0.98 safety in bareBaseMaxBevel gives this a couple of px
+    // of natural thickness so it renders as a line, not a degenerate path.
     const maxBw = bareBaseMaxBevel(sampler);
     const medialPolys = maxBw > 0 ? offsetClosedPolygon(body, -maxBw, 'miter') : [];
     const medialPath = polygonsToSvgPath(medialPolys);
+
+    // Inner medial axis: same trick, but applied to the bevel-inset polygon
+    // instead of the body. Sits on top of the outer one (same location on
+    // most shapes, but thinner because it's the medial of a smaller polygon).
+    let innerMedialPath = '';
+    if (insetPolys.length > 0) {
+      const inner = insetPolys[0]!;
+      let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+      for (const p of inner) {
+        if (p.x < mnX) mnX = p.x;
+        if (p.y < mnY) mnY = p.y;
+        if (p.x > mxX) mxX = p.x;
+        if (p.y > mxY) mxY = p.y;
+      }
+      let lo = 0;
+      let hi = Math.max(1, Math.max(mxX - mnX, mxY - mnY) / 2);
+      for (let i = 0; i < 18; i++) {
+        const mid = (lo + hi) / 2;
+        if (offsetClosedPolygon(inner, -mid, 'miter').length === 0) hi = mid;
+        else lo = mid;
+        if (hi - lo < 0.25) break;
+      }
+      const innerMaxBw = Math.max(0, lo * 0.98);
+      if (innerMaxBw > 0) {
+        innerMedialPath = polygonsToSvgPath(offsetClosedPolygon(inner, -innerMaxBw, 'miter'));
+      }
+    }
 
     // Light azimuth rays — length runs to the actual rim in that direction.
     const lights = domeLights.map((l) => {
@@ -1010,6 +1037,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       bodyRingPoints: bodyPts.join(' '),
       bevelPath,
       medialPath,
+      innerMedialPath,
       lights,
     };
   }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
@@ -1175,17 +1203,23 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
                 key={i}
                 x1={domeDebug.cx} y1={domeDebug.cy}
                 x2={l.x2} y2={l.y2}
-                stroke="#ffd54a" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
+                stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
               />
             ))}
             <path
               d={domeDebug.medialPath}
               fill="#ff3030"
-              stroke="#ff3030"
-              strokeWidth={3}
-              strokeLinejoin="round"
-              opacity={0.85}
+              stroke="none"
+              opacity={0.9}
             />
+            {domeDebug.innerMedialPath && (
+              <path
+                d={domeDebug.innerMedialPath}
+                fill="#ffcc00"
+                stroke="none"
+                opacity={0.95}
+              />
+            )}
             <circle cx={domeDebug.cx} cy={domeDebug.cy} r={4} fill="#ff3030" />
           </g>
         )}
