@@ -3,6 +3,7 @@ import {
   CheckboxRow,
   ColorRow,
   CurveField as KitCurveField,
+  type CurveMark,
   LabShell,
   LayerStack as KitLayerStack,
   type LayerStackItem,
@@ -16,7 +17,8 @@ import {
   useLabStore,
 } from '@labkit/react';
 import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@labkit/react/undo';
-import { SpeechBalloon } from './SpeechBalloon';
+import { bareBaseRadiusRange, SpeechBalloon } from './SpeechBalloon';
+import { buildBaseSampler } from './geometry';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import {
   BASE_CONTROLS,
@@ -710,9 +712,10 @@ interface CurveBlockProps {
   max: number;
   step: number;
   defaults?: readonly number[];
+  marks?: readonly CurveMark[];
   onChange: (vals: number[]) => void;
 }
-function CurveBlock({ label, values, min, max, step, defaults, onChange }: CurveBlockProps) {
+function CurveBlock({ label, values, min, max, step, defaults, marks, onChange }: CurveBlockProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   useLayoutEffect(() => {
@@ -730,7 +733,7 @@ function CurveBlock({ label, values, min, max, step, defaults, onChange }: Curve
     <div className="sb-curve-block lk-property-group__span" ref={wrapRef}>
       {label && <h3 className="sb-curve-label">{label}</h3>}
       {width > 0 && (
-        <KitCurveField values={values} min={min} max={max} step={step} width={width} defaults={defaults} onChange={onChange} />
+        <KitCurveField values={values} min={min} max={max} step={step} width={width} defaults={defaults} marks={marks} onChange={onChange} />
       )}
     </div>
   );
@@ -779,8 +782,8 @@ function renderRow(
   onChange: (key: string, value: ParamValue) => void,
   bodyW?: number,
   bodyH?: number,
-  _bodyShape?: BalloonBase,
-  _bodyParams?: ParamBag,
+  bodyShape?: BalloonBase,
+  bodyParams?: ParamBag,
 ): React.ReactNode {
   if (c.kind === 'header') return null;
   const label = c.label ?? c.key;
@@ -845,6 +848,23 @@ function renderRow(
   }
   if (c.kind === 'curve') {
     const arr = Array.isArray(value) ? (value as number[]) : c.defaults;
+    let marks: readonly CurveMark[] | undefined;
+    if (
+      c.key === 'contour' &&
+      typeof params.bevelWidth === 'number' &&
+      bodyW !== undefined &&
+      bodyH !== undefined &&
+      bodyShape !== undefined &&
+      bodyParams !== undefined
+    ) {
+      const sampler = buildBaseSampler(bodyShape, bodyParams, bodyW, bodyH);
+      const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
+      if (Rmin > 1e-3 && Rmax > 1e-3) {
+        const xMax = Math.min(1, params.bevelWidth / Rmin);
+        const xMin = Math.min(1, params.bevelWidth / Rmax);
+        marks = [{ kind: 'band', x: [xMin, xMax], color: '#ffcc00' }];
+      }
+    }
     return (
       <CurveBlock
         key={c.key}
@@ -854,6 +874,7 @@ function renderRow(
         max={c.max}
         step={c.step}
         defaults={c.defaults}
+        marks={marks}
         onChange={(vals) => onChange(c.key, vals)}
       />
     );
