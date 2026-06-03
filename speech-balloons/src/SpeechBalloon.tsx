@@ -921,7 +921,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
         let a0 = arc.start;
         let a1 = arc.end;
         if (a1 <= a0) a1 += 2 * Math.PI;
-        const boundaries = subdivideArc(angleSampler, a0, a1, centroid, 8, 4, 32);
+        const boundaries = subdivideArc(angleSampler, a0, a1, centroid, 4, 4, 96);
         for (let k = 0; k + 1 < boundaries.length; k++) {
           const aStart = boundaries[k]!;
           const aEnd = boundaries[k + 1]!;
