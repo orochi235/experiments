@@ -249,21 +249,23 @@ function rotateAttachByOutAngle(p: PerimeterPoint, outAngleDeg: number): Perimet
   return { x: p.x, y: p.y, nx: p.nx * c - p.ny * s, ny: p.nx * s + p.ny * c };
 }
 
-// Axis-aligned bounding box of one or more polygons.
-function polysBBox(polys: Polygon[]): { x: number; y: number; w: number; h: number } {
+// Axis-aligned bounding box of the base sampler's perimeter — i.e. the
+// bare body silhouette before any tail/spike/lobe/cloud effects deform
+// it. Sampling around totalLen avoids depending on the cooked
+// `bodyPolygon`, which bakes pointed/wavy tails into the silhouette.
+function bareBaseBBox(sampler: BaseSampler): { x: number; y: number; w: number; h: number } {
+  const N = 96;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const poly of polys) {
-    for (const pt of poly) {
-      if (pt.x < minX) minX = pt.x;
-      if (pt.y < minY) minY = pt.y;
-      if (pt.x > maxX) maxX = pt.x;
-      if (pt.y > maxY) maxY = pt.y;
-    }
+  for (let i = 0; i < N; i++) {
+    const p = sampler.perimeterAt((i / N) * sampler.totalLen);
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
   }
   if (!isFinite(minX)) return { x: 0, y: 0, w: 1, h: 1 };
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
-
 
 // --- Component -----------------------------------------------------------
 
@@ -744,7 +746,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
 
   const domeLayers = useMemo(() => {
     if (fillRender.mode !== 'dome') return [];
-    const bb = polysBBox([bodyPolygon]);
+    const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return [];
     const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
     const R = Math.max(bb.w, bb.h) / 2;
@@ -800,7 +802,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     fillRender.crownHeight,
     fillRender.bevelWidth,
     fillRender.contour,
-    bodyPolygon,
+    sampler,
     angleSampler,
     domeLights,
   ]);
@@ -811,7 +813,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   // fill so the user can see where the math lands relative to the body.
   const domeDebug = useMemo(() => {
     if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
-    const bb = polysBBox([bodyPolygon]);
+    const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return null;
     const cx = bb.x + bb.w / 2;
     const cy = bb.y + bb.h / 2;
@@ -823,7 +825,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       return { x2: cx + Math.cos(az) * R, y2: cy + Math.sin(az) * R, intensity: l.intensity };
     });
     return { bb, cx, cy, R, rBevelPx, lights };
-  }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, bodyPolygon, domeLights]);
+  }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
