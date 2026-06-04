@@ -316,3 +316,32 @@ input[type=range]::-moz-range-thumb {
 .shading-pulse {
   animation: shading-pulse 1.2s ease-in-out infinite;
 }
+
+.sb-shading-panel { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.sb-shading-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sb-shading-panel__title { font-size: 12px; font-weight: 600; margin: 0; }
+.sb-shading-panel__group { display: flex; flex-direction: column; gap: 2px; }
+.sb-shading-panel__group-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin: 4px 0 0;
+}
+.sb-shading-panel__list { list-style: none; padding: 0; margin: 0; }
+.sb-shading-panel__row {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sb-shading-panel__row:hover { background: rgba(255, 255, 255, 0.05); }
+.sb-shading-panel__row.is-active {
+  background: rgba(255, 0, 255, 0.12);
+  border-color: rgba(255, 0, 255, 0.6);
+}
+.sb-shading-panel__empty { font-size: 12px; opacity: 0.6; }
