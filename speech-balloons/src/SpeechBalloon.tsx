@@ -1,5 +1,5 @@
-import { Fragment, useId, useMemo } from 'react';
-import type { DesignState, FillMode, ParamBag, RuntimeState, TailShape } from './types';
+import { Fragment, useEffect, useId, useMemo } from 'react';
+import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
 import {
   bareBaseMaxBevel,
   buildBaseSampler,
@@ -30,6 +30,8 @@ interface Props {
   design: DesignState;
   runtime: RuntimeState;
   zoom?: number;
+  onShadingItems?: (items: ShadingItem[]) => void;
+  highlightedShadingId?: string | null;
 }
 
 // --- Text measurement (avoids a double-render bbox roundtrip) -------------
@@ -93,6 +95,11 @@ export interface LitArc {
   end: number;   // radians
 }
 
+// User-edited height profile h(x) where x = 0 at the rim and x = 1 at the
+// medial axis. Single primitive that drives every shading mode (dome / BRDF
+// Lambertian, specular hot-spot placement, rim/Fresnel, billboard heightmap).
+export type ContourFn = (x: number) => number;
+
 function lightDirection(azimuthDeg: number, elevationDeg: number): [number, number, number] {
   const az = (azimuthDeg * Math.PI) / 180;
   const el = (elevationDeg * Math.PI) / 180;
@@ -100,24 +107,27 @@ function lightDirection(azimuthDeg: number, elevationDeg: number): [number, numb
   return [Math.cos(az) * ce, Math.sin(az) * ce, Math.sin(el)];
 }
 
-// Surface tilt θ(r) for the implicit body of revolution. r ∈ [0,1] where
-// r=0 is the centroid and r=1 is the rim. θ is the angle the outward
-// normal lifts above the SVG plane. See spec
-// docs/superpowers/specs/2026-06-02-contour-driven-normal-tilt-design.md
-export function domeSurfaceTilt(
-  r: number,
-  rimTiltRad: number,
-  crownHeight: number,
-  bwNorm: number,
+// Surface tilt θ(r) of the body of revolution at normalized radius r ∈ [0,1]
+// (r=0 = medial axis / dome apex, r=1 = rim). The dome's shape is defined by
+// the user's contour curve h(x) where x = 1 − r (x=0 at the rim, x=1 at the
+// medial axis). Physically, dz/dr = −dh/dx and dz/dr = −cot(θ), so
+//   cot(θ) = dh/dx  ⇒  θ = atan2(1, dh/dx).
+// Slope is clamped ≥ 0: a contour that dips toward center would give tilt
+// > π/2 (normal pointing downward), which is unphysical for our dome model;
+// treat the dip as a flat plateau locally.
+export function contourTilt(
+  rNorm: number,
+  contour: ContourFn,
+  eps = 0.01,
 ): number {
-  const bw = Math.min(1, Math.max(0, bwNorm));
-  const crownTilt = rimTiltRad + (Math.PI / 2 - rimTiltRad) * crownHeight;
-  const rBevel = 1 - bw;
-  // rBevel === 0 when bwNorm === 1 — skip the bevel branch so the interior
-  // ramp covers all of [0, 1].
-  if (r >= rBevel && rBevel > 0) return rimTiltRad;
-  const t = rBevel > 0 ? r / rBevel : r;
-  return crownTilt + (rimTiltRad - crownTilt) * t;
+  const r = Math.min(1, Math.max(0, rNorm));
+  const xMid = 1 - r;
+  const xHi = Math.min(1, xMid + eps);
+  const xLo = Math.max(0, xMid - eps);
+  const dx = xHi - xLo;
+  if (dx <= 0) return Math.PI / 2;
+  const slope = Math.max(0, (contour(xHi) - contour(xLo)) / dx);
+  return Math.atan2(1, slope);
 }
 
 // Sample the perimeter at `samples` angles and return the contiguous arcs
@@ -239,17 +249,12 @@ export function buildSliceWedgePath(
   return d;
 }
 
-export type ContourFn = (x: number) => number;
-
 export interface LightStopInput {
   azimuthDeg: number;
   elevationDeg: number;
-  rimTiltRad: number;
-  crownHeight: number;
   rLit: number;             // centroid→perimeter distance along the lit direction
   rFar: number;             // centroid→perimeter distance along the opposite direction
-  bevelWidthPx: number;     // in the same units as rLit/rFar
-  contour: ContourFn;       // x=0 (rim) → x=1 (center); y is brightness multiplier
+  contour: ContourFn;       // height profile, x=0 (rim) → x=1 (medial axis)
   samples?: number;         // default 16
 }
 
@@ -261,7 +266,8 @@ export interface GradientStop {
 // Sample the per-light brightness along the gradient axis (s ∈ [0,1] going
 // lit-rim → centroid → far-rim). The centroid sits at s_centroid =
 // rLit/(rLit+rFar), so the lit and far halves can have different physical
-// lengths — this is how non-square bodies get a faithful gradient.
+// lengths — this is how non-square bodies get a faithful gradient. Tilt at
+// each sample is derived from the contour curve's slope (see contourTilt).
 export function sampleLightStops(input: LightStopInput): GradientStop[] {
   const SAMPLES = input.samples ?? 16;
   const azRad = (input.azimuthDeg * Math.PI) / 180;
@@ -277,8 +283,6 @@ export function sampleLightStops(input: LightStopInput): GradientStop[] {
   const rLit = Math.max(1e-6, input.rLit);
   const rFar = Math.max(1e-6, input.rFar);
   const sCentroid = rLit / (rLit + rFar);
-  const bwNormLit = Math.min(1, Math.max(0, input.bevelWidthPx / rLit));
-  const bwNormFar = Math.min(1, Math.max(0, input.bevelWidthPx / rFar));
 
   const out: GradientStop[] = [];
   for (let i = 0; i <= SAMPLES; i++) {
@@ -287,8 +291,7 @@ export function sampleLightStops(input: LightStopInput): GradientStop[] {
     const r = litSide
       ? 1 - s / sCentroid                                    // 1 at lit rim, 0 at centroid
       : (s - sCentroid) / Math.max(1e-6, 1 - sCentroid);     // 0 at centroid, 1 at far rim
-    const bwNorm = litSide ? bwNormLit : bwNormFar;
-    const tilt = domeSurfaceTilt(r, input.rimTiltRad, input.crownHeight, bwNorm);
+    const tilt = contourTilt(r, input.contour);
     const cosTilt = Math.cos(tilt);
     const sinTilt = Math.sin(tilt);
     const sgn = litSide ? 1 : -1;
@@ -296,8 +299,7 @@ export function sampleLightStops(input: LightStopInput): GradientStop[] {
     const N3y = sgn * sinAz * cosTilt;
     const N3z = sinTilt;
     const phys = Math.max(0, N3x * Lx + N3y * Ly + N3z * Lz);
-    const paint = Math.max(0, input.contour(1 - r));
-    out.push({ offset: s, opacity: phys * paint });
+    out.push({ offset: s, opacity: phys });
   }
   return out;
 }
@@ -305,11 +307,6 @@ export function sampleLightStops(input: LightStopInput): GradientStop[] {
 export interface SliceStopInput {
   /** In-plane radial direction (centroid → rim) of this slice. */
   axisAngleRad: number;
-  /** Body radius from centroid to perimeter at axisAngleRad, in px. */
-  rLocal: number;
-  rimTiltRad: number;
-  crownHeight: number;
-  bevelWidthPx: number;
   lightAzimuthDeg: number;
   lightElevationDeg: number;
   lightIntensity: number;
@@ -321,6 +318,7 @@ export interface SliceStopInput {
 // single sub-wedge. The in-plane normal points radially outward along
 // `axisAngleRad`, so the gradient is correct for the slice's own direction
 // rather than the light's azimuth — this is what kills the wedge seams.
+// Tilt is read off the user's contour curve via contourTilt.
 export function sampleSliceStops(input: SliceStopInput): GradientStop[] {
   const SAMPLES = input.samples ?? 16;
   const azRad = (input.lightAzimuthDeg * Math.PI) / 180;
@@ -331,22 +329,19 @@ export function sampleSliceStops(input: SliceStopInput): GradientStop[] {
 
   const cosA = Math.cos(input.axisAngleRad);
   const sinA = Math.sin(input.axisAngleRad);
-  const rLocal = Math.max(1e-6, input.rLocal);
-  const bwNorm = Math.min(1, Math.max(0, input.bevelWidthPx / rLocal));
 
   const out: GradientStop[] = [];
   for (let i = 0; i <= SAMPLES; i++) {
     const s = i / SAMPLES;
     const r = s;                                           // 0 = centroid, 1 = rim
-    const tilt = domeSurfaceTilt(r, input.rimTiltRad, input.crownHeight, bwNorm);
+    const tilt = contourTilt(r, input.contour);
     const cosTilt = Math.cos(tilt);
     const sinTilt = Math.sin(tilt);
     const N3x = cosA * cosTilt;
     const N3y = sinA * cosTilt;
     const N3z = sinTilt;
     const phys = Math.max(0, N3x * Lx + N3y * Ly + N3z * Lz);
-    const paint = Math.max(0, input.contour(1 - r));
-    out.push({ offset: s, opacity: input.lightIntensity * phys * paint });
+    out.push({ offset: s, opacity: input.lightIntensity * phys });
   }
   return out;
 }
@@ -404,9 +399,103 @@ export function bareBaseRadiusRange(sampler: BaseSampler): { Rmin: number; Rmax:
   return { Rmin, Rmax };
 }
 
+// --- BRDF (per-light × per-term) shading ---------------------------------
+// Architecture: docs/superpowers/notes/2026-06-03-per-light-region-shading.md.
+// For each light L and each BRDF term T ∈ {Diffuse, Specular, Rim}, paint one
+// region (clip-path) with the gradient that captures T's intensity over that
+// region. Ambient = the solid base body fill underneath. Layers composite via
+// `mix-blend-mode: screen`, so additively in screen space.
+
+// Body-of-revolution Blinn-Phong: the surface tilt at which the dome's normal
+// aligns with the half-vector H = normalize(L + V) for viewer V = (0, 0, 1).
+// We only need L's elevation: H's in-plane direction is L's in-plane direction
+// (so the spot sits on the light azimuth), and H's tilt above the plane is
+// atan((Lz + 1) / |L_xy|). An in-plane light gives a vertical H (tilt = π/2).
+export function halfVectorTilt(elevationDeg: number): number {
+  const el = (elevationDeg * Math.PI) / 180;
+  const Lxy = Math.cos(el);
+  const Lz = Math.sin(el);
+  if (Lxy < 1e-9) return Math.PI / 2;
+  return Math.atan2(Lz + 1, Lxy);
+}
+
+// Scan r ∈ [0, 1] for the value whose `contourTilt(r)` best matches a target
+// tilt. The contour-derived tilt isn't guaranteed monotone (user can draw any
+// shape), so a brute-force min-error scan beats bisection in robustness; the
+// inner cost is cheap (constant work per step) and only runs once per light.
+export function findRForTilt(targetTilt: number, contour: ContourFn): number {
+  const SAMPLES = 64;
+  let bestR = 0;
+  let bestErr = Infinity;
+  for (let i = 0; i <= SAMPLES; i++) {
+    const r = i / SAMPLES;
+    const err = Math.abs(contourTilt(r, contour) - targetTilt);
+    if (err < bestErr) {
+      bestErr = err;
+      bestR = r;
+    }
+  }
+  return bestR;
+}
+
+// Specular falloff sampled along the radial of a radialGradient anchored at
+// the hot spot. Falloff curve mimics Blinn-Phong cos^n with the gradient
+// radius corresponding to the angular width of the highlight: bright at the
+// center, smooth roll-off to zero at offset=1. `specPower` is the Phong-style
+// shininess (higher = tighter).
+export function sampleSpecularStops(specPower: number, samples = 16): GradientStop[] {
+  const k = Math.max(0.5, specPower / 6);
+  const out: GradientStop[] = [];
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    out.push({ offset: t, opacity: Math.pow(Math.max(0, 1 - t), k) });
+  }
+  return out;
+}
+
+// Fresnel/rim stops along a radial from centroid (offset 0) to rim (offset 1).
+// Intensity = (1 - |N · V|)^rimPower with V=(0,0,1) and |N · V| = sin(tilt(r)).
+// Strongest near the rim where the contour's slope is steep (low tilt, normal
+// near in-plane), decaying to zero on plateau regions where the normal points
+// straight at the viewer.
+export function sampleRimStops(
+  contour: ContourFn,
+  rimPower: number,
+  samples = 24,
+): GradientStop[] {
+  const k = Math.max(0.5, rimPower);
+  const out: GradientStop[] = [];
+  for (let i = 0; i <= samples; i++) {
+    const r = i / samples;
+    const tilt = contourTilt(r, contour);
+    const fresnel = Math.pow(Math.max(0, 1 - Math.sin(tilt)), k);
+    out.push({ offset: r, opacity: fresnel });
+  }
+  return out;
+}
+
+// --- Heightmap ------------------------------------------------------------
+// Billboard (orthographic, V=(0,0,1)) elevation of the body — literally the
+// user's contour curve sampled per-pixel. With the contour-driven model the
+// curve IS the height profile h(x) where x = 1 − r (x=0 rim, x=1 medial
+// axis), so the heightmap is just `h(1 − r)` clipped to [0, 1]. Same primitive
+// the dome/BRDF Lambertian reads via contourTilt — no separate parameter
+// universe to drift out of sync.
+
+export function domeHeight(rNorm: number, contour: ContourFn): number {
+  const r = Math.min(1, Math.max(0, rNorm));
+  return Math.max(0, contour(1 - r));
+}
+
 // --- Component -----------------------------------------------------------
 
-export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
+export function SpeechBalloon({
+  design,
+  runtime,
+  zoom: zoomProp,
+  onShadingItems,
+  highlightedShadingId,
+}: Props) {
   // Body dimensions: either design-time width/height or fit-to-content.
   const { W, H } = useMemo(() => {
     if (!runtime.fitToContent) return { W: design.width, H: design.height };
@@ -800,7 +889,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
   const fillRender = useMemo(() => {
     const p = fillEffect?.params ?? {};
     const rawMode = (p.mode as string) ?? 'dome';
-    const mode: FillMode = rawMode === 'aqua' ? 'aqua' : 'dome';
+    const mode: FillMode =
+      rawMode === 'aqua' ? 'aqua' : rawMode === 'brdf' ? 'brdf' : 'dome';
     const base = (p.base as string) ?? '#ffffff';
     const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, 1, 1, 1];
     return {
@@ -812,12 +902,14 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       highlightColor: (p.highlightColor as string) ?? '#ffffff',
       lightAzimuth: (p.lightAzimuth as number) ?? 270,
       lightElevation: (p.lightElevation as number) ?? 55,
-      rimTilt: (p.rimTilt as number) ?? 0,
-      crownHeight: (p.crownHeight as number) ?? 0,
       bevelWidth: (p.bevelWidth as number) ?? 22,
       domeGloss: (p.domeGloss as number) ?? 0.35,
       specStrength: (p.specStrength as number) ?? 0.5,
       specSize: (p.specSize as number) ?? 18,
+      // BRDF-only knobs
+      specPower: (p.specPower as number) ?? 32,
+      rimStrength: (p.rimStrength as number) ?? 0.4,
+      rimPower: (p.rimPower as number) ?? 3,
       // Aqua-only params
       lightAngle: (p.lightAngle as number) ?? 270,
       glossStrength: (p.glossStrength as number) ?? 0.55,
@@ -881,22 +973,18 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     };
   }, [sampler, W, H]);
 
-  const domeLayers = useMemo(() => {
-    if (fillRender.mode !== 'dome') return [];
-    const bb = bareBaseBBox(sampler);
-    if (bb.w <= 0 || bb.h <= 0) return [];
-    const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
-    const rimTiltRad = (fillRender.rimTilt * Math.PI) / 180;
-    const bevelWidthPx = fillRender.bevelWidth;
-
-    // Build a linear-interp contour function once per render.
-    const flatContour = fillRender.contour;
+  // Single contour function shared by every shading and debug memo. The
+  // dome's tilt curve, the BRDF terms, and the heightmap all derive from this
+  // one primitive — no separate parameters for rim tilt / crown height /
+  // bevel curve. The user sculpts the height profile directly.
+  const contour = useMemo<ContourFn>(() => {
+    const flat = fillRender.contour;
     const cpts: Array<{ x: number; y: number }> = [];
-    for (let i = 0; i + 1 < flatContour.length; i += 2) {
-      cpts.push({ x: flatContour[i]!, y: flatContour[i + 1]! });
+    for (let i = 0; i + 1 < flat.length; i += 2) {
+      cpts.push({ x: flat[i]!, y: flat[i + 1]! });
     }
     cpts.sort((a, b) => a.x - b.x);
-    const contour = (x: number): number => {
+    return (x) => {
       if (cpts.length === 0) return 0;
       if (x <= cpts[0]!.x) return cpts[0]!.y;
       if (x >= cpts[cpts.length - 1]!.x) return cpts[cpts.length - 1]!.y;
@@ -907,6 +995,18 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       const u = (x - a.x) / (b.x - a.x);
       return a.y + (b.y - a.y) * u;
     };
+  }, [fillRender.contour]);
+
+  // Rim tilt is whatever the contour curve produces at r=1; this seeds the
+  // computeLitArcs threshold (it tests whether the lifted 3D rim normal
+  // catches the light) so the lit half-arc still tracks the dome's shape.
+  const rimTiltRad = useMemo(() => contourTilt(1, contour), [contour]);
+
+  const domeLayers = useMemo(() => {
+    if (fillRender.mode !== 'dome') return [];
+    const bb = bareBaseBBox(sampler);
+    if (bb.w <= 0 || bb.h <= 0) return [];
+    const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
 
     const out: Array<{
       clipD: string;
@@ -933,10 +1033,6 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
           const clipD = buildSliceWedgePath(angleSampler, aStart, aEnd, centroid);
           const stops = sampleSliceStops({
             axisAngleRad: aMid,
-            rLocal,
-            rimTiltRad,
-            crownHeight: fillRender.crownHeight,
-            bevelWidthPx,
             lightAzimuthDeg: light.az,
             lightElevationDeg: light.el,
             lightIntensity: light.intensity,
@@ -957,20 +1053,243 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
     return out;
   }, [
     fillRender.mode,
-    fillRender.rimTilt,
-    fillRender.crownHeight,
-    fillRender.bevelWidth,
-    fillRender.contour,
+    contour,
+    rimTiltRad,
     sampler,
     angleSampler,
     domeLights,
+  ]);
+
+  // BRDF mode: one path per (light × term). Far fewer gradient primitives
+  // than the dome's N-slice loop — at most 3 per light (Diffuse + Specular +
+  // Rim) on top of the solid base body fill that stands in for Ambient.
+  type BrdfLayer = {
+    key: string;
+    clipD: string;
+    gradient:
+      | { type: 'linear'; x1: number; y1: number; x2: number; y2: number }
+      | { type: 'radial'; cx: number; cy: number; r: number };
+    stops: GradientStop[];
+    color: string;
+    scale: number;
+  };
+
+  const brdfLayers = useMemo<BrdfLayer[]>(() => {
+    if (fillRender.mode !== 'brdf') return [];
+    const bb = bareBaseBBox(sampler);
+    if (bb.w <= 0 || bb.h <= 0) return [];
+    const cx = bb.x + bb.w / 2;
+    const cy = bb.y + bb.h / 2;
+
+    const out: BrdfLayer[] = [];
+    for (let li = 0; li < domeLights.length; li++) {
+      const light = domeLights[li]!;
+      const arcs = computeLitArcs(angleSampler, light.az, light.el, 240, rimTiltRad);
+      if (arcs.length === 0) continue;
+      const litWedgeD = buildLightWedgePath(angleSampler, arcs, [cx, cy]);
+
+      // Lit-rim and far-rim points along the light azimuth for axis-aligned
+      // gradients; the centroid sits between them at s = rLit/(rLit + rFar).
+      const azRad = (light.az * Math.PI) / 180;
+      const litRim = angleSampler(azRad);
+      const farRim = angleSampler(azRad + Math.PI);
+      const rLit = Math.hypot(litRim.x - cx, litRim.y - cy);
+      const rFar = Math.hypot(farRim.x - cx, farRim.y - cy);
+
+      // Diffuse: linearGradient along the light axis. Stops come from
+      // sampleLightStops (Lambertian over the contour-derived tilt curve);
+      // the wedge clip bounds the paint to the lit hemisphere — and since
+      // N·L = 0 at the terminator, that hard edge is zero by construction.
+      out.push({
+        key: `${li}-d`,
+        clipD: litWedgeD,
+        gradient: { type: 'linear', x1: litRim.x, y1: litRim.y, x2: farRim.x, y2: farRim.y },
+        stops: sampleLightStops({
+          azimuthDeg: light.az,
+          elevationDeg: light.el,
+          rLit,
+          rFar,
+          contour,
+        }),
+        color: fillRender.highlightColor,
+        scale: fillRender.amount * light.intensity,
+      });
+
+      // Specular: find r where contour-derived tilt matches the half-vector's
+      // elevation (Blinn-Phong peak), then anchor a small radialGradient
+      // there. The hot spot sits on the light-azimuth radial at
+      // distance r_spec · rLit from the centroid.
+      if (fillRender.specStrength > 0) {
+        const targetTilt = halfVectorTilt(light.el);
+        const rSpec = findRForTilt(targetTilt, contour);
+        const hotX = cx + rSpec * (litRim.x - cx);
+        const hotY = cy + rSpec * (litRim.y - cy);
+        out.push({
+          key: `${li}-s`,
+          clipD: litWedgeD,
+          gradient: { type: 'radial', cx: hotX, cy: hotY, r: Math.max(2, fillRender.specSize) },
+          stops: sampleSpecularStops(fillRender.specPower),
+          color: fillRender.highlightColor,
+          scale: fillRender.amount * light.intensity * fillRender.specStrength,
+        });
+      }
+
+      // Rim/Fresnel: radialGradient centered at centroid with radius = rLit,
+      // stops peaked where the contour's slope is steep — that's where the
+      // surface normal is nearest in-plane and (1 − sin(tilt))^k spikes. The
+      // lit-wedge clip restricts the paint to the lit side, so the rim only
+      // appears where light actually grazes the silhouette.
+      if (fillRender.rimStrength > 0) {
+        out.push({
+          key: `${li}-r`,
+          clipD: litWedgeD,
+          gradient: { type: 'radial', cx, cy, r: rLit },
+          stops: sampleRimStops(contour, fillRender.rimPower),
+          color: fillRender.highlightColor,
+          scale: fillRender.amount * light.intensity * fillRender.rimStrength,
+        });
+      }
+    }
+    return out;
+  }, [
+    fillRender.mode,
+    contour,
+    rimTiltRad,
+    fillRender.amount,
+    fillRender.highlightColor,
+    fillRender.specStrength,
+    fillRender.specSize,
+    fillRender.specPower,
+    fillRender.rimStrength,
+    fillRender.rimPower,
+    sampler,
+    angleSampler,
+    domeLights,
+  ]);
+
+  // Heightmap debug overlay: rasterize the body's billboard-viewed elevation
+  // z(x, y) into a canvas, encode as a grayscale data URL, and hand back
+  // placement metadata. Black = rim (z = 0), white = the highest centroid
+  // sample. With the contour-driven model, z(x, y) is literally the contour
+  // curve sampled at r_norm = 1 − d/dMax (d = distance from perimeter, dMax =
+  // medial-axis depth) — a direct visualization of the same primitive the
+  // dome/BRDF shading reads via contourTilt.
+  const heightmapImage = useMemo(() => {
+    if (!runtime.heightmapDebug) return null;
+    if (typeof document === 'undefined') return null;
+    const bb = bareBaseBBox(sampler);
+    if (bb.w <= 0 || bb.h <= 0) return null;
+
+    // Perimeter polyline: closed loop of segments around the body silhouette.
+    // Per-pixel we compute (a) point-in-polygon to decide inside, and (b) the
+    // minimum distance to any perimeter segment. That distance is what
+    // parameterizes the dome — the body-of-revolution model is replaced with
+    // a body-of-OFFSETS model so the bevel band hugs the actual silhouette
+    // instead of stretching radially out from the centroid (which on a
+    // rounded-rect produces the blob you saw at the corners).
+    const PERIM_N = 192;
+    const perimX = new Float32Array(PERIM_N);
+    const perimY = new Float32Array(PERIM_N);
+    for (let i = 0; i < PERIM_N; i++) {
+      const p = sampler.perimeterAt((i / PERIM_N) * sampler.totalLen);
+      perimX[i] = p.x;
+      perimY[i] = p.y;
+    }
+
+    // dMax = depth of the medial axis (deepest inscribed offset). Used to
+    // normalize per-pixel perimeter distance into r ∈ [0, 1] before sampling
+    // the contour. No bevel-width split — the contour curve carries that.
+    const dMax = Math.max(1e-6, bareBaseMaxBevel(sampler));
+
+    const PAD = 2;
+    const W = Math.max(1, Math.ceil(bb.w) + 2 * PAD);
+    const H = Math.max(1, Math.ceil(bb.h) + 2 * PAD);
+    const x0 = bb.x - PAD;
+    const y0 = bb.y - PAD;
+
+    const cv = document.createElement('canvas');
+    cv.width = W;
+    cv.height = H;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return null;
+    const img = ctx.createImageData(W, H);
+    const data = img.data;
+
+    const heightField = new Float32Array(W * H);
+    const insideMask = new Uint8Array(W * H);
+    let hMax = 0;
+    for (let py = 0; py < H; py++) {
+      const wy = y0 + py + 0.5;
+      for (let px = 0; px < W; px++) {
+        const wx = x0 + px + 0.5;
+        // Distance to perimeter (min over all segments) + horizontal ray-cast
+        // crossing parity for the inside test, fused into one perimeter pass.
+        let dMinSq = Infinity;
+        let crossings = 0;
+        let ax = perimX[PERIM_N - 1]!;
+        let ay = perimY[PERIM_N - 1]!;
+        for (let k = 0; k < PERIM_N; k++) {
+          const bx = perimX[k]!;
+          const by = perimY[k]!;
+          const dx = bx - ax;
+          const dy = by - ay;
+          const lenSq = dx * dx + dy * dy;
+          let t = 0;
+          if (lenSq > 1e-12) {
+            t = ((wx - ax) * dx + (wy - ay) * dy) / lenSq;
+            if (t < 0) t = 0; else if (t > 1) t = 1;
+          }
+          const qx = ax + t * dx;
+          const qy = ay + t * dy;
+          const ex = wx - qx;
+          const ey = wy - qy;
+          const dsq = ex * ex + ey * ey;
+          if (dsq < dMinSq) dMinSq = dsq;
+          // Ray-cast (horizontal ray going +x from pixel).
+          if ((ay > wy) !== (by > wy)) {
+            const xCross = ax + (wy - ay) * (bx - ax) / (by - ay);
+            if (wx < xCross) crossings++;
+          }
+          ax = bx;
+          ay = by;
+        }
+        if ((crossings & 1) === 0) continue; // outside body
+        const d = Math.sqrt(dMinSq);
+        const rNorm = Math.min(1, Math.max(0, 1 - d / dMax));
+        const h = domeHeight(rNorm, contour);
+        const i = py * W + px;
+        heightField[i] = h;
+        insideMask[i] = 1;
+        if (h > hMax) hMax = h;
+      }
+    }
+    const norm = hMax > 1e-9 ? 1 / hMax : 0;
+    for (let i = 0; i < W * H; i++) {
+      const o = i * 4;
+      if (!insideMask[i]) {
+        data[o + 3] = 0;
+        continue;
+      }
+      const v = Math.min(255, Math.max(0, Math.round(heightField[i]! * norm * 255)));
+      data[o] = v;
+      data[o + 1] = v;
+      data[o + 2] = v;
+      data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+    return { href: cv.toDataURL('image/png'), x: x0, y: y0, w: W, h: H };
+  }, [
+    runtime.heightmapDebug,
+    contour,
+    sampler,
   ]);
 
   // Debug overlay geometry. Body silhouette in red, bevel band inner
   // boundary (geometrically-correct clipper miter inset) in yellow,
   // plus light azimuth rays from the centroid.
   const domeDebug = useMemo(() => {
-    if (!runtime.domeDebug || fillRender.mode !== 'dome') return null;
+    if (!runtime.domeDebug) return null;
+    if (fillRender.mode !== 'dome' && fillRender.mode !== 'brdf') return null;
     const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return null;
     const cx = bb.x + bb.w / 2;
@@ -1027,26 +1346,83 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       }
     }
 
-    // Light azimuth rays — length runs to the actual rim in that direction.
+    // Per-light overlay data:
+    //   - lit-rim point (where the centroid → azimuth ray hits the perimeter):
+    //     also the bright end of the BRDF diffuse linearGradient,
+    //   - far-rim point (opposite side): the dark end of that same axis,
+    //   - specular hot spot (BRDF only): scanned r where contourTilt(r)
+    //     matches the half-vector elevation, placed on the azimuth radial.
+    const isBrdf = fillRender.mode === 'brdf';
     const lights = domeLights.map((l) => {
-      const sc = angleToS(l.az, sampler, cx, cy);
-      const rim = sampler.perimeterAt(sc);
-      return { x2: rim.x, y2: rim.y, intensity: l.intensity };
+      const azRad = (l.az * Math.PI) / 180;
+      const litRim = angleSampler(azRad);
+      const farRim = angleSampler(azRad + Math.PI);
+      let hot: { x: number; y: number; r: number } | null = null;
+      if (isBrdf && fillRender.specStrength > 0) {
+        const targetTilt = halfVectorTilt(l.el);
+        const rSpec = findRForTilt(targetTilt, contour);
+        hot = {
+          x: cx + rSpec * (litRim.x - cx),
+          y: cy + rSpec * (litRim.y - cy),
+          r: Math.max(2, fillRender.specSize),
+        };
+      }
+      return {
+        x2: litRim.x,
+        y2: litRim.y,
+        farX: farRim.x,
+        farY: farRim.y,
+        hot,
+        intensity: l.intensity,
+      };
     });
     return {
       cx,
       cy,
+      isBrdf,
       bodyRingPoints: bodyPts.join(' '),
       bevelPath,
       medialPath,
       innerMedialPath,
       lights,
     };
-  }, [runtime.domeDebug, fillRender.mode, fillRender.bevelWidth, sampler, domeLights]);
+  }, [
+    runtime.domeDebug,
+    fillRender.mode,
+    fillRender.bevelWidth,
+    fillRender.specStrength,
+    fillRender.specSize,
+    contour,
+    sampler,
+    angleSampler,
+    domeLights,
+  ]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
   const pxH = (H + 2 * reach) * zoom;
+
+  // Render-time registry of shading elements. Each tagged JSX element calls
+  // `pushShading` to add itself; after this render the array is published to
+  // the parent via onShadingItems. Recreated every render so it always
+  // reflects the current mode/light/effect set.
+  const shadingItems: ShadingItem[] = [];
+  const pushShading = (item: ShadingItem): string => {
+    shadingItems.push(item);
+    return item.id;
+  };
+  const pulseIf = (id: string): string | undefined =>
+    highlightedShadingId === id ? 'shading-pulse' : undefined;
+
+  // Publish after each render. useEffect's dep on a joined id list avoids
+  // re-firing when the (always-new) array reference changes but the item set
+  // hasn't.
+  const shadingItemsKey = shadingItems.map((s) => s.id).join('|');
+  useEffect(() => {
+    onShadingItems?.(shadingItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shadingItemsKey, onShadingItems]);
+
   return (
     <svg
       viewBox={`${-reach} ${-reach} ${W + 2 * reach} ${H + 2 * reach}`}
@@ -1118,7 +1494,7 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
       {/* Body group — silhouette + bubble/lightning tails share the same fill,
           stroke, and drop-shadow filter. */}
       <g filter={hasShadow ? `url(#${shadowId})` : undefined}>
-        {fillRender.mode === 'aqua' ? (
+        {fillRender.mode === 'aqua' && (
           // Aqua: per-shape paint servers, no filter. Body and each bubble get
           // their own bbox-anchored gradient + gloss so the "centroid" of each
           // sub-shape's highlight lands inside it instead of being averaged
@@ -1135,7 +1511,8 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
               </g>
             ))}
           </>
-        ) : (
+        )}
+        {fillRender.mode === 'dome' && (
           // Dome: solid base color + N additive light layers, each clipped
           // to its lit region (centroid-to-perimeter wedge across the lit
           // arc) and painted with a radial gradient from centroid out to the
@@ -1182,10 +1559,101 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
             )}
           </>
         )}
+        {fillRender.mode === 'brdf' && (
+          // BRDF: solid base body (ambient) + one painted region per
+          // (light × term). Each region has the gradient shape best matched
+          // to its term — linear along the light axis for Diffuse,
+          // radial at the hot spot for Specular, radial centroid→rim for Rim.
+          // Stacked additively via `mix-blend-mode: screen`.
+          <>
+            <path d={bodyPath} fill={fillRender.base} />
+            {brdfLayers.length > 0 && (
+              <>
+                <defs>
+                  {brdfLayers.map((layer) => (
+                    <Fragment key={layer.key}>
+                      <clipPath id={`${idPrefix}-brdf-clip-${layer.key}`}>
+                        <path d={layer.clipD} />
+                      </clipPath>
+                      {layer.gradient.type === 'linear' ? (
+                        <linearGradient
+                          id={`${idPrefix}-brdf-grad-${layer.key}`}
+                          gradientUnits="userSpaceOnUse"
+                          x1={layer.gradient.x1} y1={layer.gradient.y1}
+                          x2={layer.gradient.x2} y2={layer.gradient.y2}
+                        >
+                          {layer.stops.map((s, j) => (
+                            <stop
+                              key={j}
+                              offset={s.offset}
+                              stopColor={layer.color}
+                              stopOpacity={Math.min(1, Math.max(0, layer.scale * s.opacity))}
+                            />
+                          ))}
+                        </linearGradient>
+                      ) : (
+                        <radialGradient
+                          id={`${idPrefix}-brdf-grad-${layer.key}`}
+                          gradientUnits="userSpaceOnUse"
+                          cx={layer.gradient.cx} cy={layer.gradient.cy} r={layer.gradient.r}
+                          fx={layer.gradient.cx} fy={layer.gradient.cy}
+                        >
+                          {layer.stops.map((s, j) => (
+                            <stop
+                              key={j}
+                              offset={s.offset}
+                              stopColor={layer.color}
+                              stopOpacity={Math.min(1, Math.max(0, layer.scale * s.opacity))}
+                            />
+                          ))}
+                        </radialGradient>
+                      )}
+                    </Fragment>
+                  ))}
+                </defs>
+                <g style={{ mixBlendMode: 'screen', isolation: 'isolate' }}>
+                  {brdfLayers.map((layer) => (
+                    <path
+                      key={layer.key}
+                      d={bodyPath}
+                      fill={`url(#${idPrefix}-brdf-grad-${layer.key})`}
+                      clipPath={`url(#${idPrefix}-brdf-clip-${layer.key})`}
+                    />
+                  ))}
+                </g>
+              </>
+            )}
+          </>
+        )}
 
         {/* Outline last so it sits on top of the lit fill. */}
         {strokeW > 0 && (
           <path d={bodyPath} fill="none" stroke={strokeColor} strokeWidth={strokeW} strokeLinejoin="round" />
+        )}
+        {heightmapImage && (
+          // Billboard heightmap overlay: covers the body silhouette with the
+          // grayscale elevation field derived from the same bevel curve the
+          // dome/BRDF modes shade against. Sits above the fill but below the
+          // line-art debug overlay, and clips to the body silhouette so it
+          // doesn't bleed into tails / lightning / bubbles (which aren't part
+          // of the body-of-revolution model).
+          <>
+            <defs>
+              <clipPath id={`${idPrefix}-hm-clip`}>
+                <path d={bodyPath} />
+              </clipPath>
+            </defs>
+            <image
+              href={heightmapImage.href}
+              x={heightmapImage.x}
+              y={heightmapImage.y}
+              width={heightmapImage.w}
+              height={heightmapImage.h}
+              preserveAspectRatio="none"
+              clipPath={`url(#${idPrefix}-hm-clip)`}
+              style={{ imageRendering: 'pixelated', pointerEvents: 'none' }}
+            />
+          </>
         )}
         {domeDebug && (
           <g style={{ pointerEvents: 'none' }}>
@@ -1201,12 +1669,36 @@ export function SpeechBalloon({ design, runtime, zoom: zoomProp }: Props) {
               strokeOpacity={0.9}
             />
             {domeDebug.lights.map((l, i) => (
-              <line
-                key={i}
-                x1={domeDebug.cx} y1={domeDebug.cy}
-                x2={l.x2} y2={l.y2}
-                stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
-              />
+              <Fragment key={i}>
+                {/* Centroid → lit-rim: the bright end of the diffuse axis. */}
+                <line
+                  x1={domeDebug.cx} y1={domeDebug.cy}
+                  x2={l.x2} y2={l.y2}
+                  stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
+                />
+                {domeDebug.isBrdf && (
+                  <>
+                    {/* Centroid → far-rim: dim half of the BRDF diffuse axis. */}
+                    <line
+                      x1={domeDebug.cx} y1={domeDebug.cy}
+                      x2={l.farX} y2={l.farY}
+                      stroke="#32cd32" strokeWidth={1} strokeDasharray="4 3"
+                      opacity={0.25 + 0.35 * l.intensity}
+                    />
+                    {l.hot && (
+                      <>
+                        {/* Specular hot spot center + falloff radius. */}
+                        <circle
+                          cx={l.hot.x} cy={l.hot.y} r={l.hot.r}
+                          fill="none" stroke="#00e5ff" strokeWidth={1}
+                          strokeDasharray="3 2" opacity={0.7}
+                        />
+                        <circle cx={l.hot.x} cy={l.hot.y} r={2.5} fill="#00e5ff" />
+                      </>
+                    )}
+                  </>
+                )}
+              </Fragment>
             ))}
             <path
               d={domeDebug.medialPath}
