@@ -306,3 +306,13 @@ input[type=range]::-moz-range-thumb {
   background: color-mix(in srgb, hsl(196 80% 62%) 45%, transparent);
   border: none;
 }
+
+/* Shading-layers debug highlight. Driven by data-shading-id on the matching
+   SVG element; class added by SpeechBalloon when highlightedShadingId matches. */
+@keyframes shading-pulse {
+  0%, 100% { filter: drop-shadow(0 0 0 magenta); }
+  50%      { filter: drop-shadow(0 0 6px magenta); }
+}
+.shading-pulse {
+  animation: shading-pulse 1.2s ease-in-out infinite;
+}
