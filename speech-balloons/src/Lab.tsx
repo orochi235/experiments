@@ -166,20 +166,35 @@ export function Lab() {
   const currentUndoStack = store.workspaces.find((w) => w.id === 'balloon')?.undoStack ?? emptyStack();
   const view = store.workspaces.find((w) => w.id === 'balloon')?.view ?? { zoom: 1.2, pan: { x: 0, y: 0 } };
 
+  // Refs hold the latest staged value so chained setDesign / setRuntime calls
+  // in the same tick compose instead of clobbering. Without these, two
+  // back-to-back `setDesign(d => ...)` calls would both see the closure's
+  // `design` from the last render, and the second would overwrite the
+  // first's changes. (The partition drag — which writes both `contour` and
+  // `bevelWidth` per tick — hit this exact bug.)
+  const designRef = useRef(design);
+  designRef.current = design;
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
+
   const setDesign: React.Dispatch<React.SetStateAction<DesignState>> = useCallback((next) => {
-    const nextDesign = typeof next === 'function' ? (next as (d: DesignState) => DesignState)(design) : next;
+    const current = designRef.current;
+    const nextDesign = typeof next === 'function' ? (next as (d: DesignState) => DesignState)(current) : next;
+    designRef.current = nextDesign;
     // setConfig is per-key; iterate top-level keys and only set those that changed.
     for (const k of Object.keys(nextDesign) as (keyof DesignState)[]) {
-      if ((design as Record<string, unknown>)[k] !== (nextDesign as Record<string, unknown>)[k]) {
+      if ((current as Record<string, unknown>)[k] !== (nextDesign as Record<string, unknown>)[k]) {
         setConfig(k, (nextDesign as DesignState)[k] as never);
       }
     }
-  }, [design, setConfig]);
+  }, [setConfig]);
 
   const setRuntime: React.Dispatch<React.SetStateAction<RuntimeState>> = useCallback((next) => {
-    const nextRuntime = typeof next === 'function' ? (next as (r: RuntimeState) => RuntimeState)(runtime) : next;
+    const current = runtimeRef.current;
+    const nextRuntime = typeof next === 'function' ? (next as (r: RuntimeState) => RuntimeState)(current) : next;
+    runtimeRef.current = nextRuntime;
     setState(nextRuntime);
-  }, [runtime, setState]);
+  }, [setState]);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
 
