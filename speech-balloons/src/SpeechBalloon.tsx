@@ -24,6 +24,7 @@ import {
   polygonsToSvgPath,
   circleToPolygon,
   offsetClosedPolygon,
+  offsetClosedPolygons,
   type Polygon,
 } from './clipping';
 interface Props {
@@ -939,6 +940,28 @@ export function SpeechBalloon({
     };
   }, [fillEffect]);
 
+  // Nested inset polygons for the lit-bevel `bevel-rings` heightmap.
+  // Each ring is painted at fill-opacity = 1/N so cumulative alpha at a
+  // pixel covered by K rings is ≈ K/N — i.e. a stepwise distance-from-rim
+  // approximation. The contour-tableValues feComponentTransfer in the
+  // filter then reshapes it to the user's profile. Only computed when
+  // the live mode actually needs it.
+  const litBevelRingPaths = useMemo(() => {
+    if (fillRender.mode !== 'lit-bevel' || fillRender.heightmapSource !== 'bevel-rings') return null;
+    const N = Math.max(2, Math.round(fillRender.rings));
+    const maxInset = Math.max(1, fillRender.bevelWidth);
+    const out: string[] = [];
+    for (let i = 0; i < N; i++) {
+      const inset = (i / (N - 1)) * maxInset;
+      const polys = i === 0
+        ? bodyAndBubblesPolys
+        : offsetClosedPolygons(bodyAndBubblesPolys, -inset, 'miter');
+      if (polys.length === 0) break;
+      out.push(polygonsToSvgPath(polys));
+    }
+    return { paths: out, opacityPerRing: 1 / N };
+  }, [fillRender.mode, fillRender.heightmapSource, fillRender.rings, fillRender.bevelWidth, bodyAndBubblesPolys]);
+
   // Pre-compute the aqua paint-server geometry: gradient direction in
   // objectBoundingBox coordinates + the five color stops mixed from base/tints.
   const aquaPaint = useMemo(() => {
@@ -1744,9 +1767,7 @@ export function SpeechBalloon({
             samples.push(Math.max(0, Math.min(1, contour(xs))));
           }
           const tableValues = samples.map((v) => v.toFixed(4)).join(' ');
-          // feGaussianBlur on SourceAlpha gives a distance-from-rim
-          // approximation: deeper inside the silhouette = more blur =
-          // higher alpha. Saturates past ~3σ but cheap and one primitive.
+          const hmIsRings = fillRender.heightmapSource === 'bevel-rings' && litBevelRingPaths;
           return (
             <>
               <defs>
@@ -1755,13 +1776,24 @@ export function SpeechBalloon({
                   x="-10%" y="-10%" width="120%" height="120%"
                   colorInterpolationFilters="sRGB"
                 >
-                  {/* heightmap source — bevel-blur path */}
-                  <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.blur} result="hm-raw" />
-                  {/* contour remap on the alpha channel */}
+                  {/* heightmap source */}
+                  {hmIsRings ? (
+                    // Rings: cumulative SourceAlpha from the inset stack
+                    // already encodes distance from rim. Optional smoothing
+                    // softens the stair-stepping between rings.
+                    fillRender.smoothing > 0 ? (
+                      <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.smoothing} result="hm-raw" />
+                    ) : (
+                      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="hm-raw" />
+                    )
+                  ) : (
+                    // Blur: classic feGaussianBlur on SourceAlpha. Cheap;
+                    // saturates past ~3σ on big silhouettes.
+                    <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.blur} result="hm-raw" />
+                  )}
                   <feComponentTransfer in="hm-raw" result="hm">
                     <feFuncA type="table" tableValues={tableValues} />
                   </feComponentTransfer>
-                  {/* diffuse lighting */}
                   <feDiffuseLighting
                     in="hm"
                     surfaceScale={fillRender.surfaceScale}
@@ -1771,10 +1803,8 @@ export function SpeechBalloon({
                   >
                     <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
                   </feDiffuseLighting>
-                  {/* diffuse × base color */}
                   <feFlood floodColor={fillRender.base} result="base" />
                   <feComposite in="diffuse" in2="base" operator="arithmetic" k1={1} k2={0} k3={0} k4={0} result="diffuseBase" />
-                  {/* specular lighting */}
                   <feSpecularLighting
                     in="hm"
                     surfaceScale={fillRender.surfaceScale}
@@ -1785,7 +1815,6 @@ export function SpeechBalloon({
                   >
                     <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
                   </feSpecularLighting>
-                  {/* additive merge + clip to silhouette */}
                   <feMerge result="lit">
                     <feMergeNode in="diffuseBase" />
                     <feMergeNode in="specular" />
@@ -1793,13 +1822,29 @@ export function SpeechBalloon({
                   <feComposite in="lit" in2="SourceAlpha" operator="in" />
                 </filter>
               </defs>
-              <path
-                d={bodyPath}
-                fill={fillRender.base}
-                filter={`url(#${filterId})`}
-                data-shading-id={pushShading({ id: 'lit-bevel.body', label: 'Lit-bevel body', group: 'body' })}
-                className={pulseIf('lit-bevel.body')}
-              />
+              {hmIsRings ? (
+                // The ring stack IS the SourceGraphic the filter operates on.
+                // Each ring paints white at fill-opacity=1/N so cumulative
+                // alpha at a pixel covered by K rings ≈ K/N → distance from
+                // rim approximation.
+                <g
+                  filter={`url(#${filterId})`}
+                  data-shading-id={pushShading({ id: 'lit-bevel.body', label: 'Lit-bevel body', group: 'body' })}
+                  className={pulseIf('lit-bevel.body')}
+                >
+                  {litBevelRingPaths!.paths.map((d, i) => (
+                    <path key={i} d={d} fill="white" fillOpacity={litBevelRingPaths!.opacityPerRing} />
+                  ))}
+                </g>
+              ) : (
+                <path
+                  d={bodyPath}
+                  fill={fillRender.base}
+                  filter={`url(#${filterId})`}
+                  data-shading-id={pushShading({ id: 'lit-bevel.body', label: 'Lit-bevel body', group: 'body' })}
+                  className={pulseIf('lit-bevel.body')}
+                />
+              )}
             </>
           );
         })()}
