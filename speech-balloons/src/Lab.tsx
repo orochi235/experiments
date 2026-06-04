@@ -17,8 +17,16 @@ import {
   useLabStore,
 } from '@labkit/react';
 import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@labkit/react/undo';
-import { bareBaseRadiusRange, SpeechBalloon } from './SpeechBalloon';
-import { buildBaseSampler, type BaseSampler } from './geometry';
+import { SpeechBalloon } from './SpeechBalloon';
+import { ShadingLayersPanel } from './ShadingLayersPanel';
+import { bareBaseMaxBevel, buildBaseSampler, type BaseSampler } from './geometry';
+import {
+  LayeredCurveEditor,
+  createFunctionLayer,
+  type ControlPoint,
+  type CurveLayer,
+  type FunctionLayerState,
+} from '@orochi235/weasel-ui';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import {
   BASE_CONTROLS,
@@ -40,6 +48,7 @@ import type {
   ParamBag,
   ParamValue,
   RuntimeState,
+  ShadingItem,
 } from './types';
 
 // --- Module-scope helpers for EffectLayerStack ------------------------------
@@ -303,6 +312,8 @@ export function Lab() {
   };
 
   const [isPreparingSvg, setIsPreparingSvg] = useState(false);
+  const [shadingItems, setShadingItems] = useState<ShadingItem[]>([]);
+  const [highlightedShadingId, setHighlightedShadingId] = useState<string | null>(null);
   const downloadSvg = async () => {
     const stage = stageRef.current;
     const svg = stage?.querySelector('svg');
@@ -553,6 +564,14 @@ export function Lab() {
             />
             <span>Dome debug overlay</span>
           </label>
+          <label className="sb-checkbox">
+            <input
+              type="checkbox"
+              checked={!!runtime.heightmapDebug}
+              onChange={(e) => setRuntime((r) => ({ ...r, heightmapDebug: e.target.checked }))}
+            />
+            <span>Heightmap overlay</span>
+          </label>
           <ColorRow
             label="Background"
             value={splitColor(design.bg).rgb}
@@ -635,7 +654,13 @@ export function Lab() {
 
           <section className="sb-preview">
             <div className="sb-preview-stage" ref={stageRef}>
-              <SpeechBalloon design={design} runtime={runtime} zoom={view.zoom} />
+              <SpeechBalloon
+                design={design}
+                runtime={runtime}
+                zoom={view.zoom}
+                onShadingItems={setShadingItems}
+                highlightedShadingId={highlightedShadingId}
+              />
             </div>
             <div className="sb-zoom-bar">
               <span className="sb-zoom-label">Zoom</span>
@@ -696,6 +721,11 @@ export function Lab() {
               onPrimaryChange={updateEffectParam}
               onUpdateParam={updateEffectParam}
             />
+            <ShadingLayersPanel
+              items={shadingItems}
+              highlightedId={highlightedShadingId}
+              onHighlight={setHighlightedShadingId}
+            />
           </aside>
         </div>
       </div>
@@ -734,6 +764,229 @@ function CurveBlock({ label, values, min, max, step, defaults, marks, onChange }
       {label && <h3 className="sb-curve-label">{label}</h3>}
       {width > 0 && (
         <KitCurveField values={values} min={min} max={max} step={step} width={width} defaults={defaults} marks={marks} onChange={onChange} />
+      )}
+    </div>
+  );
+}
+
+// ── Rim contour editor (LayeredCurveEditor) ───────────────────────────
+// Replaces the single-layer CurveBlock for the `contour` param. Two
+// function layers (bevel + spline) share a 1D domain split at x=b where
+// b = bevelWidth / dMax. The bevel side is filled (golden), the spline
+// side is just a stroke (purple). A draggable partition handle lets the
+// user move b directly, which writes back through onChange to the
+// `bevelWidth` param. Storage stays as a single flat number[] of anchors
+// — the two-layer view is purely a UI affordance, with synthetic seam
+// anchors interpolated at x=b when no real anchor sits exactly there.
+
+interface PartitionState { x: number }
+
+function createPartitionLayer(): CurveLayer<PartitionState> {
+  return {
+    id: 'partition',
+    render(state, ctx) {
+      const x = ctx.toPlot({ x: state.x, y: 0 }).x;
+      const h = ctx.plotSize.height;
+      const activeStroke = ctx.isActive ? 'rgba(80,80,80,0.85)' : 'rgba(80,80,80,0.5)';
+      return (
+        <g>
+          <line x1={x} x2={x} y1={0} y2={h} stroke={activeStroke} strokeDasharray="5 4" strokeWidth={1.5} />
+          <rect x={x - 5} y={h / 2 - 14} width={10} height={28} rx={2} fill={activeStroke} style={{ cursor: 'ew-resize' }} data-anchor-index="partition" />
+        </g>
+      );
+    },
+    hitTest(state, plot, ctx) {
+      const x = ctx.toPlot({ x: state.x, y: 0 }).x;
+      return Math.abs(plot.x - x) < 10 ? { kind: 'handle' } : null;
+    },
+    onPointerDown(_state, hit) {
+      if (hit.kind !== 'handle') return;
+      return {
+        onMove(_state, model, _e, ctx) {
+          const span = ctx.modelRange.xMax - ctx.modelRange.xMin;
+          const pad = span * 0.05;
+          const lo = ctx.modelRange.xMin + pad;
+          const hi = ctx.modelRange.xMax - pad;
+          return { x: Math.max(lo, Math.min(hi, model.x)) };
+        },
+      };
+    },
+  };
+}
+
+// Linear-interp the contour's y at a given x. Mirrors the parser used by
+// SpeechBalloon's contour memo so the synthetic seam y matches what the
+// shading actually sees.
+function interpFlat(flat: readonly number[], x: number): number {
+  const cpts: { x: number; y: number }[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) cpts.push({ x: flat[i]!, y: flat[i + 1]! });
+  cpts.sort((a, b) => a.x - b.x);
+  if (cpts.length === 0) return 0;
+  if (x <= cpts[0]!.x) return cpts[0]!.y;
+  if (x >= cpts[cpts.length - 1]!.x) return cpts[cpts.length - 1]!.y;
+  let i = 0;
+  while (i < cpts.length - 1 && cpts[i + 1]!.x < x) i++;
+  const a = cpts[i]!;
+  const b = cpts[i + 1]!;
+  const u = (x - a.x) / (b.x - a.x);
+  return a.y + (b.y - a.y) * u;
+}
+
+const SEAM_X_EPS = 1e-4;
+
+function splitFlatAtPartition(flat: readonly number[], b: number): {
+  bevel: ControlPoint[];
+  spline: ControlPoint[];
+} {
+  const cpts: ControlPoint[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) cpts.push({ x: flat[i]!, y: flat[i + 1]! });
+  cpts.sort((a, c) => a.x - c.x);
+  // Decide whether an anchor "is" the seam.
+  const seamIdx = cpts.findIndex((p) => Math.abs(p.x - b) < SEAM_X_EPS);
+  const seamY = seamIdx >= 0 ? cpts[seamIdx]!.y : interpFlat(flat, b);
+  const seam: ControlPoint = { x: b, y: seamY };
+  const bevel = cpts.filter((p) => p.x < b - SEAM_X_EPS);
+  const spline = cpts.filter((p) => p.x > b + SEAM_X_EPS);
+  // Both layers need their boundary endpoints; bevel must include x=0 anchor
+  // (synthesize if missing), spline must include x=1 anchor.
+  if (bevel.length === 0 || Math.abs(bevel[0]!.x) > SEAM_X_EPS) {
+    bevel.unshift({ x: 0, y: interpFlat(flat, 0) });
+  }
+  if (spline.length === 0 || Math.abs(spline[spline.length - 1]!.x - 1) > SEAM_X_EPS) {
+    spline.push({ x: 1, y: interpFlat(flat, 1) });
+  }
+  bevel.push(seam);
+  spline.unshift(seam);
+  return { bevel, spline };
+}
+
+// Merge a layer's incoming points back into the unified flat array.
+//   - `incoming` is the layer's new anchors (with first or last at x=b).
+//   - `otherSide` is the OTHER layer's current anchors (also bookended at b).
+//   - The seam (at x=b) is taken from `incoming` so the user's seam-y drag
+//     wins; the other side adopts it on the next render via splitFlatAtPartition.
+function mergeLayerPoints(
+  incoming: readonly ControlPoint[],
+  otherSide: readonly ControlPoint[],
+  b: number,
+): number[] {
+  const all: ControlPoint[] = [];
+  // Push all from `incoming` (including its seam anchor at x=b).
+  for (const p of incoming) all.push(p);
+  // From the other side, skip its seam anchor (which is at x=b) so we don't
+  // get two seam entries; `incoming`'s seam is the canonical one.
+  for (const p of otherSide) {
+    if (Math.abs(p.x - b) < SEAM_X_EPS) continue;
+    all.push(p);
+  }
+  all.sort((a, c) => a.x - c.x);
+  // Flatten.
+  const out: number[] = [];
+  for (const p of all) out.push(p.x, p.y);
+  return out;
+}
+
+interface RimContourBlockProps {
+  label?: string;
+  values: number[];
+  bevelWidth: number;
+  dMax: number;
+  onContourChange: (vals: number[]) => void;
+  onBevelWidthChange: (px: number) => void;
+}
+
+function RimContourBlock({
+  label,
+  values,
+  bevelWidth,
+  dMax,
+  onContourChange,
+  onBevelWidthChange,
+}: RimContourBlockProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    setWidth(el.clientWidth);
+    const obs = new ResizeObserver((entries) => {
+      setWidth(entries[0]?.contentRect.width ?? el.clientWidth);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Partition x in model space [0, 1] derived from the px-valued bevelWidth.
+  const b = Math.max(0.05, Math.min(0.95, dMax > 0 ? bevelWidth / dMax : 0.25));
+
+  const { bevel, spline } = useMemo(() => splitFlatAtPartition(values, b), [values, b]);
+
+  const bevelLayer = useMemo(() => createFunctionLayer({
+    id: 'bevel',
+    domain: '1d',
+    endpoints: 'pinned-x',
+    constrain: 'function',
+    addPointMode: 'click-curve',
+    fill: { side: 'below' },
+    xClamp: [0, b],
+    minPoints: 2,
+  }), [b]);
+  const splineLayer = useMemo(() => createFunctionLayer({
+    id: 'spline',
+    domain: '1d',
+    endpoints: 'pinned-x',
+    constrain: 'function',
+    addPointMode: 'click-curve',
+    xClamp: [b, 1],
+    minPoints: 2,
+  }), [b]);
+  const partitionLayer = useMemo(() => createPartitionLayer(), []);
+
+  const layers = useMemo(() => [
+    { layer: bevelLayer, state: { points: bevel, activeIndex: null } as FunctionLayerState },
+    { layer: splineLayer, state: { points: spline, activeIndex: null } as FunctionLayerState },
+    { layer: partitionLayer, state: { x: b } as PartitionState },
+  ], [bevelLayer, bevel, splineLayer, spline, partitionLayer, b]);
+
+  const onLayerChange = (id: string, nextUnknown: unknown) => {
+    if (id === 'bevel') {
+      const next = nextUnknown as FunctionLayerState;
+      onContourChange(mergeLayerPoints(next.points, spline, b));
+    } else if (id === 'spline') {
+      const next = nextUnknown as FunctionLayerState;
+      onContourChange(mergeLayerPoints(next.points, bevel, b));
+    } else if (id === 'partition') {
+      const next = nextUnknown as PartitionState;
+      onBevelWidthChange(next.x * dMax);
+    }
+  };
+
+  const height = width > 0 ? Math.round(width * 0.6) : 0;
+
+  return (
+    <div className="sb-curve-block lk-property-group__span" ref={wrapRef}>
+      {label && <h3 className="sb-curve-label">{label}</h3>}
+      {width > 0 && (
+        <LayeredCurveEditor
+          layers={layers}
+          onLayerChange={onLayerChange}
+          width={width}
+          height={height}
+          xRange={[0, 1]}
+          yRange={[0, 1]}
+          grid={{ divisions: 4 }}
+          axes={{}}
+        >
+          <style>{`
+            [data-layer-id="bevel"] {
+              --curve-line: goldenrod;
+              --curve-fill: color-mix(in srgb, goldenrod 35%, transparent);
+            }
+            [data-layer-id="spline"] {
+              --curve-line: rebeccapurple;
+            }
+          `}</style>
+        </LayeredCurveEditor>
       )}
     </div>
   );
@@ -852,20 +1105,23 @@ function renderRow(
   }
   if (c.kind === 'curve') {
     const arr = Array.isArray(value) ? (value as number[]) : c.defaults;
-    let marks: readonly CurveMark[] | undefined;
-    if (
-      c.key === 'contour' &&
-      typeof params.bevelWidth === 'number' &&
-      sampler !== undefined
-    ) {
-      const { Rmin } = bareBaseRadiusRange(sampler);
-      if (Rmin > 1e-3) {
-        // Contour x: 0 = rim, 1 = center. The bevel face occupies [0, bw/R]
-        // and R varies per direction; use Rmin (the narrowest direction) so
-        // the band covers every direction's bevel face.
-        const xMax = Math.min(1, params.bevelWidth / Rmin);
-        marks = [{ kind: 'band', x: [0, xMax], color: '#ffcc00' }];
-      }
+    // Special: the dome `contour` uses the rim/spline layered editor with a
+    // draggable partition handle bound to `bevelWidth`. dMax is the medial-
+    // axis depth of the bare body — same value the heightmap & shading use
+    // to normalize bevelWidth → partition x.
+    if (c.key === 'contour' && sampler && typeof params.bevelWidth === 'number') {
+      const dMax = Math.max(1, bareBaseMaxBevel(sampler));
+      return (
+        <RimContourBlock
+          key={c.key}
+          label={c.label}
+          values={arr}
+          bevelWidth={params.bevelWidth}
+          dMax={dMax}
+          onContourChange={(vals) => onChange(c.key, vals)}
+          onBevelWidthChange={(px) => onChange('bevelWidth', px)}
+        />
+      );
     }
     return (
       <CurveBlock
@@ -876,7 +1132,6 @@ function renderRow(
         max={c.max}
         step={c.step}
         defaults={c.defaults}
-        marks={marks}
         onChange={(vals) => onChange(c.key, vals)}
       />
     );
