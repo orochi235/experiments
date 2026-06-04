@@ -23,6 +23,7 @@ import { bareBaseMaxBevel, buildBaseSampler, type BaseSampler } from './geometry
 import {
   LayeredCurveEditor,
   createFunctionLayer,
+  type AnchorRenderProps,
   type ControlPoint,
   type CurveLayer,
   type FunctionLayerState,
@@ -918,6 +919,16 @@ interface RimContourBlockProps {
   onBevelWidthChange: (px: number) => void;
 }
 
+function Diamond({ cx, cy, size = 8, fill = 'goldenrod' }: { cx: number; cy: number; size?: number; fill?: string }) {
+  const r = size / 2;
+  return (
+    <polygon
+      points={`${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}`}
+      fill={fill}
+    />
+  );
+}
+
 // Pulls the y of the seam anchor at x≈b out of a flat values array, or
 // falls back to a linear-interp estimate if the array hasn't been
 // migrated to include one yet (first render).
@@ -991,6 +1002,13 @@ function RimContourBlock({
     fill: { side: 'below' },
     xClamp: [0, b],
     minPoints: 2,
+    renderAnchor: ({ cx, cy, point, isPinnedEndpoint }: AnchorRenderProps) => {
+      if (!isPinnedEndpoint) return undefined; // default circle for user anchors
+      // x=0 endpoint: goldenrod diamond. Seam endpoint (x≈b): hidden — the
+      // partition layer's circle is the visible anchor at the seam.
+      if (Math.abs(point.x) < SEAM_X_EPS) return <Diamond cx={cx} cy={cy} />;
+      return null;
+    },
   }), [b]);
   const splineLayer = useMemo(() => createFunctionLayer({
     id: 'spline',
@@ -1000,6 +1018,12 @@ function RimContourBlock({
     addPointMode: 'click-curve',
     xClamp: [b, 1],
     minPoints: 2,
+    renderAnchor: ({ cx, cy, point, isPinnedEndpoint }: AnchorRenderProps) => {
+      if (!isPinnedEndpoint) return undefined;
+      // x=1 endpoint: goldenrod diamond. Seam endpoint (x≈b): hidden.
+      if (Math.abs(point.x - 1) < SEAM_X_EPS) return <Diamond cx={cx} cy={cy} />;
+      return null;
+    },
   }), [b]);
   const partitionLayer = useMemo(() => createPartitionLayer(), []);
 
