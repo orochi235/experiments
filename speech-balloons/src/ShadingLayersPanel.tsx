@@ -6,11 +6,26 @@ interface Props {
   items: ShadingItem[];
   highlightedId: string | null;
   onHighlight: (id: string | null) => void;
+  // Visibility checkbox state — ids in this list render `display:none` via
+  // the SVG <style> rules SpeechBalloon emits. Independent from highlight.
+  hiddenIds: readonly string[];
+  onSetHidden: (ids: string[]) => void;
 }
 
-export function ShadingLayersPanel({ items, highlightedId, onHighlight }: Props) {
+export function ShadingLayersPanel({
+  items, highlightedId, onHighlight,
+  hiddenIds, onSetHidden,
+}: Props) {
   const [hideNonLight, setHideNonLight] = useState(false);
   const groups = groupShadingItems(items, { hideNonLight });
+  const hiddenSet = new Set(hiddenIds);
+
+  const toggleHidden = (id: string) => {
+    const next = new Set(hiddenSet);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSetHidden(Array.from(next));
+  };
 
   return (
     <div className="sb-shading-panel">
@@ -34,11 +49,20 @@ export function ShadingLayersPanel({ items, highlightedId, onHighlight }: Props)
             <ul className="sb-shading-panel__list">
               {g.items.map((item) => {
                 const isActive = item.id === highlightedId;
+                const isVisible = !hiddenSet.has(item.id);
                 return (
-                  <li key={item.id}>
+                  <li key={item.id} className="sb-shading-panel__item">
+                    <input
+                      type="checkbox"
+                      className="sb-shading-panel__vis"
+                      checked={isVisible}
+                      onChange={() => toggleHidden(item.id)}
+                      title={isVisible ? 'Hide this contributor' : 'Show this contributor'}
+                      aria-label={`${isVisible ? 'Hide' : 'Show'} ${item.label}`}
+                    />
                     <button
                       type="button"
-                      className={`sb-shading-panel__row${isActive ? ' is-active' : ''}`}
+                      className={`sb-shading-panel__row${isActive ? ' is-active' : ''}${isVisible ? '' : ' is-hidden'}`}
                       onClick={() => onHighlight(isActive ? null : item.id)}
                     >
                       {item.label}

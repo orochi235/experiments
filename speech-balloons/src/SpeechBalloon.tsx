@@ -1465,6 +1465,17 @@ export function SpeechBalloon({
         display: 'block',
       }}
     >
+      {runtime.hiddenShadingIds && runtime.hiddenShadingIds.length > 0 && (
+        // Per-row visibility from the shading-layers panel. Hidden ids are
+        // suppressed at paint time without removing them from the registry,
+        // so the panel keeps showing the row (with its checkbox unchecked)
+        // and the user can flip them back on.
+        <style>{
+          runtime.hiddenShadingIds
+            .map((id) => `[data-shading-id="${id}"]{display:none}`)
+            .join('')
+        }</style>
+      )}
       <defs>
         {hasShadow && (
           <filter id={shadowId} x="-50%" y="-50%" width="200%" height="200%">

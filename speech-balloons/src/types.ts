@@ -20,6 +20,11 @@ export interface RuntimeState {
   fitToContent: boolean;
   domeDebug?: boolean;
   heightmapDebug?: boolean;
+  // Shading-layer ids the user has hidden via the panel checkboxes. The
+  // renderer emits a <style> rule that sets [data-shading-id="X"] { display: none }
+  // for each entry, so the contributor is suppressed without changing
+  // the registry the panel reads from.
+  hiddenShadingIds?: string[];
 }
 
 export interface DesignState {

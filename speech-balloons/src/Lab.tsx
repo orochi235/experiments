@@ -17,7 +17,7 @@ import {
   useLabStore,
 } from '@labkit/react';
 import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@labkit/react/undo';
-import { SpeechBalloon } from './SpeechBalloon';
+import { SpeechBalloon, bareBaseRadiusRange } from './SpeechBalloon';
 import { ShadingLayersPanel } from './ShadingLayersPanel';
 import { bareBaseMaxBevel, buildBaseSampler, type BaseSampler } from './geometry';
 import {
@@ -742,6 +742,8 @@ export function Lab() {
               items={shadingItems}
               highlightedId={highlightedShadingId}
               onHighlight={setHighlightedShadingId}
+              hiddenIds={runtime.hiddenShadingIds ?? []}
+              onSetHidden={(ids) => setRuntime((r) => ({ ...r, hiddenShadingIds: ids }))}
             />
           </aside>
         </div>
@@ -797,6 +799,35 @@ function CurveBlock({ label, values, min, max, step, defaults, marks, onChange }
 // anchors interpolated at x=b when no real anchor sits exactly there.
 
 interface PartitionState { x: number; y: number }
+
+// Passive read-only layer that paints a yellow band across the plot to
+// show the bevel-ridge zone. The band's x range comes from the body
+// shape: bevelWidth/Rmax → bevelWidth/Rmin, where Rmin/Rmax are the
+// per-direction medial-axis depths of the bare body. On a circle Rmin
+// === Rmax so the band collapses to a thin line at the partition x;
+// on a rectangle the band visibly spans the real bevel's normalized-x
+// range.
+interface MarksLayerState { band: { xMin: number; xMax: number } | null }
+function createMarksLayer(): CurveLayer<MarksLayerState> {
+  return {
+    id: 'marks',
+    render(state, ctx) {
+      if (!state.band) return null;
+      const left = ctx.toPlot({ x: state.band.xMin, y: 0 }).x;
+      const right = ctx.toPlot({ x: state.band.xMax, y: 0 }).x;
+      const x = Math.min(left, right);
+      const w = Math.max(1, Math.abs(right - left));
+      return (
+        <rect
+          x={x} y={0}
+          width={w} height={ctx.plotSize.height}
+          fill="rgba(255, 204, 0, 0.18)"
+          pointerEvents="none"
+        />
+      );
+    },
+  };
+}
 
 function createPartitionLayer(): CurveLayer<PartitionState> {
   return {
@@ -929,6 +960,7 @@ interface RimContourBlockProps {
   bevelWidth: number;
   dMax: number;
   defaultContour: readonly number[];
+  bevelBand?: { xMin: number; xMax: number } | null;
   onContourChange: (vals: number[]) => void;
   onBevelWidthChange: (px: number) => void;
 }
@@ -964,6 +996,7 @@ function RimContourBlock({
   bevelWidth,
   dMax,
   defaultContour,
+  bevelBand,
   onContourChange,
   onBevelWidthChange,
 }: RimContourBlockProps) {
@@ -1046,12 +1079,15 @@ function RimContourBlock({
     },
   }), [b]);
   const partitionLayer = useMemo(() => createPartitionLayer(), []);
+  const marksLayer = useMemo(() => createMarksLayer(), []);
 
+  // Marks layer first so the band paints UNDER the curves and partition.
   const layers = useMemo(() => [
+    { layer: marksLayer, state: { band: bevelBand ?? null } as MarksLayerState },
     { layer: bevelLayer, state: { points: bevel, activeIndex: null } as FunctionLayerState },
     { layer: splineLayer, state: { points: spline, activeIndex: null } as FunctionLayerState },
     { layer: partitionLayer, state: { x: b, y: seamYFromValues(values, b) } as PartitionState },
-  ], [bevelLayer, bevel, splineLayer, spline, partitionLayer, b]);
+  ], [marksLayer, bevelBand, bevelLayer, bevel, splineLayer, spline, partitionLayer, b]);
 
   const onLayerChange = (id: string, nextUnknown: unknown) => {
     if (id === 'bevel') {
@@ -1255,6 +1291,17 @@ function renderRow(
     // to normalize bevelWidth → partition x.
     if (c.key === 'contour' && sampler && typeof params.bevelWidth === 'number') {
       const dMax = Math.max(1, bareBaseMaxBevel(sampler));
+      // Yellow bevel-ridge band: [bw / Rmax, bw / Rmin]. On a circle
+      // Rmin === Rmax so the band collapses to a thin line at the
+      // partition x; on a rectangle the band visibly spans the real
+      // bevel zone's normalized-x range across the perimeter.
+      let bevelBand: { xMin: number; xMax: number } | null = null;
+      const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
+      if (Rmin > 1e-3 && Rmax > 1e-3) {
+        const xMax = Math.min(1, params.bevelWidth / Rmin);
+        const xMin = Math.min(1, params.bevelWidth / Rmax);
+        bevelBand = { xMin, xMax };
+      }
       return (
         <RimContourBlock
           key={c.key}
@@ -1263,6 +1310,7 @@ function renderRow(
           bevelWidth={params.bevelWidth}
           dMax={dMax}
           defaultContour={c.defaults}
+          bevelBand={bevelBand}
           onContourChange={(vals) => onChange(c.key, vals)}
           onBevelWidthChange={(px) => onChange('bevelWidth', px)}
         />

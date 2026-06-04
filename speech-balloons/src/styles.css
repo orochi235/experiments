@@ -339,8 +339,10 @@ input[type=range]::-moz-range-thumb {
   margin: 4px 0 0;
 }
 .sb-shading-panel__list { list-style: none; padding: 0; margin: 0; }
+.sb-shading-panel__item { display: flex; align-items: center; gap: 6px; }
+.sb-shading-panel__vis { flex: 0 0 auto; cursor: pointer; }
 .sb-shading-panel__row {
-  width: 100%;
+  flex: 1 1 auto;
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
@@ -354,4 +356,5 @@ input[type=range]::-moz-range-thumb {
   background: rgba(255, 0, 255, 0.12);
   border-color: rgba(255, 0, 255, 0.6);
 }
+.sb-shading-panel__row.is-hidden { opacity: 0.45; text-decoration: line-through; }
 .sb-shading-panel__empty { font-size: 12px; opacity: 0.6; }
