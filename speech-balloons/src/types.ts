@@ -1,7 +1,8 @@
 export type BalloonBase = 'rectangle' | 'oval' | 'polygon' | 'cloud';
 export type EffectKind = 'fill' | 'tail' | 'spikes' | 'lobes' | 'wobble' | 'jitter' | 'cloud' | 'stroke' | 'shadow';
 export type TailShape = 'pointed' | 'bubbles' | 'lightning' | 'wavy';
-export type FillMode = 'aqua' | 'dome' | 'brdf';
+export type FillMode = 'aqua' | 'dome' | 'brdf' | 'lit-bevel';
+export type HeightmapSource = 'bevel-blur' | 'bevel-rings' | 'bevel-dt';
 
 // Lab params: numbers, strings (color/select), booleans (toggles), and number arrays (curves).
 export type ParamValue = number | string | boolean | number[];

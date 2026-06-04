@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useMemo } from 'react';
-import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
+import type { DesignState, FillMode, HeightmapSource, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
 import {
   bareBaseMaxBevel,
   buildBaseSampler,
@@ -890,9 +890,17 @@ export function SpeechBalloon({
     const p = fillEffect?.params ?? {};
     const rawMode = (p.mode as string) ?? 'dome';
     const mode: FillMode =
-      rawMode === 'aqua' ? 'aqua' : rawMode === 'brdf' ? 'brdf' : 'dome';
+      rawMode === 'aqua' ? 'aqua'
+      : rawMode === 'brdf' ? 'brdf'
+      : rawMode === 'lit-bevel' ? 'lit-bevel'
+      : 'dome';
     const base = (p.base as string) ?? '#ffffff';
     const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, 1, 1, 1];
+    const rawHm = (p.heightmapSource as string) ?? 'bevel-blur';
+    const heightmapSource: HeightmapSource =
+      rawHm === 'bevel-rings' ? 'bevel-rings'
+      : rawHm === 'bevel-dt' ? 'bevel-dt'
+      : 'bevel-blur';
     return {
       mode,
       base,
@@ -916,6 +924,18 @@ export function SpeechBalloon({
       rimContrast: (p.rimContrast as number) ?? 0.4,
       highlightTint: (p.highlightTint as string) ?? '#ffffff',
       shadowTint: (p.shadowTint as string) ?? '#0a1020',
+      // lit-bevel params
+      heightmapSource,
+      blur: (p.blur as number) ?? 14,
+      rings: (p.rings as number) ?? 20,
+      smoothing: (p.smoothing as number) ?? 1.2,
+      dtResolution: (p.dtResolution as number) ?? 256,
+      surfaceScale: (p.surfaceScale as number) ?? 8,
+      diffuse: (p.diffuse as number) ?? 1.0,
+      specular: (p.specular as number) ?? 0.6,
+      shininess: (p.shininess as number) ?? 30,
+      lightColor: (p.lightColor as string) ?? '#ffffff',
+      specularColor: (p.specularColor as string) ?? '#ffffff',
     };
   }, [fillEffect]);
 
@@ -1704,6 +1724,85 @@ export function SpeechBalloon({
             )}
           </>
         )}
+
+        {fillRender.mode === 'lit-bevel' && (() => {
+          // Lit-bevel: SVG filter chain. The body silhouette feeds a
+          // distance-from-rim heightmap (currently feGaussianBlur on
+          // SourceAlpha — bevel-rings and bevel-dt land as follow-ups),
+          // remapped through feComponentTransfer using contour samples,
+          // then lit with feDiffuseLighting + feSpecularLighting and
+          // composited additively. The whole thing gets clipped back to
+          // the silhouette via feComposite operator=in.
+          const filterId = `${idPrefix}-lit-bevel`;
+          // Sample the contour at 33 evenly-spaced x positions; written
+          // into feFuncA.tableValues so the heightmap alpha gets remapped
+          // from "distance from rim" to "height along the user profile."
+          const N = 33;
+          const samples: number[] = [];
+          for (let i = 0; i < N; i++) {
+            const xs = i / (N - 1);
+            samples.push(Math.max(0, Math.min(1, contour(xs))));
+          }
+          const tableValues = samples.map((v) => v.toFixed(4)).join(' ');
+          // feGaussianBlur on SourceAlpha gives a distance-from-rim
+          // approximation: deeper inside the silhouette = more blur =
+          // higher alpha. Saturates past ~3σ but cheap and one primitive.
+          return (
+            <>
+              <defs>
+                <filter
+                  id={filterId}
+                  x="-10%" y="-10%" width="120%" height="120%"
+                  colorInterpolationFilters="sRGB"
+                >
+                  {/* heightmap source — bevel-blur path */}
+                  <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.blur} result="hm-raw" />
+                  {/* contour remap on the alpha channel */}
+                  <feComponentTransfer in="hm-raw" result="hm">
+                    <feFuncA type="table" tableValues={tableValues} />
+                  </feComponentTransfer>
+                  {/* diffuse lighting */}
+                  <feDiffuseLighting
+                    in="hm"
+                    surfaceScale={fillRender.surfaceScale}
+                    diffuseConstant={fillRender.diffuse}
+                    lightingColor={fillRender.lightColor}
+                    result="diffuse"
+                  >
+                    <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
+                  </feDiffuseLighting>
+                  {/* diffuse × base color */}
+                  <feFlood floodColor={fillRender.base} result="base" />
+                  <feComposite in="diffuse" in2="base" operator="arithmetic" k1={1} k2={0} k3={0} k4={0} result="diffuseBase" />
+                  {/* specular lighting */}
+                  <feSpecularLighting
+                    in="hm"
+                    surfaceScale={fillRender.surfaceScale}
+                    specularConstant={fillRender.specular}
+                    specularExponent={fillRender.shininess}
+                    lightingColor={fillRender.specularColor}
+                    result="specular"
+                  >
+                    <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
+                  </feSpecularLighting>
+                  {/* additive merge + clip to silhouette */}
+                  <feMerge result="lit">
+                    <feMergeNode in="diffuseBase" />
+                    <feMergeNode in="specular" />
+                  </feMerge>
+                  <feComposite in="lit" in2="SourceAlpha" operator="in" />
+                </filter>
+              </defs>
+              <path
+                d={bodyPath}
+                fill={fillRender.base}
+                filter={`url(#${filterId})`}
+                data-shading-id={pushShading({ id: 'lit-bevel.body', label: 'Lit-bevel body', group: 'body' })}
+                className={pulseIf('lit-bevel.body')}
+              />
+            </>
+          );
+        })()}
 
         {/* Outline last so it sits on top of the lit fill. */}
         {strokeW > 0 && (

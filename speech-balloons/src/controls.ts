@@ -29,7 +29,7 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   fill: [
     { key: 'mode', label: 'Mode', kind: 'select',
-      options: ['aqua', 'dome', 'brdf'],
+      options: ['aqua', 'dome', 'brdf', 'lit-bevel'],
       default: 'dome' },
     { key: 'base', label: 'Base color', kind: 'color', default: '#3b82f6' },
 
@@ -44,10 +44,10 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'shadowColor', label: 'Shadow color', kind: 'color', default: '#000000', hideWhen: (p) => p.mode !== 'dome' },
     { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
 
-    { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
-    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', maxFn: ({ W, H, sampler }) => sampler ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler))) : Math.floor(Math.min(W, H) / 3), unit: 'px' },
-    { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: '°' },
-    { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: '°' },
+    { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel' },
+    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel', maxFn: ({ W, H, sampler }) => sampler ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler))) : Math.floor(Math.min(W, H) / 3), unit: 'px' },
+    { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel', unit: '°' },
+    { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel', unit: '°' },
     { key: 'domeGloss', label: 'Gloss', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.35, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'specStrength', label: 'Specular', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
     { key: 'specSize', label: 'Specular size', kind: 'range', min: 2, max: 80, step: 0.5, default: 18, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: 'px' },
@@ -57,10 +57,32 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'rimStrength', label: 'Rim strength', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.4, hideWhen: (p) => p.mode !== 'brdf' },
     { key: 'rimPower', label: 'Rim sharpness', kind: 'range', min: 0.5, max: 8, step: 0.1, default: 3, hideWhen: (p) => p.mode !== 'brdf' },
 
+    // lit-bevel: SVG-filter-based dome using feDiffuseLighting +
+    // feSpecularLighting on a contour-shaped heightmap. Three heightmap
+    // sources, picked via `heightmapSource`. Shares bevelWidth /
+    // lightAzimuth / lightElevation / contour with the other modes so the
+    // existing contour editor still drives it.
+    { kind: 'header', label: 'Lit bevel — heightmap', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'heightmapSource', label: 'Source', kind: 'select',
+      options: ['bevel-blur', 'bevel-rings', 'bevel-dt'],
+      default: 'bevel-blur', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'blur', label: 'Blur σ', kind: 'range', min: 1, max: 60, step: 0.5, default: 14, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-blur', unit: 'px' },
+    { key: 'rings', label: 'Rings', kind: 'range', min: 4, max: 48, step: 1, default: 20, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-rings' },
+    { key: 'smoothing', label: 'Smoothing', kind: 'range', min: 0, max: 4, step: 0.1, default: 1.2, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-rings', unit: 'px' },
+    { key: 'dtResolution', label: 'DT resolution', kind: 'range', min: 64, max: 512, step: 16, default: 256, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-dt' },
+
+    { kind: 'header', label: 'Lit bevel — material', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'surfaceScale', label: 'Surface scale', kind: 'range', min: 0, max: 30, step: 0.5, default: 8, hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0, hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30, hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'lightColor', label: 'Light color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
+
     // Own header so the curve doesn't get adopted by the preceding (possibly
     // hidden) BRDF group — the grouping pass in Lab.tsx attaches every
     // subsequent control to the latest header until it sees another one.
-    { kind: 'header', label: 'Bevel contour', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
+    { kind: 'header', label: 'Bevel contour', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel' },
     {
       key: 'contour',
       label: 'Contour (rim → center)',
@@ -74,7 +96,7 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
       // the rim to 1 at the medial axis with a plateau on top — looks like
       // a beveled button out of the box. Interleaved [x0,y0,x1,y1,…].
       defaults: [0, 0, 0.5, 0.8, 1, 1],
-      hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf',
+      hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel',
     },
   ],
 
