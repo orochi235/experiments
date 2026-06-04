@@ -28,6 +28,7 @@ import {
   type FunctionLayerState,
 } from '@orochi235/weasel-ui';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
+import { remapAcrossPartition, SEAM_X_EPS } from './contourEditor';
 import {
   BASE_CONTROLS,
   EFFECT_CONTROLS,
@@ -831,8 +832,6 @@ function interpFlat(flat: readonly number[], x: number): number {
   const u = (x - a.x) / (b.x - a.x);
   return a.y + (b.y - a.y) * u;
 }
-
-const SEAM_X_EPS = 1e-4;
 
 function splitFlatAtPartition(flat: readonly number[], b: number): {
   bevel: ControlPoint[];
