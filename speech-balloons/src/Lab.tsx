@@ -804,7 +804,11 @@ function createPartitionLayer(): CurveLayer<PartitionState> {
     render(state, ctx) {
       const plotPt = ctx.toPlot({ x: state.x, y: state.y });
       const h = ctx.plotSize.height;
-      const guideStroke = ctx.isActive ? 'rgba(80,80,80,0.85)' : 'rgba(80,80,80,0.5)';
+      // Goldenrod (matches the partition diamond) at full opacity when
+      // active, dimmed when idle. Mid-tone grays disappeared against the
+      // dark grid; tying the guide color to the handle keeps the bevel
+      // edge legible at a glance.
+      const guideStroke = ctx.isActive ? 'goldenrod' : 'rgba(218,165,32,0.7)';
       return (
         <g>
           <line
@@ -813,19 +817,13 @@ function createPartitionLayer(): CurveLayer<PartitionState> {
             y1={0}
             y2={h}
             stroke={guideStroke}
-            strokeDasharray="5 4"
-            strokeWidth={1.5}
+            strokeDasharray="2 4"
+            strokeLinecap="round"
+            strokeWidth={2}
           />
-          <circle
-            cx={plotPt.x}
-            cy={plotPt.y}
-            r={5}
-            fill="goldenrod"
-            stroke="goldenrod"
-            strokeWidth={1.5}
-            style={{ cursor: 'move' }}
-            data-anchor-index="partition"
-          />
+          <g style={{ cursor: 'move' }} data-anchor-index="partition">
+            <Diamond cx={plotPt.x} cy={plotPt.y} size={10} />
+          </g>
         </g>
       );
     },
@@ -930,9 +928,15 @@ interface RimContourBlockProps {
   values: number[];
   bevelWidth: number;
   dMax: number;
+  defaultContour: readonly number[];
   onContourChange: (vals: number[]) => void;
   onBevelWidthChange: (px: number) => void;
 }
+
+// Mirrors the `bevelWidth` control's default in `controls.ts`. Reset uses
+// it so one click returns both the curve and the partition to the
+// canonical starting state.
+const DEFAULT_BEVEL_WIDTH_PX = 22;
 
 function Diamond({ cx, cy, size = 8, fill = 'goldenrod' }: { cx: number; cy: number; size?: number; fill?: string }) {
   const r = size / 2;
@@ -959,6 +963,7 @@ function RimContourBlock({
   values,
   bevelWidth,
   dMax,
+  defaultContour,
   onContourChange,
   onBevelWidthChange,
 }: RimContourBlockProps) {
@@ -1068,6 +1073,34 @@ function RimContourBlock({
 
   const height = width > 0 ? Math.round(width * 0.6) : 0;
 
+  // Reset returns the curve to the three constrained anchors only — any
+  // user-added intermediate points are discarded. Y values at x=0, x=b,
+  // and x=1 are sampled from the default curve so the shape still feels
+  // like the canonical starting point.
+  const handleReset = () => {
+    const bNew = Math.max(0.05, Math.min(0.95, DEFAULT_BEVEL_WIDTH_PX / dMax));
+    const y0 = interpFlat(defaultContour, 0);
+    const ySeam = interpFlat(defaultContour, bNew);
+    const y1 = interpFlat(defaultContour, 1);
+    onContourChange([0, y0, bNew, ySeam, 1, y1]);
+    onBevelWidthChange(DEFAULT_BEVEL_WIDTH_PX);
+  };
+
+  // Mirror around x=0.5: every anchor (x, y) becomes (1−x, y). The seam
+  // moves with the rest so the bevel/spline sides swap roles and no
+  // anchor ends up on the wrong side of its constraint.
+  const handleFlip = () => {
+    const flipped: { x: number; y: number }[] = [];
+    for (let i = 0; i + 1 < values.length; i += 2) {
+      flipped.push({ x: 1 - values[i]!, y: values[i + 1]! });
+    }
+    flipped.sort((a, c) => a.x - c.x);
+    const out: number[] = [];
+    for (const p of flipped) out.push(p.x, p.y);
+    onContourChange(out);
+    onBevelWidthChange(Math.max(0, dMax - bevelWidth));
+  };
+
   return (
     <div className="sb-curve-block lk-property-group__span" ref={wrapRef}>
       {label && <h3 className="sb-curve-label">{label}</h3>}
@@ -1086,6 +1119,8 @@ function RimContourBlock({
             [data-layer-id="bevel"] {
               --curve-line: goldenrod;
               --curve-fill: color-mix(in srgb, goldenrod 35%, transparent);
+              --curve-anchor-fill: goldenrod;
+              --curve-anchor-stroke: goldenrod;
             }
             [data-layer-id="spline"] {
               --curve-line: rebeccapurple;
@@ -1093,6 +1128,10 @@ function RimContourBlock({
           `}</style>
         </LayeredCurveEditor>
       )}
+      <div className="sb-curve-actions">
+        <button type="button" onClick={handleReset}>Reset</button>
+        <button type="button" onClick={handleFlip}>Flip horizontally</button>
+      </div>
     </div>
   );
 }
@@ -1223,6 +1262,7 @@ function renderRow(
           values={arr}
           bevelWidth={params.bevelWidth}
           dMax={dMax}
+          defaultContour={c.defaults}
           onContourChange={(vals) => onChange(c.key, vals)}
           onBevelWidthChange={(px) => onChange('bevelWidth', px)}
         />

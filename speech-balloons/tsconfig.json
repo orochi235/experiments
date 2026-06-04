@@ -14,7 +14,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "useDefineForClassFields": true,
-    "noEmit": true
+    "noEmit": true,
+    "paths": {
+      "@orochi235/weasel-ui": ["../../weasel/packages/weasel-ui/src/index.ts"]
+    }
   },
   "include": ["src"]
 }

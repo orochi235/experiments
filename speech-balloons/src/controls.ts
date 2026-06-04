@@ -29,7 +29,7 @@ export const BASE_CONTROLS: Record<BalloonBase, LabControl[]> = {
 export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
   fill: [
     { key: 'mode', label: 'Mode', kind: 'select',
-      options: ['aqua', 'dome'],
+      options: ['aqua', 'dome', 'brdf'],
       default: 'dome' },
     { key: 'base', label: 'Base color', kind: 'color', default: '#3b82f6' },
 
@@ -40,20 +40,27 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'highlightTint', label: 'Highlight tint', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'aqua' },
     { key: 'shadowTint', label: 'Shadow tint', kind: 'color', default: '#0a1020', hideWhen: (p) => p.mode !== 'aqua' },
 
-    { key: 'amount', label: 'Amount', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'amount', label: 'Amount', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
     { key: 'shadowColor', label: 'Shadow color', kind: 'color', default: '#000000', hideWhen: (p) => p.mode !== 'dome' },
-    { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'dome' },
+    { key: 'highlightColor', label: 'Highlight color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
 
-    { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' },
-    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome', maxFn: ({ W, H, sampler }) => sampler ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler))) : Math.floor(Math.min(W, H) / 3), unit: 'px' },
-    { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
-    { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
-    { key: 'rimTilt', label: 'Rim tilt', kind: 'range', min: 0, max: 90, step: 1, default: 0, hideWhen: (p) => p.mode !== 'dome', unit: '°' },
-    { key: 'crownHeight', label: 'Crown height', kind: 'range', min: 0, max: 1, step: 0.02, default: 0, hideWhen: (p) => p.mode !== 'dome' },
+    { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
+    { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', maxFn: ({ W, H, sampler }) => sampler ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler))) : Math.floor(Math.min(W, H) / 3), unit: 'px' },
+    { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: '°' },
+    { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: '°' },
     { key: 'domeGloss', label: 'Gloss', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.35, hideWhen: (p) => p.mode !== 'dome' },
-    { key: 'specStrength', label: 'Specular', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'dome' },
-    { key: 'specSize', label: 'Specular size', kind: 'range', min: 2, max: 80, step: 0.5, default: 18, hideWhen: (p) => p.mode !== 'dome', unit: 'px' },
+    { key: 'specStrength', label: 'Specular', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
+    { key: 'specSize', label: 'Specular size', kind: 'range', min: 2, max: 80, step: 0.5, default: 18, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: 'px' },
 
+    { kind: 'header', label: 'BRDF', hideWhen: (p) => p.mode !== 'brdf' },
+    { key: 'specPower', label: 'Specular sharpness', kind: 'range', min: 1, max: 128, step: 1, default: 32, hideWhen: (p) => p.mode !== 'brdf' },
+    { key: 'rimStrength', label: 'Rim strength', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.4, hideWhen: (p) => p.mode !== 'brdf' },
+    { key: 'rimPower', label: 'Rim sharpness', kind: 'range', min: 0.5, max: 8, step: 0.1, default: 3, hideWhen: (p) => p.mode !== 'brdf' },
+
+    // Own header so the curve doesn't get adopted by the preceding (possibly
+    // hidden) BRDF group — the grouping pass in Lab.tsx attaches every
+    // subsequent control to the latest header until it sees another one.
+    { kind: 'header', label: 'Bevel contour', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
     {
       key: 'contour',
       label: 'Contour (rim → center)',
@@ -61,11 +68,13 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
       min: -1,
       max: 1,
       step: 0.02,
-      // Flat at y=1: neutral painterly multiplier. The dome shape comes
-      // from physics (rimTilt/crownHeight/bevelWidth); the contour is an
-      // optional override on top. Interleaved [x0,y0,x1,y1].
-      defaults: [0, 1, 1, 1],
-      hideWhen: (p) => p.mode !== 'dome',
+      // The contour IS the dome's height profile h(x), x=0 rim → x=1 medial
+      // axis. The shading (dome/BRDF tilt curve) and the heightmap overlay
+      // both read this directly. Default: a smooth s-curve rising from 0 at
+      // the rim to 1 at the medial axis with a plateau on top — looks like
+      // a beveled button out of the box. Interleaved [x0,y0,x1,y1,…].
+      defaults: [0, 0, 0.5, 0.8, 1, 1],
+      hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf',
     },
   ],
 

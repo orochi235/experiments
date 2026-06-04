@@ -1353,10 +1353,29 @@ export function SpeechBalloon({
     //   - specular hot spot (BRDF only): scanned r where contourTilt(r)
     //     matches the half-vector elevation, placed on the azimuth radial.
     const isBrdf = fillRender.mode === 'brdf';
+    // Project each light's 3D position to the xy plane (orthographic, V=+z).
+    // Distance is 0.75 × max body dimension so grazing lights sit clearly
+    // outside the silhouette while overhead lights collapse toward centroid.
+    const lightDist = 0.75 * Math.max(bb.w, bb.h);
     const lights = domeLights.map((l) => {
       const azRad = (l.az * Math.PI) / 180;
+      const elRad = (l.el * Math.PI) / 180;
       const litRim = angleSampler(azRad);
       const farRim = angleSampler(azRad + Math.PI);
+      const ce = Math.cos(elRad);
+      const se = Math.sin(elRad);
+      // Ground projection: the light's xy on the body plane.
+      const groundX = cx + lightDist * ce * Math.cos(azRad);
+      const groundY = cy + lightDist * ce * Math.sin(azRad);
+      // Lifted disc: encode z-elevation as screen-y offset so an
+      // overhead light reads as a high lollipop and a grazing one stays
+      // pinned to the ground. Scaled to 0.6× horizontal so even an
+      // overhead light keeps its disc near the body instead of soaring
+      // off-canvas. The pole is drawn between (groundX, groundY) and
+      // (groundX, sourceY).
+      const liftPx = lightDist * se * 0.6;
+      const sourceX = groundX;
+      const sourceY = groundY - liftPx;
       let hot: { x: number; y: number; r: number } | null = null;
       if (isBrdf && fillRender.specStrength > 0) {
         const targetTilt = halfVectorTilt(l.el);
@@ -1374,6 +1393,12 @@ export function SpeechBalloon({
         farY: farRim.y,
         hot,
         intensity: l.intensity,
+        sourceX,
+        sourceY,
+        groundX,
+        groundY,
+        liftPx,
+        elevationDeg: l.el,
       };
     });
     return {
@@ -1719,6 +1744,73 @@ export function SpeechBalloon({
                   x2={l.x2} y2={l.y2}
                   stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
                 />
+                {/* Lollipop depth visualization:
+                      - flat ellipse "shadow" at the xy projection on the body plane,
+                      - vertical pole rising by lightDist·sin(el),
+                      - disc at the top with an arrow toward the centroid.
+                    The pole length reads directly as the light's z height;
+                    a grazing light keeps the disc on the ground, an overhead
+                    light hoists it well above the centroid. Disc radius also
+                    shrinks with elevation as a secondary "further away" cue. */}
+                {(() => {
+                  const r = 3 + 5 * Math.cos((l.elevationDeg * Math.PI) / 180);
+                  const dx = domeDebug.cx - l.sourceX;
+                  const dy = domeDebug.cy - l.sourceY;
+                  const len = Math.hypot(dx, dy);
+                  // Ground footprint + pole rendered first so the disc sits on top.
+                  const hasLift = l.liftPx > 1;
+                  const footprint = (
+                    <ellipse
+                      cx={l.groundX} cy={l.groundY}
+                      rx={4} ry={1.5}
+                      fill="#ffd54a" opacity={0.35}
+                    />
+                  );
+                  const pole = hasLift ? (
+                    <line
+                      x1={l.groundX} y1={l.groundY}
+                      x2={l.sourceX} y2={l.sourceY}
+                      stroke="#ffd54a" strokeWidth={1}
+                      strokeDasharray="2 3" strokeLinecap="round"
+                      opacity={0.55}
+                    />
+                  ) : null;
+                  // Skip arrow when source is essentially on centroid.
+                  if (len < 1) return (
+                    <g opacity={0.4 + 0.6 * l.intensity}>
+                      {footprint}
+                      {pole}
+                      <circle cx={l.sourceX} cy={l.sourceY} r={r} fill="#ffd54a" />
+                    </g>
+                  );
+                  const nx = dx / len;
+                  const ny = dy / len;
+                  const ax1 = l.sourceX + nx * r;
+                  const ay1 = l.sourceY + ny * r;
+                  const ax2 = domeDebug.cx - nx * 8;
+                  const ay2 = domeDebug.cy - ny * 8;
+                  const headLen = 7;
+                  const headHalfW = 3;
+                  const hx1 = ax2 - nx * headLen + ny * headHalfW;
+                  const hy1 = ay2 - ny * headLen - nx * headHalfW;
+                  const hx2 = ax2 - nx * headLen - ny * headHalfW;
+                  const hy2 = ay2 - ny * headLen + nx * headHalfW;
+                  return (
+                    <g opacity={0.4 + 0.6 * l.intensity}>
+                      {footprint}
+                      {pole}
+                      <circle cx={l.sourceX} cy={l.sourceY} r={r} fill="#ffd54a" />
+                      <line
+                        x1={ax1} y1={ay1} x2={ax2} y2={ay2}
+                        stroke="#ffd54a" strokeWidth={1.5}
+                      />
+                      <polygon
+                        points={`${ax2},${ay2} ${hx1},${hy1} ${hx2},${hy2}`}
+                        fill="#ffd54a"
+                      />
+                    </g>
+                  );
+                })()}
                 {domeDebug.isBrdf && (
                   <>
                     {/* Centroid → far-rim: dim half of the BRDF diffuse axis. */}

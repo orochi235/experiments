@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLitArcs, domeSurfaceTilt, subdivideArc, buildSliceWedgePath, sampleLightStops, sampleSliceStops, bareBaseRadiusRange, type PerimeterSampler, type ContourFn } from './SpeechBalloon';
+import { computeLitArcs, contourTilt, subdivideArc, buildSliceWedgePath, sampleLightStops, sampleSliceStops, bareBaseRadiusRange, type PerimeterSampler, type ContourFn } from './SpeechBalloon';
 import { bareBaseMaxBevel, buildBaseSampler } from './geometry';
 
 const unitCircleAt = (cx: number, cy: number, r: number): PerimeterSampler => (angle) => ({
@@ -43,46 +43,34 @@ describe('computeLitArcs', () => {
   });
 });
 
-describe('domeSurfaceTilt', () => {
-  const deg = (rad: number) => (rad * 180) / Math.PI;
-  const rad = (d: number) => (d * Math.PI) / 180;
+describe('contourTilt', () => {
+  const deg = (r: number) => (r * 180) / Math.PI;
 
-  it('returns rimTilt at the rim regardless of crown/bw', () => {
-    expect(deg(domeSurfaceTilt(1, rad(30), 0.5, 0.2))).toBeCloseTo(30, 5);
-    expect(deg(domeSurfaceTilt(1, rad(0), 1, 1))).toBeCloseTo(0, 5);
-    expect(deg(domeSurfaceTilt(1, rad(45), 0, 0.1))).toBeCloseTo(45, 5);
+  it('flat contour → tilt = π/2 (normal straight up)', () => {
+    const flat: ContourFn = () => 1;
+    expect(deg(contourTilt(0, flat))).toBeCloseTo(90, 4);
+    expect(deg(contourTilt(0.5, flat))).toBeCloseTo(90, 4);
+    expect(deg(contourTilt(1, flat))).toBeCloseTo(90, 4);
   });
 
-  it('is uniform at rimTilt when crownHeight is 0', () => {
-    expect(deg(domeSurfaceTilt(0.5, rad(20), 0, 0.3))).toBeCloseTo(20, 5);
-    expect(deg(domeSurfaceTilt(0, rad(20), 0, 0.3))).toBeCloseTo(20, 5);
+  it('linear ramp h(x) = x → tilt = π/4 (45°) at every interior r', () => {
+    // dh/dx = 1 ⇒ cot(θ) = 1 ⇒ θ = 45°.
+    const ramp: ContourFn = (x) => x;
+    expect(deg(contourTilt(0.5, ramp))).toBeCloseTo(45, 2);
+    expect(deg(contourTilt(0.25, ramp))).toBeCloseTo(45, 2);
   });
 
-  it('reaches 90° at the centroid for full crown + no bevel band', () => {
-    // crownHeight=1, bwNorm=1 → pure ramp from rimTilt at r=1 to 90° at r=0.
-    expect(deg(domeSurfaceTilt(0, rad(0), 1, 1))).toBeCloseTo(90, 5);
-    expect(deg(domeSurfaceTilt(0.5, rad(0), 1, 1))).toBeCloseTo(45, 5);
+  it('steeper slope ⇒ smaller tilt (normal closer to in-plane)', () => {
+    // h(x) = 2x ⇒ slope 2 ⇒ θ = atan2(1, 2) ≈ 26.6°
+    const steep: ContourFn = (x) => 2 * x;
+    expect(deg(contourTilt(0.5, steep))).toBeCloseTo(26.6, 1);
   });
 
-  it('holds rimTilt across the bevel band', () => {
-    // bwNorm=0.1 → rBevel=0.9. r in [0.9, 1] is bevel face at rimTilt.
-    expect(deg(domeSurfaceTilt(0.95, rad(0), 1, 0.1))).toBeCloseTo(0, 5);
-    expect(deg(domeSurfaceTilt(0.9, rad(0), 1, 0.1))).toBeCloseTo(0, 5);
-  });
-
-  it('ramps inside the interior band', () => {
-    // rimTilt=0, crown=1, bwNorm=0.1 → crownTilt=90°, rBevel=0.9.
-    // Interior: θ = lerp(crownTilt, rimTilt, r/rBevel).
-    // r=0.5 → θ = lerp(90°, 0°, 0.5/0.9) = 90° · 4/9 = 40°.
-    expect(deg(domeSurfaceTilt(0.5, rad(0), 1, 0.1))).toBeCloseTo(40, 1);
-    // r=0 → 90°.
-    expect(deg(domeSurfaceTilt(0, rad(0), 1, 0.1))).toBeCloseTo(90, 5);
-  });
-
-  it('clamps bwNorm to [0,1]', () => {
-    expect(deg(domeSurfaceTilt(0.5, rad(0), 1, 5))).toBeCloseTo(45, 5); // same as bwNorm=1
-    // bwNorm=-1 clamps to 0 → rBevel=1, interior ramp: lerp(90°, 20°, 0.5) = 55°
-    expect(deg(domeSurfaceTilt(0.5, rad(20), 1, -1))).toBeCloseTo(55, 1);
+  it('clamps negative slope to flat (tilt = π/2)', () => {
+    // h(x) = 1 − x dips toward center; the dome model treats that as a local
+    // plateau rather than an under-side normal, so tilt stays π/2.
+    const inverted: ContourFn = (x) => 1 - x;
+    expect(deg(contourTilt(0.5, inverted))).toBeCloseTo(90, 4);
   });
 });
 
@@ -129,36 +117,38 @@ describe('computeLitArcs with rimTilt', () => {
 });
 
 describe('sampleLightStops', () => {
-  const rad = (d: number) => (d * Math.PI) / 180;
-  const unitContour: ContourFn = () => 1;     // no painterly modulation
+  // Linear ramp contour h(x) = x: rim (r=1) has slope 1 ⇒ tilt 45°; centroid
+  // (r=0) has slope 1 ⇒ tilt 45°. Uniform 45° everywhere — useful baseline.
+  const linearContour: ContourFn = (x) => x;
+  // Concave dome contour with a single peak at the medial axis: steep slope
+  // at the rim (low tilt, dim) smoothly easing to zero slope at center (tilt
+  // π/2, bright). h(x) = 1 − (1 − x)² ⇒ slope = 2(1 − x).
+  const domeContour: ContourFn = (x) => 1 - (1 - x) * (1 - x);
 
-  it('peaks at lit rim for a horizontal light, flat surface', () => {
+  it('peaks at lit rim for a horizontal light, linear contour', () => {
     const stops = sampleLightStops({
       azimuthDeg: 0,
       elevationDeg: 0,
-      rimTiltRad: 0,
-      crownHeight: 0,
       rLit: 100,
       rFar: 100,
-      bevelWidthPx: 0,
-      contour: unitContour,
+      contour: linearContour,
       samples: 16,
     });
+    // Horizontal light: lit-side normal (lifted by the contour-derived tilt)
+    // dots positively with L; far-side dots negatively (clamped to 0). The
+    // max sits at offset 0 (the lit rim) and decays through 0 at offset 1.
     const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
     expect(max.offset).toBeCloseTo(0, 5);
     expect(stops[stops.length - 1]!.opacity).toBeCloseTo(0, 5);
   });
 
-  it('shifts the bright spot toward centroid for an overhead light + dome crown', () => {
+  it('shifts the bright spot toward centroid for an overhead light + dome contour', () => {
     const stops = sampleLightStops({
       azimuthDeg: 0,
       elevationDeg: 90,
-      rimTiltRad: 0,
-      crownHeight: 1,
       rLit: 100,
       rFar: 100,
-      bevelWidthPx: 100,                       // full ramp, no bevel face
-      contour: unitContour,
+      contour: domeContour, // flat plateau in the middle → normal straight up
       samples: 16,
     });
     const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
@@ -170,12 +160,9 @@ describe('sampleLightStops', () => {
     const stops = sampleLightStops({
       azimuthDeg: 45,
       elevationDeg: 30,
-      rimTiltRad: rad(20),
-      crownHeight: 0.4,
       rLit: 100,
       rFar: 100,
-      bevelWidthPx: 20,
-      contour: unitContour,
+      contour: linearContour,
       samples: 16,
     });
     expect(stops).toHaveLength(17);
@@ -185,18 +172,15 @@ describe('sampleLightStops', () => {
   });
 
   it('shifts the centroid offset for asymmetric rLit/rFar', () => {
-    // Wide-on-lit-side body: rLit much larger than rFar. The centroid
-    // (peak brightness for an overhead light + full dome) should sit at
-    // s ≈ rLit / (rLit + rFar) = 200 / 300 ≈ 0.67.
+    // Wide-on-lit-side body: rLit much larger than rFar. With an overhead
+    // light + a dome contour, the peak brightness (where the normal points
+    // up) sits at s ≈ rLit / (rLit + rFar) = 200 / 300 ≈ 0.67.
     const stops = sampleLightStops({
       azimuthDeg: 0,
       elevationDeg: 90,
-      rimTiltRad: 0,
-      crownHeight: 1,
       rLit: 200,
       rFar: 100,
-      bevelWidthPx: 300,
-      contour: unitContour,
+      contour: domeContour,
       samples: 32,
     });
     const max = stops.reduce((m, s) => (s.opacity > m.opacity ? s : m));
@@ -271,10 +255,6 @@ describe('sampleSliceStops', () => {
     // axisAngleRad = light.az (rim direction = light direction).
     const sliceStops = sampleSliceStops({
       axisAngleRad: 0,
-      rLocal: 1,
-      rimTiltRad: 0,
-      crownHeight: 0,
-      bevelWidthPx: 0.1,
       lightAzimuthDeg: 0,
       lightElevationDeg: 30,
       lightIntensity: 1,
@@ -284,11 +264,8 @@ describe('sampleSliceStops', () => {
     const lightStops = sampleLightStops({
       azimuthDeg: 0,
       elevationDeg: 30,
-      rimTiltRad: 0,
-      crownHeight: 0,
       rLit: 1,
       rFar: 1,
-      bevelWidthPx: 0.1,
       contour: flatContour,
       samples: 16,
     });
@@ -308,10 +285,6 @@ describe('sampleSliceStops', () => {
   it('emits samples+1 stops with strictly increasing offsets from 0 to 1', () => {
     const stops = sampleSliceStops({
       axisAngleRad: 0,
-      rLocal: 50,
-      rimTiltRad: 0,
-      crownHeight: 0.4,
-      bevelWidthPx: 10,
       lightAzimuthDeg: 30,
       lightElevationDeg: 45,
       lightIntensity: 1,
@@ -326,32 +299,13 @@ describe('sampleSliceStops', () => {
     }
   });
 
-  it('contour multiplier is applied: zero contour produces zero opacity', () => {
-    const zero = () => 0;
-    const stops = sampleSliceStops({
-      axisAngleRad: 0,
-      rLocal: 50,
-      rimTiltRad: 0,
-      crownHeight: 0.5,
-      bevelWidthPx: 10,
-      lightAzimuthDeg: 0,
-      lightElevationDeg: 30,
-      lightIntensity: 1,
-      contour: zero,
-      samples: 8,
-    });
-    for (const s of stops) expect(s.opacity).toBe(0);
-  });
-
   it('applies lightIntensity multiplicatively', () => {
     const a = sampleSliceStops({
-      axisAngleRad: 0, rLocal: 50, rimTiltRad: 0, crownHeight: 0,
-      bevelWidthPx: 10, lightAzimuthDeg: 0, lightElevationDeg: 30,
+      axisAngleRad: 0, lightAzimuthDeg: 0, lightElevationDeg: 30,
       lightIntensity: 1, contour: flatContour, samples: 8,
     });
     const b = sampleSliceStops({
-      axisAngleRad: 0, rLocal: 50, rimTiltRad: 0, crownHeight: 0,
-      bevelWidthPx: 10, lightAzimuthDeg: 0, lightElevationDeg: 30,
+      axisAngleRad: 0, lightAzimuthDeg: 0, lightElevationDeg: 30,
       lightIntensity: 0.5, contour: flatContour, samples: 8,
     });
     for (let i = 0; i < a.length; i++) {

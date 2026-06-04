@@ -272,6 +272,16 @@ body {
   letter-spacing: 0.08em;
   margin: 10px 0 4px;
 }
+.sb-curve-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.sb-curve-actions button {
+  font-size: 11px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
 
 /* ── Sliders ──────────────────────────────────────────────── */
 
