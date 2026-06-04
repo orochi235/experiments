@@ -1,7 +1,7 @@
 export type BalloonBase = 'rectangle' | 'oval' | 'polygon' | 'cloud';
 export type EffectKind = 'fill' | 'tail' | 'spikes' | 'lobes' | 'wobble' | 'jitter' | 'cloud' | 'stroke' | 'shadow';
 export type TailShape = 'pointed' | 'bubbles' | 'lightning' | 'wavy';
-export type FillMode = 'aqua' | 'dome';
+export type FillMode = 'aqua' | 'dome' | 'brdf';
 
 // Lab params: numbers, strings (color/select), booleans (toggles), and number arrays (curves).
 export type ParamValue = number | string | boolean | number[];
@@ -19,6 +19,7 @@ export interface RuntimeState {
   text: string;
   fitToContent: boolean;
   domeDebug?: boolean;
+  heightmapDebug?: boolean;
 }
 
 export interface DesignState {
@@ -33,4 +34,17 @@ export interface DesignState {
   textColor: string;
   bg: string;
   nextId: number;
+}
+
+export type ShadingGroup =
+  | 'body'    // base body fill
+  | 'dome'    // per-light dome wedges (dome mode)
+  | 'brdf'    // Lambertian / specular / rim/Fresnel (BRDF mode)
+  | 'aqua'    // aqua-mode body gradient + gloss
+  | 'bevel';  // bevel inset path
+
+export interface ShadingItem {
+  id: string;
+  label: string;
+  group: ShadingGroup;
 }
