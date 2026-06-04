@@ -1500,13 +1500,35 @@ export function SpeechBalloon({
           // sub-shape's highlight lands inside it instead of being averaged
           // across the unioned silhouette.
           <>
-            <path d={bodyOnlyPath} fill={`url(#${aquaBodyId})`} />
-            {fillRender.glossStrength > 0 && <path d={bodyOnlyPath} fill={`url(#${aquaGlossId})`} />}
+            <path
+              d={bodyOnlyPath}
+              fill={`url(#${aquaBodyId})`}
+              data-shading-id={pushShading({ id: 'aqua.body', label: 'Aqua body gradient', group: 'aqua' })}
+              className={pulseIf('aqua.body')}
+            />
+            {fillRender.glossStrength > 0 && (
+              <path
+                d={bodyOnlyPath}
+                fill={`url(#${aquaGlossId})`}
+                data-shading-id={pushShading({ id: 'aqua.gloss', label: 'Aqua gloss', group: 'aqua' })}
+                className={pulseIf('aqua.gloss')}
+              />
+            )}
             {allBubbles.map((b, i) => (
               <g key={i}>
-                <circle cx={b.cx} cy={b.cy} r={b.r} fill={`url(#${aquaBodyId})`} />
+                <circle
+                  cx={b.cx} cy={b.cy} r={b.r}
+                  fill={`url(#${aquaBodyId})`}
+                  data-shading-id={pushShading({ id: `aqua.bubble-${i}.body`, label: `Bubble ${i + 1} body`, group: 'aqua' })}
+                  className={pulseIf(`aqua.bubble-${i}.body`)}
+                />
                 {fillRender.glossStrength > 0 && (
-                  <circle cx={b.cx} cy={b.cy} r={b.r} fill={`url(#${aquaGlossId})`} />
+                  <circle
+                    cx={b.cx} cy={b.cy} r={b.r}
+                    fill={`url(#${aquaGlossId})`}
+                    data-shading-id={pushShading({ id: `aqua.bubble-${i}.gloss`, label: `Bubble ${i + 1} gloss`, group: 'aqua' })}
+                    className={pulseIf(`aqua.bubble-${i}.gloss`)}
+                  />
                 )}
               </g>
             ))}
@@ -1544,16 +1566,27 @@ export function SpeechBalloon({
                     </Fragment>
                   ))}
                 </defs>
-                <path d={bodyPath} fill={fillRender.base} />
+                <path
+                  d={bodyPath}
+                  fill={fillRender.base}
+                  data-shading-id={pushShading({ id: 'body', label: 'Body fill', group: 'body' })}
+                  className={pulseIf('body')}
+                />
                 <g style={{ mixBlendMode: 'screen', isolation: 'isolate' }}>
-                  {domeLayers.map((_, i) => (
-                    <path
-                      key={i}
-                      d={bodyPath}
-                      fill={`url(#${idPrefix}-dome-grad-${i})`}
-                      clipPath={`url(#${idPrefix}-dome-clip-${i})`}
-                    />
-                  ))}
+                  {domeLayers.map((_, i) => {
+                    const id = `dome.light-${i}`;
+                    const label = i === 0 ? 'Key light' : i === 1 ? 'Fill light' : `Light ${i + 1}`;
+                    return (
+                      <path
+                        key={i}
+                        d={bodyPath}
+                        fill={`url(#${idPrefix}-dome-grad-${i})`}
+                        clipPath={`url(#${idPrefix}-dome-clip-${i})`}
+                        data-shading-id={pushShading({ id, label, group: 'dome' })}
+                        className={pulseIf(id)}
+                      />
+                    );
+                  })}
                 </g>
               </>
             )}
@@ -1566,7 +1599,12 @@ export function SpeechBalloon({
           // radial at the hot spot for Specular, radial centroid→rim for Rim.
           // Stacked additively via `mix-blend-mode: screen`.
           <>
-            <path d={bodyPath} fill={fillRender.base} />
+            <path
+              d={bodyPath}
+              fill={fillRender.base}
+              data-shading-id={pushShading({ id: 'body', label: 'Body fill', group: 'body' })}
+              className={pulseIf('body')}
+            />
             {brdfLayers.length > 0 && (
               <>
                 <defs>
@@ -1612,14 +1650,19 @@ export function SpeechBalloon({
                   ))}
                 </defs>
                 <g style={{ mixBlendMode: 'screen', isolation: 'isolate' }}>
-                  {brdfLayers.map((layer) => (
-                    <path
-                      key={layer.key}
-                      d={bodyPath}
-                      fill={`url(#${idPrefix}-brdf-grad-${layer.key})`}
-                      clipPath={`url(#${idPrefix}-brdf-clip-${layer.key})`}
-                    />
-                  ))}
+                  {brdfLayers.map((layer) => {
+                    const id = `brdf.${layer.key}`;
+                    return (
+                      <path
+                        key={layer.key}
+                        d={bodyPath}
+                        fill={`url(#${idPrefix}-brdf-grad-${layer.key})`}
+                        clipPath={`url(#${idPrefix}-brdf-clip-${layer.key})`}
+                        data-shading-id={pushShading({ id, label: layer.key, group: 'brdf' })}
+                        className={pulseIf(id)}
+                      />
+                    );
+                  })}
                 </g>
               </>
             )}
