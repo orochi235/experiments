@@ -780,25 +780,44 @@ function CurveBlock({ label, values, min, max, step, defaults, marks, onChange }
 // — the two-layer view is purely a UI affordance, with synthetic seam
 // anchors interpolated at x=b when no real anchor sits exactly there.
 
-interface PartitionState { x: number }
+interface PartitionState { x: number; y: number }
 
 function createPartitionLayer(): CurveLayer<PartitionState> {
   return {
     id: 'partition',
     render(state, ctx) {
-      const x = ctx.toPlot({ x: state.x, y: 0 }).x;
+      const plotPt = ctx.toPlot({ x: state.x, y: state.y });
       const h = ctx.plotSize.height;
-      const activeStroke = ctx.isActive ? 'rgba(80,80,80,0.85)' : 'rgba(80,80,80,0.5)';
+      const guideStroke = ctx.isActive ? 'rgba(80,80,80,0.85)' : 'rgba(80,80,80,0.5)';
       return (
         <g>
-          <line x1={x} x2={x} y1={0} y2={h} stroke={activeStroke} strokeDasharray="5 4" strokeWidth={1.5} />
-          <rect x={x - 5} y={h / 2 - 14} width={10} height={28} rx={2} fill={activeStroke} style={{ cursor: 'ew-resize' }} data-anchor-index="partition" />
+          <line
+            x1={plotPt.x}
+            x2={plotPt.x}
+            y1={0}
+            y2={h}
+            stroke={guideStroke}
+            strokeDasharray="5 4"
+            strokeWidth={1.5}
+          />
+          <circle
+            cx={plotPt.x}
+            cy={plotPt.y}
+            r={5}
+            fill="goldenrod"
+            stroke="goldenrod"
+            strokeWidth={1.5}
+            style={{ cursor: 'move' }}
+            data-anchor-index="partition"
+          />
         </g>
       );
     },
     hitTest(state, plot, ctx) {
-      const x = ctx.toPlot({ x: state.x, y: 0 }).x;
-      return Math.abs(plot.x - x) < 10 ? { kind: 'handle' } : null;
+      const p = ctx.toPlot({ x: state.x, y: state.y });
+      const dx = plot.x - p.x;
+      const dy = plot.y - p.y;
+      return dx * dx + dy * dy < 10 * 10 ? { kind: 'handle' } : null;
     },
     onPointerDown(_state, hit) {
       if (hit.kind !== 'handle') return;
@@ -806,9 +825,14 @@ function createPartitionLayer(): CurveLayer<PartitionState> {
         onMove(_state, model, _e, ctx) {
           const span = ctx.modelRange.xMax - ctx.modelRange.xMin;
           const pad = span * 0.05;
-          const lo = ctx.modelRange.xMin + pad;
-          const hi = ctx.modelRange.xMax - pad;
-          return { x: Math.max(lo, Math.min(hi, model.x)) };
+          const xLo = ctx.modelRange.xMin + pad;
+          const xHi = ctx.modelRange.xMax - pad;
+          const yLo = Math.min(ctx.modelRange.yMin, ctx.modelRange.yMax);
+          const yHi = Math.max(ctx.modelRange.yMin, ctx.modelRange.yMax);
+          return {
+            x: Math.max(xLo, Math.min(xHi, model.x)),
+            y: Math.max(yLo, Math.min(yHi, model.y)),
+          };
         },
       };
     },
@@ -894,6 +918,16 @@ interface RimContourBlockProps {
   onBevelWidthChange: (px: number) => void;
 }
 
+// Pulls the y of the seam anchor at x≈b out of a flat values array, or
+// falls back to a linear-interp estimate if the array hasn't been
+// migrated to include one yet (first render).
+function seamYFromValues(values: readonly number[], b: number): number {
+  for (let i = 0; i + 1 < values.length; i += 2) {
+    if (Math.abs(values[i]! - b) < SEAM_X_EPS) return values[i + 1]!;
+  }
+  return interpFlat(values, b);
+}
+
 function RimContourBlock({
   label,
   values,
@@ -917,6 +951,34 @@ function RimContourBlock({
 
   // Partition x in model space [0, 1] derived from the px-valued bevelWidth.
   const b = Math.max(0.05, Math.min(0.95, dMax > 0 ? bevelWidth / dMax : 0.25));
+
+  // One-time per (b, values) migration: ensure a real anchor exists at
+  // x≈b so splitFlatAtPartition / mergeLayerPoints can rely on it.
+  useEffect(() => {
+    const hasSeam = (() => {
+      for (let i = 0; i + 1 < values.length; i += 2) {
+        if (Math.abs(values[i]! - b) < SEAM_X_EPS) return true;
+      }
+      return false;
+    })();
+    if (hasSeam) return;
+    const seamY = interpFlat(values, b);
+    const next: number[] = [];
+    let inserted = false;
+    const cpts: { x: number; y: number }[] = [];
+    for (let i = 0; i + 1 < values.length; i += 2) cpts.push({ x: values[i]!, y: values[i + 1]! });
+    cpts.sort((a, c) => a.x - c.x);
+    for (const p of cpts) {
+      if (!inserted && p.x > b) {
+        next.push(b, seamY);
+        inserted = true;
+      }
+      next.push(p.x, p.y);
+    }
+    if (!inserted) next.push(b, seamY);
+    onContourChange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b]);
 
   const { bevel, spline } = useMemo(() => splitFlatAtPartition(values, b), [values, b]);
 
@@ -944,7 +1006,7 @@ function RimContourBlock({
   const layers = useMemo(() => [
     { layer: bevelLayer, state: { points: bevel, activeIndex: null } as FunctionLayerState },
     { layer: splineLayer, state: { points: spline, activeIndex: null } as FunctionLayerState },
-    { layer: partitionLayer, state: { x: b } as PartitionState },
+    { layer: partitionLayer, state: { x: b, y: seamYFromValues(values, b) } as PartitionState },
   ], [bevelLayer, bevel, splineLayer, spline, partitionLayer, b]);
 
   const onLayerChange = (id: string, nextUnknown: unknown) => {
@@ -956,7 +1018,12 @@ function RimContourBlock({
       onContourChange(mergeLayerPoints(next.points, bevel, b));
     } else if (id === 'partition') {
       const next = nextUnknown as PartitionState;
-      onBevelWidthChange(next.x * dMax);
+      const bOld = b;
+      const bNew = next.x;
+      const seamY = next.y;
+      const remapped = remapAcrossPartition(values, bOld, bNew, seamY);
+      onContourChange(remapped);
+      onBevelWidthChange(bNew * dMax);
     }
   };
 
