@@ -51,7 +51,7 @@ Unit tests: 96 pass (vitest).
 
 6. **Other bodies** — PASS. Switching to polygon (hexagon) renders correctly with lit-bevel; per-facet bevel strips visible, no crashes. Path count drops to 14 (fewer rim vertices → fewer regions). Cloud and oval not separately tested.
 
-7. **Shading panel** — PARTIAL / BUG (pre-existing). The panel rows for lit-bevel (`Ambient`, `Key light`, `Fill light`, `Specular`, `Bevel band`, `Interior`) do not appear after switching from dome mode. The panel shows the dome mode's 193 entries (Body fill + 192 dome wedges) because of a pre-existing bug: `shadingItemsKey` in `SpeechBalloon.tsx` (line 1507) is computed from `shadingItems` *before* the JSX evaluates and fills the array (always `""` ), so the `useEffect` that calls `onShadingItems` never re-fires after mount. The correct 6 lit-bevel `[data-shading-id]` elements exist in the SVG; only the panel list is stale. Toggling the "Key light" row in the dome-labeled panel is a no-op for lit-bevel rendering. **This bug predates the analytic lit-bevel work** (present in commit `bbc78e4`).
+7. **Shading panel** — PASS (fixed). The panel rows for lit-bevel (`Ambient`, `Key light`, `Fill light`, `Specular`, `Bevel band`, `Interior`) appear correctly after switching from dome mode. Toggling "Key light" visibly darkens the lit side; toggling "Bevel band" hides the band paths. Mode round-trips (dome → lit-bevel → dome) swap the row list correctly.
 
 8. **A/B dome vs lit-bevel** — PASS. Mode switch produces visually distinct results at identical azimuth/elevation/bevelWidth: dome is a soft radial gradient; lit-bevel shows a physically-modeled bevel band + structured interior.
 
@@ -61,7 +61,7 @@ Unit tests: 96 pass (vitest).
 
 - Hairline seams between band regions are present but minimal — the 1 px same-paint stroke overlap from the implementation nearly eliminates them.
 - Corner fans at 45° azimuth show no visible popping; transitions are smooth.
-- The shading panel shows "dome" as the group header for lit-bevel's Key/Fill light entries even after switching (see item 7 above).
+- The shading panel correctly swaps group headers on mode change (fixed in same commit as item 7).
 
 ---
 
@@ -95,15 +95,4 @@ all flow through labkit's experiment provider; localStorage key is
 
 ## Open issues
 
-### Shading panel does not update on mode switch (pre-existing, not fixed by lit-bevel work)
-
-Root cause: `shadingItemsKey` (line 1507, `SpeechBalloon.tsx`) is computed
-before the `return` statement runs, so it is always `""` (empty array at that
-point). The `useEffect([shadingItemsKey, onShadingItems], …)` dep never
-changes after mount, so `onShadingItems` is called exactly once — with the
-initial mode's items (dome). Switching to lit-bevel changes the SVG
-`data-shading-id` elements correctly but the panel list stays frozen.
-
-Fix: move `shadingItemsKey` computation after the JSX rendering phase, or use
-a different mechanism (e.g., deduplicated `useEffect` keyed on the mode string,
-or a `useRef` accumulator pattern).
+No known open issues.

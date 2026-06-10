@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo } from 'react';
+import { Fragment, useEffect, useId, useMemo, useRef } from 'react';
 import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
 import {
   bareBaseMaxBevel,
@@ -1501,14 +1501,18 @@ export function SpeechBalloon({
   const pulseIf = (id: string): string | undefined =>
     highlightedShadingId === id ? 'shading-pulse' : undefined;
 
-  // Publish after each render. useEffect's dep on a joined id list avoids
-  // re-firing when the (always-new) array reference changes but the item set
-  // hasn't.
-  const shadingItemsKey = shadingItems.map((s) => s.id).join('|');
+  // Publish after each render. shadingItems is fully populated by effect time
+  // (effects run after render, and pushShading calls happen during JSX
+  // construction). A ref-compare on the joined id key avoids re-publishing —
+  // and triggering an upstream setState + re-render loop — when the item set
+  // hasn't actually changed.
+  const lastShadingKeyRef = useRef('');
   useEffect(() => {
+    const key = shadingItems.map((i) => i.id).join('|');
+    if (key === lastShadingKeyRef.current) return;
+    lastShadingKeyRef.current = key;
     onShadingItems?.(shadingItems);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shadingItemsKey, onShadingItems]);
+  });
 
   return (
     <svg
