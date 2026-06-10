@@ -57,27 +57,25 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'rimStrength', label: 'Rim strength', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.4, hideWhen: (p) => p.mode !== 'brdf' },
     { key: 'rimPower', label: 'Rim sharpness', kind: 'range', min: 0.5, max: 8, step: 0.1, default: 3, hideWhen: (p) => p.mode !== 'brdf' },
 
-    // lit-bevel: SVG-filter-based dome using feDiffuseLighting +
-    // feSpecularLighting on a contour-shaped heightmap. Three heightmap
-    // sources, picked via `heightmapSource`. Shares bevelWidth /
-    // lightAzimuth / lightElevation / contour with the other modes so the
-    // existing contour editor still drives it.
-    { kind: 'header', label: 'Lit bevel — heightmap', hideWhen: (p) => p.mode !== 'lit-bevel' },
-    { key: 'heightmapSource', label: 'Source', kind: 'select',
-      options: ['bevel-blur', 'bevel-rings', 'bevel-dt'],
-      default: 'bevel-blur', hideWhen: (p) => p.mode !== 'lit-bevel' },
-    { key: 'blur', label: 'Blur σ', kind: 'range', min: 1, max: 60, step: 0.5, default: 14, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-blur', unit: 'px' },
-    { key: 'rings', label: 'Rings', kind: 'range', min: 4, max: 48, step: 1, default: 20, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-rings' },
-    { key: 'smoothing', label: 'Smoothing', kind: 'range', min: 0, max: 4, step: 0.1, default: 1.2, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-rings', unit: 'px' },
-    { key: 'dtResolution', label: 'DT resolution', kind: 'range', min: 64, max: 512, step: 16, default: 256, hideWhen: (p) => p.mode !== 'lit-bevel' || p.heightmapSource !== 'bevel-dt' },
-
+    // lit-bevel: analytic region renderer. The rim polyline is decomposed
+    // into band strips / corner fans / interior panels (straight skeleton);
+    // each region is one gradient path whose stops carry the final summed
+    // linear-light color. Shares bevelWidth / lightAzimuth / lightElevation /
+    // contour with the other modes.
     { kind: 'header', label: 'Lit bevel — material', hideWhen: (p) => p.mode !== 'lit-bevel' },
-    { key: 'surfaceScale', label: 'Surface scale', kind: 'range', min: 0, max: 30, step: 0.5, default: 8, hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'surfaceScale', label: 'Bevel height', kind: 'range', min: 0, max: 100, step: 0.5, default: 20, hideWhen: (p) => p.mode !== 'lit-bevel', unit: 'px' },
+    { key: 'ambient', label: 'Ambient', kind: 'range', min: 0, max: 1, step: 0.01, default: 0.25, hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0, hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30, hideWhen: (p) => p.mode !== 'lit-bevel' },
-    { key: 'lightColor', label: 'Light color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'lightColor', label: 'Key light color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
+
+    { kind: 'header', label: 'Lit bevel — interior', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'interiorTreatment', label: 'Interior', kind: 'select',
+      options: ['roof-panels', 'dome-blob', 'flat'],
+      default: 'roof-panels', hideWhen: (p) => p.mode !== 'lit-bevel' },
+    { key: 'cornerStep', label: 'Corner step', kind: 'range', min: 4, max: 30, step: 1, default: 12, hideWhen: (p) => p.mode !== 'lit-bevel', unit: '°' },
 
     // Own header so the curve doesn't get adopted by the preceding (possibly
     // hidden) BRDF group — the grouping pass in Lab.tsx attaches every
