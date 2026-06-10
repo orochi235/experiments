@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useId, useMemo } from 'react';
-import type { DesignState, FillMode, HeightmapSource, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
+import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
 import {
   bareBaseMaxBevel,
   buildBaseSampler,
@@ -24,9 +24,10 @@ import {
   polygonsToSvgPath,
   circleToPolygon,
   offsetClosedPolygon,
-  offsetClosedPolygons,
   type Polygon,
 } from './clipping';
+import { buildRegions, type InteriorTreatment, type Region } from './bevelRegions';
+import { computeStops, type LitBevelTerm } from './litBevelShading';
 interface Props {
   design: DesignState;
   runtime: RuntimeState;
@@ -897,11 +898,6 @@ export function SpeechBalloon({
       : 'dome';
     const base = (p.base as string) ?? '#ffffff';
     const contour = Array.isArray(p.contour) ? (p.contour as number[]) : [0, 1, 1, 1];
-    const rawHm = (p.heightmapSource as string) ?? 'bevel-blur';
-    const heightmapSource: HeightmapSource =
-      rawHm === 'bevel-rings' ? 'bevel-rings'
-      : rawHm === 'bevel-dt' ? 'bevel-dt'
-      : 'bevel-blur';
     return {
       mode,
       base,
@@ -926,41 +922,19 @@ export function SpeechBalloon({
       highlightTint: (p.highlightTint as string) ?? '#ffffff',
       shadowTint: (p.shadowTint as string) ?? '#0a1020',
       // lit-bevel params
-      heightmapSource,
-      blur: (p.blur as number) ?? 14,
-      rings: (p.rings as number) ?? 20,
-      smoothing: (p.smoothing as number) ?? 1.2,
-      dtResolution: (p.dtResolution as number) ?? 256,
-      surfaceScale: (p.surfaceScale as number) ?? 8,
+      surfaceScale: (p.surfaceScale as number) ?? 20,
       diffuse: (p.diffuse as number) ?? 1.0,
       specular: (p.specular as number) ?? 0.6,
       shininess: (p.shininess as number) ?? 30,
       lightColor: (p.lightColor as string) ?? '#ffffff',
       specularColor: (p.specularColor as string) ?? '#ffffff',
+      interiorTreatment: ((p.interiorTreatment as string) === 'dome-blob' ? 'dome-blob'
+        : (p.interiorTreatment as string) === 'flat' ? 'flat'
+        : 'roof-panels') as InteriorTreatment,
+      ambient: (p.ambient as number) ?? 0.25,
+      cornerStep: (p.cornerStep as number) ?? 12,
     };
   }, [fillEffect]);
-
-  // Nested inset polygons for the lit-bevel `bevel-rings` heightmap.
-  // Each ring is painted at fill-opacity = 1/N so cumulative alpha at a
-  // pixel covered by K rings is ≈ K/N — i.e. a stepwise distance-from-rim
-  // approximation. The contour-tableValues feComponentTransfer in the
-  // filter then reshapes it to the user's profile. Only computed when
-  // the live mode actually needs it.
-  const litBevelRingPaths = useMemo(() => {
-    if (fillRender.mode !== 'lit-bevel' || fillRender.heightmapSource !== 'bevel-rings') return null;
-    const N = Math.max(2, Math.round(fillRender.rings));
-    const maxInset = Math.max(1, fillRender.bevelWidth);
-    const out: string[] = [];
-    for (let i = 0; i < N; i++) {
-      const inset = (i / (N - 1)) * maxInset;
-      const polys = i === 0
-        ? bodyAndBubblesPolys
-        : offsetClosedPolygons(bodyAndBubblesPolys, -inset, 'miter');
-      if (polys.length === 0) break;
-      out.push(polygonsToSvgPath(polys));
-    }
-    return { paths: out, opacityPerRing: 1 / N };
-  }, [fillRender.mode, fillRender.heightmapSource, fillRender.rings, fillRender.bevelWidth, bodyAndBubblesPolys]);
 
   // Pre-compute the aqua paint-server geometry: gradient direction in
   // objectBoundingBox coordinates + the five color stops mixed from base/tints.
@@ -1044,6 +1018,51 @@ export function SpeechBalloon({
   // computeLitArcs threshold (it tests whether the lifted 3D rim normal
   // catches the light) so the lit half-arc still tracks the dome's shape.
   const rimTiltRad = useMemo(() => contourTilt(1, contour), [contour]);
+
+  // Analytic lit-bevel: light-independent regions, merged linear-light stops.
+  // Terms hidden in the shading panel are excluded by recomputing stops (the
+  // CSS display:none mechanism can't subtract a term from a summed gradient).
+  const litBevel = useMemo(() => {
+    if (fillRender.mode !== 'lit-bevel') return null;
+    const hidden = new Set(runtime.hiddenShadingIds ?? []);
+    const exclude = new Set<LitBevelTerm>();
+    if (hidden.has('lit-bevel.ambient')) exclude.add('ambient');
+    if (hidden.has('lit-bevel.specular')) exclude.add('specular');
+    domeLights.forEach((_, i) => {
+      if (hidden.has(`lit-bevel.light-${i}`)) exclude.add(`light-${i}`);
+    });
+    const lights = domeLights.map((l, i) => ({
+      az: l.az, el: l.el, intensity: l.intensity,
+      color: i === 0 ? fillRender.lightColor : '#ffffff',
+    }));
+    const entries: Array<{ gradientId: string; region: Region; stops: { offset: number; color: string }[] }> = [];
+    bodyAndBubblesPolys.forEach((poly, pi) => {
+      const { regions, tMax } = buildRegions({
+        rim: poly,
+        bevelWidthPx: fillRender.bevelWidth,
+        interior: fillRender.interiorTreatment,
+        cornerStepDeg: fillRender.cornerStep,
+      });
+      const material = {
+        base: fillRender.base,
+        heightPx: fillRender.surfaceScale,
+        dMaxPx: tMax,
+        diffuse: fillRender.diffuse,
+        specular: fillRender.specular,
+        shininess: fillRender.shininess,
+        specularColor: fillRender.specularColor,
+        ambient: fillRender.ambient,
+      };
+      regions.forEach((region, ri) => {
+        entries.push({
+          gradientId: `${idPrefix}-lb-${pi}-${ri}`,
+          region,
+          stops: computeStops(region, lights, contour, material, exclude),
+        });
+      });
+    });
+    return { entries, lightCount: domeLights.length };
+  }, [fillRender, bodyAndBubblesPolys, domeLights, contour, runtime.hiddenShadingIds, idPrefix]);
 
   const domeLayers = useMemo(() => {
     if (fillRender.mode !== 'dome') return [];
@@ -1748,106 +1767,85 @@ export function SpeechBalloon({
           </>
         )}
 
-        {fillRender.mode === 'lit-bevel' && (() => {
-          // Lit-bevel: SVG filter chain. The body silhouette feeds a
-          // distance-from-rim heightmap (currently feGaussianBlur on
-          // SourceAlpha — bevel-rings and bevel-dt land as follow-ups),
-          // remapped through feComponentTransfer using contour samples,
-          // then lit with feDiffuseLighting + feSpecularLighting and
-          // composited additively. The whole thing gets clipped back to
-          // the silhouette via feComposite operator=in.
-          const filterId = `${idPrefix}-lit-bevel`;
-          // Sample the contour at 33 evenly-spaced x positions; written
-          // into feFuncA.tableValues so the heightmap alpha gets remapped
-          // from "distance from rim" to "height along the user profile."
-          const N = 33;
-          const samples: number[] = [];
-          for (let i = 0; i < N; i++) {
-            const xs = i / (N - 1);
-            samples.push(Math.max(0, Math.min(1, contour(xs))));
-          }
-          const tableValues = samples.map((v) => v.toFixed(4)).join(' ');
-          const hmIsRings = fillRender.heightmapSource === 'bevel-rings' && litBevelRingPaths;
-          return (
-            <>
-              <defs>
-                <filter
-                  id={filterId}
-                  x="-10%" y="-10%" width="120%" height="120%"
-                  colorInterpolationFilters="sRGB"
-                >
-                  {/* heightmap source */}
-                  {hmIsRings ? (
-                    // Rings: cumulative SourceAlpha from the inset stack
-                    // already encodes distance from rim. Optional smoothing
-                    // softens the stair-stepping between rings.
-                    fillRender.smoothing > 0 ? (
-                      <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.smoothing} result="hm-raw" />
-                    ) : (
-                      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="hm-raw" />
-                    )
-                  ) : (
-                    // Blur: classic feGaussianBlur on SourceAlpha. Cheap;
-                    // saturates past ~3σ on big silhouettes.
-                    <feGaussianBlur in="SourceAlpha" stdDeviation={fillRender.blur} result="hm-raw" />
-                  )}
-                  <feComponentTransfer in="hm-raw" result="hm">
-                    <feFuncA type="table" tableValues={tableValues} />
-                  </feComponentTransfer>
-                  <feDiffuseLighting
-                    in="hm"
-                    surfaceScale={fillRender.surfaceScale}
-                    diffuseConstant={fillRender.diffuse}
-                    lightingColor={fillRender.lightColor}
-                    result="diffuse"
+        {fillRender.mode === 'lit-bevel' && litBevel && (
+          <>
+            <defs>
+              <clipPath id={`${idPrefix}-lb-clip`}>
+                <path d={bodyPath} />
+              </clipPath>
+              {litBevel.entries.map(({ gradientId, region, stops }) =>
+                region.frame.kind === 'linear' ? (
+                  <linearGradient
+                    key={gradientId} id={gradientId} gradientUnits="userSpaceOnUse"
+                    x1={region.frame.from.x} y1={region.frame.from.y}
+                    x2={region.frame.to.x} y2={region.frame.to.y}
                   >
-                    <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
-                  </feDiffuseLighting>
-                  <feFlood floodColor={fillRender.base} result="base" />
-                  <feComposite in="diffuse" in2="base" operator="arithmetic" k1={1} k2={0} k3={0} k4={0} result="diffuseBase" />
-                  <feSpecularLighting
-                    in="hm"
-                    surfaceScale={fillRender.surfaceScale}
-                    specularConstant={fillRender.specular}
-                    specularExponent={fillRender.shininess}
-                    lightingColor={fillRender.specularColor}
-                    result="specular"
+                    {stops.map((s, i) => <stop key={i} offset={s.offset} stopColor={s.color} />)}
+                  </linearGradient>
+                ) : region.frame.kind === 'radial' ? (
+                  <radialGradient
+                    key={gradientId} id={gradientId} gradientUnits="userSpaceOnUse"
+                    cx={region.frame.center.x} cy={region.frame.center.y}
+                    r={Math.max(1, region.frame.radius)}
                   >
-                    <feDistantLight azimuth={fillRender.lightAzimuth} elevation={fillRender.lightElevation} />
-                  </feSpecularLighting>
-                  <feMerge result="lit">
-                    <feMergeNode in="diffuseBase" />
-                    <feMergeNode in="specular" />
-                  </feMerge>
-                  <feComposite in="lit" in2="SourceAlpha" operator="in" />
-                </filter>
-              </defs>
-              {hmIsRings ? (
-                // The ring stack IS the SourceGraphic the filter operates on.
-                // Each ring paints white at fill-opacity=1/N so cumulative
-                // alpha at a pixel covered by K rings ≈ K/N → distance from
-                // rim approximation.
-                <g
-                  filter={`url(#${filterId})`}
-                  data-shading-id={pushShading({ id: 'lit-bevel.body', label: 'Lit-bevel body', group: 'body' })}
-                  className={pulseIf('lit-bevel.body')}
-                >
-                  {litBevelRingPaths!.paths.map((d, i) => (
-                    <path key={i} d={d} fill="white" fillOpacity={litBevelRingPaths!.opacityPerRing} />
-                  ))}
-                </g>
-              ) : (
-                <path
-                  d={bodyPath}
-                  fill={fillRender.base}
-                  filter={`url(#${filterId})`}
-                  data-shading-id={pushShading({ id: 'lit-bevel.body', label: 'Lit-bevel body', group: 'body' })}
-                  className={pulseIf('lit-bevel.body')}
-                />
+                    {stops.map((s, i) => <stop key={i} offset={s.offset} stopColor={s.color} />)}
+                  </radialGradient>
+                ) : null
               )}
-            </>
-          );
-        })()}
+            </defs>
+            {/* Term rows for the shading panel. Empty groups: hiding one adds
+                its id to hiddenShadingIds, which the litBevel memo turns into
+                an exclude term — the gradients recompute rather than vanish. */}
+            <g data-shading-id={pushShading({ id: 'lit-bevel.ambient', label: 'Ambient', group: 'lit-bevel' })} />
+            {Array.from({ length: litBevel.lightCount }, (_, i) => (
+              <g
+                key={i}
+                data-shading-id={pushShading({
+                  id: `lit-bevel.light-${i}`,
+                  label: i === 0 ? 'Key light' : 'Fill light',
+                  group: 'lit-bevel',
+                })}
+              />
+            ))}
+            <g data-shading-id={pushShading({ id: 'lit-bevel.specular', label: 'Specular', group: 'lit-bevel' })} />
+            <g clipPath={`url(#${idPrefix}-lb-clip)`}>
+              {(['strip', 'interior'] as const).map((bucket) => (
+                <g
+                  key={bucket}
+                  data-shading-id={pushShading({
+                    id: bucket === 'strip' ? 'lit-bevel.band' : 'lit-bevel.interior',
+                    label: bucket === 'strip' ? 'Bevel band' : 'Interior',
+                    group: 'bevel',
+                  })}
+                  className={pulseIf(bucket === 'strip' ? 'lit-bevel.band' : 'lit-bevel.interior')}
+                >
+                  {litBevel.entries
+                    .filter(({ region }) =>
+                      bucket === 'strip' ? region.kind === 'strip' : region.kind !== 'strip')
+                    .map(({ gradientId, region, stops }) => {
+                      const fill = region.frame.kind === 'solid'
+                        ? stops[0]!.color
+                        : `url(#${gradientId})`;
+                      // 1px same-paint stroke kills antialiasing hairlines
+                      // where regions abut; boundary stops match exactly
+                      // (litBevelShading continuity test) so the overlap
+                      // is invisible.
+                      return (
+                        <path
+                          key={gradientId}
+                          d={polygonsToSvgPath([region.outline])}
+                          fill={fill}
+                          stroke={fill}
+                          strokeWidth={1}
+                          strokeLinejoin="round"
+                        />
+                      );
+                    })}
+                </g>
+              ))}
+            </g>
+          </>
+        )}
 
         {/* Outline last so it sits on top of the lit fill. */}
         {strokeW > 0 && (
