@@ -94,4 +94,41 @@ describe('computeStops', () => {
     expect(stops).toHaveLength(2);
     expect(stops[0]!.color).toBe(stops[1]!.color);
   });
+
+  it('colored light × colored albedo: per-channel product is 0 for orthogonal colors', () => {
+    // Pure red light on green albedo → R×G = 0, G×R = 0, B×0 = 0 → black
+    const redLight: LitBevelLight = { az: 0, el: 90, intensity: 1, color: '#ff0000' };
+    const greenAlbedo = mat({ base: '#00ff00', diffuse: 1, ambient: 0, specular: 0 });
+    // flat contour: slope 0, normal is straight up, ndl = sin(90°) = 1
+    const stopsOrtho = computeStops(
+      stripAt(0), [redLight], flatContour, greenAlbedo,
+    );
+    for (const s of stopsOrtho) expect(s.color).toBe('#000000');
+
+    // Pure red light on white albedo → red survives
+    const whiteAlbedo = mat({ base: '#ffffff', diffuse: 1, ambient: 0, specular: 0 });
+    const stopsWhite = computeStops(
+      stripAt(0), [redLight], flatContour, whiteAlbedo,
+    );
+    for (const s of stopsWhite) expect(s.color).toBe('#ff0000');
+  });
+
+  it('blob region: azimuth-independent and radially non-constant', () => {
+    const blob: Region = {
+      kind: 'blob', outline: [], azimuthDeg: 0, x0: 1, x1: 0.4,
+      frame: { kind: 'radial', center: { x: 5, y: 5 }, radius: 10 },
+    };
+    const blobAz137: Region = { ...blob, azimuthDeg: 137 };
+    const m = mat({ heightPx: 20, dMaxPx: 50 });
+    const lights = [white(0, 30)];
+
+    const stops0   = computeStops(blob,      lights, rampContour, m);
+    const stops137 = computeStops(blobAz137, lights, rampContour, m);
+
+    // (1) azimuth-independent: identical stops regardless of azimuthDeg
+    expect(stops0.map(s => s.color)).toEqual(stops137.map(s => s.color));
+
+    // (2) radially non-constant: center (x=1, first stop) ≠ seam (x=0.4, last stop)
+    expect(stops0[0]!.color).not.toBe(stops0[stops0.length - 1]!.color);
+  });
 });

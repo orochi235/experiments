@@ -68,13 +68,14 @@ function shadeAt(
   x: number,
   region: Region,
   lights: LitBevelLight[],
+  lightColors: ReadonlyArray<readonly [number, number, number]>,
   contour: ContourFn,
   m: LitBevelMaterial,
+  albedo: readonly [number, number, number],
+  specTint: readonly [number, number, number],
   exclude: ReadonlySet<LitBevelTerm>,
 ): [number, number, number] {
   const s = (contourSlope(contour, x) * m.heightPx) / m.dMaxPx;
-  const albedo = hexToLinear(m.base);
-  const specTint = hexToLinear(m.specularColor);
   const inv = 1 / Math.hypot(s, 1);
   let dr = 0, dg = 0, db = 0;
   let sr = 0, sg = 0, sb = 0;
@@ -91,7 +92,7 @@ function shadeAt(
       : L[0] * Math.cos((region.azimuthDeg * Math.PI) / 180)
         + L[1] * Math.sin((region.azimuthDeg * Math.PI) / 180);
     const ndl = Math.max(0, (s * mDotL + L[2]) * inv);
-    const lc = hexToLinear(light.color);
+    const lc = lightColors[i]!;
     const k = light.intensity * m.diffuse * ndl;
     dr += lc[0] * k; dg += lc[1] * k; db += lc[2] * k;
 
@@ -122,8 +123,15 @@ export function computeStops(
   exclude: ReadonlySet<LitBevelTerm> = new Set(),
   samples = 17,
 ): Stop[] {
+  // Parse hex colors once per call, not once per sample.
+  const albedo = hexToLinear(material.base);
+  const specTint = hexToLinear(material.specularColor);
+  const lightColors = lights.map(l => hexToLinear(l.color));
+
   if (region.frame.kind === 'solid') {
-    const color = linearToHex(shadeAt(region.x1, region, lights, contour, material, exclude));
+    const color = linearToHex(
+      shadeAt(region.x1, region, lights, lightColors, contour, material, albedo, specTint, exclude),
+    );
     return [{ offset: 0, color }, { offset: 1, color }];
   }
   const stops: Stop[] = [];
@@ -132,7 +140,9 @@ export function computeStops(
     const x = region.x0 + (region.x1 - region.x0) * u;
     stops.push({
       offset: u,
-      color: linearToHex(shadeAt(x, region, lights, contour, material, exclude)),
+      color: linearToHex(
+        shadeAt(x, region, lights, lightColors, contour, material, albedo, specTint, exclude),
+      ),
     });
   }
   return stops;
