@@ -33,7 +33,15 @@ function vertexTrajectory(
   e: { a: Point; n: Point }, f: { a: Point; n: Point },
 ): Traj | null {
   const det = e.n.x * f.n.y - e.n.y * f.n.x;
-  if (Math.abs(det) < 1e-12) return null; // parallel edges
+  if (Math.abs(det) < 1e-12) {
+    // Parallel normals. If they point the same way it's a collinear continuation
+    // that survived the pre-filter (near-collinear pair) — return the straight
+    // inward trajectory along f's normal. Antiparallel (spike) stays null.
+    if (e.n.x * f.n.x + e.n.y * f.n.y > 0) {
+      return { p0: f.a, d: f.n };
+    }
+    return null;
+  }
   const ce = e.a.x * e.n.x + e.a.y * e.n.y;
   const cf = f.a.x * f.n.x + f.a.y * f.n.y;
   return {
@@ -45,10 +53,29 @@ function vertexTrajectory(
 const at = (tr: Traj, t: number): Point => ({ x: tr.p0.x + tr.d.x * t, y: tr.p0.y + tr.d.y * t });
 
 export function computeStraightSkeleton(poly: Polygon): Skeleton {
-  // Drop zero-length edges.
-  const pts = poly.filter((p, i) => {
+  // Drop zero-length edges, then drop collinear (redundant) vertices: a vertex
+  // whose two incident edges are nearly parallel in the same direction adds no
+  // geometry and its null trajectory breaks cell coverage.
+  const rawPts = poly.filter((p, i) => {
     const q = poly[(i + 1) % poly.length]!;
     return Math.hypot(q.x - p.x, q.y - p.y) > 1e-6;
+  });
+  const pts = rawPts.filter((p, i) => {
+    const m = rawPts.length;
+    const prev = rawPts[(i - 1 + m) % m]!;
+    const next = rawPts[(i + 1) % m]!;
+    // Unit direction of edge arriving at p (prev→p) and leaving p (p→next).
+    const dx0 = p.x - prev.x, dy0 = p.y - prev.y;
+    const len0 = Math.hypot(dx0, dy0);
+    const dx1 = next.x - p.x, dy1 = next.y - p.y;
+    const len1 = Math.hypot(dx1, dy1);
+    if (len0 < 1e-6 || len1 < 1e-6) return true; // keep; zero-len handled above
+    const ux0 = dx0 / len0, uy0 = dy0 / len0;
+    const ux1 = dx1 / len1, uy1 = dy1 / len1;
+    // Cross product of unit directions ≈ 0 and dot > 0 → collinear continuation.
+    const cross = Math.abs(ux0 * uy1 - uy0 * ux1);
+    const dot = ux0 * ux1 + uy0 * uy1;
+    return !(cross < 1e-6 && dot > 0);
   });
   const n = pts.length;
   const empty: Skeleton = { cells: [], ridges: [], tMax: 0 };

@@ -74,4 +74,38 @@ describe('computeStraightSkeleton', () => {
       }
     }
   });
+
+  // Shared invariant helper: cell sides start at t=0, end at tDeath, length >= 2.
+  function assertCellInvariants(cells: ReturnType<typeof computeStraightSkeleton>['cells']): void {
+    for (const cell of cells) {
+      for (const side of [cell.left, cell.right]) {
+        expect(side.length).toBeGreaterThanOrEqual(2);
+        expect(side[0]!.t).toBeCloseTo(0, 9);
+        expect(side[side.length - 1]!.t).toBeCloseTo(cell.tDeath, 6);
+      }
+    }
+  }
+
+  it('collinear-run regression: polygon area is fully partitioned', () => {
+    // Three collinear vertices on the bottom edge; after merging, 4 cells expected.
+    const poly: Polygon = [
+      { x: 0, y: 0 }, { x: 33, y: 0 }, { x: 66, y: 0 },
+      { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 },
+    ];
+    const skel = computeStraightSkeleton(poly);
+    const total = skel.cells.reduce((s, c) => s + polygonArea(cellOutline(c)), 0);
+    expect(total).toBeCloseTo(10000, 0); // within 0.5 px²
+    assertCellInvariants(skel.cells);
+  });
+
+  it('irregular convex polygon: area partitioned and invariants hold', () => {
+    const poly: Polygon = [
+      { x: 0, y: 0 }, { x: 180, y: 10 }, { x: 220, y: 80 },
+      { x: 150, y: 140 }, { x: 40, y: 110 },
+    ];
+    const skel = computeStraightSkeleton(poly);
+    const total = skel.cells.reduce((s, c) => s + polygonArea(cellOutline(c)), 0);
+    expect(total).toBeCloseTo(polygonArea(poly), 0); // within 0.5 px²
+    assertCellInvariants(skel.cells);
+  });
 });
