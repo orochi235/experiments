@@ -31,4 +31,83 @@ describe('simplifyRim', () => {
     ];
     expect(simplifyRim(withMid, 12)).toHaveLength(4);
   });
+
+  it('never returns fewer than 3 vertices even at degenerate tolerance', () => {
+    const dense = circlePoly(120);
+    expect(simplifyRim(dense, 200).length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+import { buildRegions } from './bevelRegions';
+
+const rect200x100: Polygon = [
+  { x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 0, y: 100 },
+];
+
+function area(poly: { x: number; y: number }[]): number {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i]!, q = poly[(i + 1) % poly.length]!;
+    a += p.x * q.y - q.x * p.y;
+  }
+  return Math.abs(a) / 2;
+}
+
+describe('buildRegions', () => {
+  const opts = { rim: rect200x100, bevelWidthPx: 20, interior: 'roof-panels' as const, cornerStepDeg: 12 };
+
+  it('rectangle, roof-panels: 4 strips + 4 panels that tile the body', () => {
+    const { regions, tMax } = buildRegions(opts);
+    expect(tMax).toBeCloseTo(50, 3);
+    const strips = regions.filter((r) => r.kind === 'strip');
+    const panels = regions.filter((r) => r.kind === 'panel');
+    expect(strips).toHaveLength(4);
+    expect(panels).toHaveLength(4);
+    const total = regions.reduce((s, r) => s + area(r.outline), 0);
+    expect(total).toBeCloseTo(200 * 100, -1); // within ~5 px²
+  });
+
+  it('x-ranges: strips span [0, x_b], panels start at x_b and end ≤ 1', () => {
+    const { regions, tMax } = buildRegions(opts);
+    const xb = 20 / tMax;
+    for (const r of regions) {
+      if (r.kind === 'strip') {
+        expect(r.x0).toBe(0);
+        expect(r.x1).toBeCloseTo(xb, 6);
+      } else if (r.kind === 'panel') {
+        expect(r.x0).toBeCloseTo(xb, 6);
+        expect(r.x1).toBeGreaterThan(r.x0);
+        expect(r.x1).toBeLessThanOrEqual(1 + 1e-9);
+      }
+    }
+  });
+
+  it('dome-blob: strips + one radial blob region', () => {
+    const { regions } = buildRegions({ ...opts, interior: 'dome-blob' });
+    const blobs = regions.filter((r) => r.kind === 'blob');
+    expect(blobs).toHaveLength(1);
+    expect(blobs[0]!.frame.kind).toBe('radial');
+  });
+
+  it('flat: strips + one solid region', () => {
+    const { regions } = buildRegions({ ...opts, interior: 'flat' });
+    const flats = regions.filter((r) => r.kind === 'flat');
+    expect(flats).toHaveLength(1);
+    expect(flats[0]!.frame.kind).toBe('solid');
+    expect(flats[0]!.x0).toBe(1);
+  });
+
+  it('bevelWidth past total collapse: strips only, capped at the ridge', () => {
+    const { regions } = buildRegions({ ...opts, bevelWidthPx: 500 });
+    expect(regions.every((r) => r.kind === 'strip')).toBe(true);
+  });
+
+  it('strip gradient frame runs inward from the rim edge midpoint', () => {
+    const { regions } = buildRegions(opts);
+    const top = regions.find((r) => r.kind === 'strip' && r.outline[0]!.y === 0)!;
+    expect(top.frame.kind).toBe('linear');
+    if (top.frame.kind === 'linear') {
+      expect(top.frame.to.y).toBeGreaterThan(top.frame.from.y); // inward = +y for the top edge
+    }
+  });
 });
