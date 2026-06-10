@@ -1,136 +1,69 @@
 # Speech Balloon Lab — handoff
 
-Branch: `port-to-labkit`. The labkit port (described in earlier handoff notes
-in git history) is complete; this document focuses on what's happening now
-and what's open.
+Branch: `port-to-labkit`.
 
-## Recent work (this branch, since `a2fd616`)
+## Recent work: analytic lit-bevel renderer — DONE, browser-verified
 
-### Shading-layers debug panel — DONE, in browser-verify
-**Spec:** `docs/superpowers/specs/2026-06-03-shading-layers-panel-design.md`
-**Plan:** `docs/superpowers/plans/2026-06-03-shading-layers-panel.md`
-**Commits:** `69bbc67` → `4bc6842` (7 commits)
+**Spec:** `docs/superpowers/specs/2026-06-03-contour-editor-constrained-anchors-design.md`,
+`docs/superpowers/specs/2026-06-09-analytic-lit-bevel-design.md` (if present)
+**Plan:** `docs/superpowers/plans/2026-06-09-analytic-lit-bevel.md`
+**Commits:** `4c5286f` → `0d3a99e` (10 commits)
 
-What it is: a right-sidebar panel below "Tails" that lists every shading
-element the renderer just mounted (body fill, dome wedges, BRDF terms, aqua
-gradient stops, …) and lets you click a row to apply a pulsing magenta
-`drop-shadow` to that element. Single-select; click again to clear. A "Hide
-non-light surfaces" toggle filters out body/aqua/bevel rows so only the
-Lambertian / specular / rim / Fresnel contributors remain.
+What landed: the `lit-bevel` fill mode was rebuilt from scratch. The SVG-filter
+heightmap pipeline (`feDiffuseLighting`, `feConvolveMatrix`, bevel-rings offscreen
+canvas) was deleted and replaced with a pure analytic region renderer.
 
-Architecture: render-time registry. `SpeechBalloon` builds a
-`shadingItems: ShadingItem[]` array as it emits JSX; each tagged element
-calls `pushShading(...)` and the array is published to `Lab` via an
-`onShadingItems` callback fired in `useEffect`. `Lab` owns the
-`highlightedShadingId` state and passes it back down. Only the currently
-mounted mode's rows ever appear (mode switching auto-rebuilds the list).
+Three new modules:
+- `src/straightSkeleton.ts` — wavefront straight-skeleton for polygon offsets
+- `src/bevelRegions.ts` — `buildRegions`: decomposes a rim polyline into strip
+  bands (one per rim edge), corner fans (one per convex corner), and a single
+  interior region (roof-panels / dome-blob / flat)
+- `src/litBevelShading.ts` — `computeStops`: analytic Phong lighting (ambient +
+  N directional lights + specular) sampled along each region's gradient axis;
+  returns gradient stops
 
-Files: `src/ShadingLayersPanel.tsx`, `src/shadingLayers.ts`,
-`src/shadingLayers.test.ts`, registry plumbing in `src/SpeechBalloon.tsx`,
-mount in `src/Lab.tsx`, pulse CSS in `src/styles.css`.
+`SpeechBalloon.tsx` changes: the lit-bevel rendering branch replaces the old
+`<filter>` / heightmap block with a `useMemo` (`litBevel`) that calls
+`buildRegions` + `computeStops` per polygon, and emits one `<path>` per region
+with a `<linearGradient>` or `<radialGradient>` fill. Band regions go under
+`data-shading-id="lit-bevel.band"`, interior regions under
+`data-shading-id="lit-bevel.interior"`. The `feDiffuseLighting` element is
+gone (`document.querySelector('feDiffuseLighting')` returns null).
 
-Browser verification needed (vitest passes, no `npm run dev` in this
-session): panel appears, row set swaps on mode change, clicks toggle the
-pulse, "Hide non-light surfaces" hides body/aqua/bevel rows.
+`src/controls.ts` changes: heightmap controls removed; new "Lit bevel — material"
+block (Bevel height / Ambient / Diffuse / Specular / Shininess / Key light color /
+Specular color) and "Lit bevel — interior" block (Interior select: roof-panels /
+dome-blob / flat; Corner step).
 
-### Contour editor — three constrained anchors + partition push — DONE, in browser-verify
-**Spec:** `docs/superpowers/specs/2026-06-03-contour-editor-constrained-anchors-design.md`
-**Plan:** `docs/superpowers/plans/2026-06-03-contour-editor-constrained-anchors.md`
-**Commits:** `294be05` → `6c5d37e` (3 commits)
+Unit tests: 96 pass (vitest).
 
-What it is: the rim contour editor (`RimContourBlock` in `Lab.tsx`) now
-treats three anchors as constrained — `x=0`, `x=b` (the partition seam),
-`x=1` — and the partition handle is a 2D draggable anchor. Dragging the
-partition horizontally piecewise-affine-remaps every other anchor so
-nothing crosses the seam; dragging it vertically sets the seam y; both
-together produce one combined update. The endpoints render as goldenrod
-diamonds; the partition (originally a circle) is now also a goldenrod
-diamond (see uncommitted polish below).
+### Browser verification status (2026-06-10)
 
-Architecture: pure helper `remapAcrossPartition(values, bOld, bNew, seamY)`
-in `src/contourEditor.ts` (with `SEAM_X_EPS`). Unit-tested in
-`src/contourEditor.test.ts`. A migration `useEffect` inside
-`RimContourBlock` ensures the seam is always a real anchor in the stored
-values array (synthesizes one on mount when needed).
-`createPartitionLayer`'s `PartitionState` is now `{x, y}`; its `onMove`
-returns both; `RimContourBlock`'s `onLayerChange('partition', …)` calls
-`remapAcrossPartition` then emits both `onContourChange` and
-`onBevelWidthChange` in one tick.
+1. **Smoke** — PASS. No JS errors (favicon 404 only). `!!document.querySelector('feDiffuseLighting')` → `false`. Path count: **61** paths in `lit-bevel.band` + `lit-bevel.interior` groups (within spec range). Lit bevel band and structured interior render correctly.
 
-Files: `src/contourEditor.ts`, `src/contourEditor.test.ts`, edits in
-`src/Lab.tsx` to `PartitionState`, `createPartitionLayer`,
-`splitFlatAtPartition` (synthesis kept as fallback), and the
-`RimContourBlock` body.
+2. **Azimuth sweep** — PASS. Bright rim band correctly follows azimuth: az=0° lights the right edge, az=180° lights the left, az=45° lights the top-right corner. No visible popping or discontinuities at corner fans at 45°.
 
-### Uncommitted polish (working tree)
+3. **Elevation** — PASS. At el=85° shading flattens toward near-uniform. At el=15° band contrast is strong and directional (vivid lit/shadow sides). Correct.
 
-Five small follow-ups on top of `6c5d37e`. All written, type-checked, all
-71 vitest tests pass. Not committed — the user reviews uncommitted work
-before commit on this project.
+4. **Interior treatments** — PASS. All three render distinctly: `roof-panels` shows interior panel creases; `dome-blob` gives a smooth radial gradient; `flat` is a uniform interior with only the bevel band active.
 
-1. **Partition vertical line:** 2px, dotted (`strokeDasharray="2 4"`,
-   `strokeLinecap="round"`) instead of 1.5px dashed.
-2. **Partition handle:** goldenrod `<Diamond>` (size 10) replacing the
-   `<circle r={5}>`.
-3. **Bevel-side intermediate anchors:** gold via CSS vars
-   (`--curve-anchor-fill: goldenrod; --curve-anchor-stroke: goldenrod`)
-   inside `[data-layer-id="bevel"]`.
-4. **Header label:** `"Dome shape"` → `"Bevel contour"` in
-   `src/controls.ts`.
-5. **Reset / Flip horizontally buttons** below the curve editor.
-   - Reset: emits a 3-anchor contour `[0, y0, bNew, ySeam, 1, y1]` with
-     y values sampled from `c.defaults` (`[0, 0, 0.5, 0.8, 1, 1]`) and
-     `bevelWidth → 22`. Strips every intermediate user anchor.
-   - Flip horizontally: mirrors every anchor `(x, y) → (1−x, y)` and
-     swaps the partition (`bevelWidth → dMax − bevelWidth`); bevel and
-     spline sides cleanly swap roles.
-6. **Light sources in the dome debug overlay:** for each `domeLights`
-   entry the overlay now draws a goldenrod disc at the light's projected
-   xy position (`cx + d·cos(el)·cos(az)`, `cy + d·cos(el)·sin(az)` with
-   `d = 0.75 × max(bbox dimension)`) plus a yellow arrow from the disc
-   toward the centroid. Disc radius shrinks as elevation rises; a near-
-   overhead light collapses to a small dot at the centroid. Opacity scales
-   with `light.intensity`. Lives in the existing `domeDebug` overlay
-   block in `src/SpeechBalloon.tsx`.
+5. **Contour responsiveness** — PASS. Clicking "Flip horizontally" in the contour editor immediately recomputes the shading (bevel profile inverts, lighting changes). Live update confirmed.
 
-## Open issues (still need investigation)
+6. **Other bodies** — PASS. Switching to polygon (hexagon) renders correctly with lit-bevel; per-facet bevel strips visible, no crashes. Path count drops to 14 (fewer rim vertices → fewer regions). Cloud and oval not separately tested.
 
-### Reset doesn't visibly reset (reported, not reproduced)
-User reports clicking Reset does nothing visible. Static analysis of the
-handler says it should work — it writes both `contour` and `bevelWidth`
-through the same `onChange` plumbing the partition drag uses. Three
-hypotheses, none confirmed:
-- The two `setDesign` calls aren't batching in this environment and the
-  migration `useEffect` is interleaving (would leave a stale seam at the
-  old `b` plus a new one at the new `b`).
-- The kit's bevel/spline layers re-emit `onLayerChange` mid-update,
-  using a stale closure for `spline` or `bevel`, and the merge restores
-  removed anchors.
-- The buttons fire and the data updates, but the visible state already
-  closely matches the default and the user thinks nothing changed.
+7. **Shading panel** — PARTIAL / BUG (pre-existing). The panel rows for lit-bevel (`Ambient`, `Key light`, `Fill light`, `Specular`, `Bevel band`, `Interior`) do not appear after switching from dome mode. The panel shows the dome mode's 193 entries (Body fill + 192 dome wedges) because of a pre-existing bug: `shadingItemsKey` in `SpeechBalloon.tsx` (line 1507) is computed from `shadingItems` *before* the JSX evaluates and fills the array (always `""` ), so the `useEffect` that calls `onShadingItems` never re-fires after mount. The correct 6 lit-bevel `[data-shading-id]` elements exist in the SVG; only the panel list is stale. Toggling the "Key light" row in the dome-labeled panel is a no-op for lit-bevel rendering. **This bug predates the analytic lit-bevel work** (present in commit `bbc78e4`).
 
-Next step: open React DevTools (or add a one-line `console.log` to
-`handleReset` in `src/Lab.tsx`), click Reset, and look at the fill
-effect's `params.contour` + `params.bevelWidth`. That tells us which
-hypothesis is right in three seconds.
+8. **A/B dome vs lit-bevel** — PASS. Mode switch produces visually distinct results at identical azimuth/elevation/bevelWidth: dome is a soft radial gradient; lit-bevel shows a physically-modeled bevel band + structured interior.
 
-### Dragging the partition leaves stray anchors (reported, not investigated)
-User reports that dragging the partition around accumulates extra anchors
-on the curve. Initial reading of `remapAcrossPartition` says each tick
-skips the previous seam (within `SEAM_X_EPS` of `bOld`) and emits exactly
-one new one — but the kit's gesture / layer-state lifecycle is more
-complex than that helper assumes. Likely suspects:
+9. **DOM sanity** — PASS. Path count is stable at 61 for rectangle base across multiple render cycles. The 6 `data-shading-id` groups are exactly `lit-bevel.ambient`, `lit-bevel.light-0`, `lit-bevel.light-1`, `lit-bevel.specular`, `lit-bevel.band`, `lit-bevel.interior` — correct, light-count-independent.
 
-- The bevel or spline `createFunctionLayer` is re-pushing its state
-  through `onLayerChange` between drag ticks (kit-internal xClamp
-  re-application?), and `mergeLayerPoints` is unioning stale interior
-  anchors back in.
-- Two batched `setDesign` calls in `onLayerChange('partition', …)`
-  aren't actually batching and the migration `useEffect` runs in between.
+### Visual notes
 
-To investigate: instrument `onLayerChange` to log `(id, next.points.length,
-b, values.length)` for each call during a drag. The pattern of layer ids
-firing per tick will localize the source.
+- Hairline seams between band regions are present but minimal — the 1 px same-paint stroke overlap from the implementation nearly eliminates them.
+- Corner fans at 45° azimuth show no visible popping; transitions are smooth.
+- The shading panel shows "dome" as the group header for lit-bevel's Key/Fill light entries even after switching (see item 7 above).
+
+---
 
 ## Earlier (still relevant) architecture notes
 
@@ -140,30 +73,37 @@ Two repos:
   `<PropertyPanel>`, `<SliderRow>`, `<ColorRow>`, `<CurveField>`,
   `<LayerStack>`, `<SingletonExperimentProvider>`, undo/redo).
 - **`~/src/experiments/speech-balloons/`** — domain layer. Main files:
-  - `src/SpeechBalloon.tsx` — renderer + shading modes (dome / BRDF /
-    aqua) + heightmap + debug overlays.
+  - `src/SpeechBalloon.tsx` — renderer + shading modes (dome / BRDF / aqua /
+    lit-bevel) + debug overlays.
   - `src/Lab.tsx` — the Lab page; contains `RimContourBlock` for the
     contour editor.
   - `src/controls.ts` — control descriptors driving the property panel.
-  - `src/contourEditor.ts` — `remapAcrossPartition` helper (new).
-  - `src/ShadingLayersPanel.tsx` — debug panel (new).
-  - `src/shadingLayers.ts` — pure grouping helper (new).
+  - `src/contourEditor.ts` — `remapAcrossPartition` helper.
+  - `src/ShadingLayersPanel.tsx` — debug panel.
+  - `src/shadingLayers.ts` — pure grouping helper.
+  - `src/straightSkeleton.ts` — wavefront straight-skeleton (new).
+  - `src/bevelRegions.ts` — region decomposition for lit-bevel (new).
+  - `src/litBevelShading.ts` — analytic Phong stop computation (new).
+
+Note: `src/distanceTransform` was referenced in earlier planning docs but
+was never created; the analytic renderer does not use a distance transform.
 
 Composition model unchanged: shape-mode (single named silhouette) vs
 compose-mode (base + ordered effect stack). State, persistence, undo/redo
 all flow through labkit's experiment provider; localStorage key is
 `lk:speech-balloon-lab-v12:workspaces`.
 
-## How to verify the working-tree changes
+## Open issues
 
-```bash
-cd ~/src/experiments/speech-balloons
-npx tsc --noEmit       # only the pre-existing Lab.tsx:173 baseline error
-npx vitest run         # 71/71 should pass
-npm run dev            # then walk through the manual checks in the two plan files'
-                       # final-verification tasks
-```
+### Shading panel does not update on mode switch (pre-existing, not fixed by lit-bevel work)
 
-The two pre-existing TS errors at `src/Lab.tsx:173` (`DesignState` →
-`Record<string, unknown>` cast) are baseline — not introduced by this
-work.
+Root cause: `shadingItemsKey` (line 1507, `SpeechBalloon.tsx`) is computed
+before the `return` statement runs, so it is always `""` (empty array at that
+point). The `useEffect([shadingItemsKey, onShadingItems], …)` dep never
+changes after mount, so `onShadingItems` is called exactly once — with the
+initial mode's items (dome). Switching to lit-bevel changes the SVG
+`data-shading-id` elements correctly but the panel list stays frozen.
+
+Fix: move `shadingItemsKey` computation after the JSX rendering phase, or use
+a different mechanism (e.g., deduplicated `useEffect` keyed on the mode string,
+or a `useRef` accumulator pattern).
