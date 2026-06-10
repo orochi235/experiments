@@ -4,10 +4,9 @@ Branch: `port-to-labkit`.
 
 ## Recent work: analytic lit-bevel renderer — DONE, browser-verified
 
-**Spec:** `docs/superpowers/specs/2026-06-03-contour-editor-constrained-anchors-design.md`,
-`docs/superpowers/specs/2026-06-09-analytic-lit-bevel-design.md` (if present)
+**Spec:** `docs/superpowers/specs/2026-06-09-analytic-lit-bevel-design.md`
 **Plan:** `docs/superpowers/plans/2026-06-09-analytic-lit-bevel.md`
-**Commits:** `4c5286f` → `0d3a99e` (10 commits)
+**Commits:** `c184919` → `3fc9876` (spec/plan docs at `4c5286f`/`a92d181`)
 
 What landed: the `lit-bevel` fill mode was rebuilt from scratch. The SVG-filter
 heightmap pipeline (`feDiffuseLighting`, `feConvolveMatrix`, bevel-rings offscreen
