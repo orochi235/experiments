@@ -78,7 +78,6 @@
      Oswald light, 1.2rem, 1.2 line-height. */
   h2,
   .controls-label,
-  .param-table-wrap h2,
   .param-table tr.group-header td {
     font: 300 1.2rem/1.2 'Oswald', 'IBM Plex Mono', monospace;
     color: #fff;
@@ -295,7 +294,6 @@
     margin-top: 20px; background: #16213e; border-radius: 10px;
     padding: 16px 20px; overflow-x: auto;
   }
-  .param-table-wrap h2 { font-size: 1rem; margin-bottom: 10px; color: #fff; font-weight: 600; }
   .param-table {
     width: 100%; border-collapse: collapse; font-size: 0.78rem; white-space: nowrap;
   }
@@ -304,6 +302,12 @@
   }
   .param-table th { color: #7ec8e3; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; font-size: 0.7rem; }
   .param-table th:first-child, .param-table td:first-child { text-align: left; color: #ccc; font-weight: 500; }
+  /* Section title lives inline in the matrix's corner cell — keep the
+     subsection-heading look despite the th column-header styling. */
+  .param-table th.matrix-title {
+    font: 300 1.2rem/1.2 'Oswald', 'IBM Plex Mono', monospace;
+    color: #fff; text-transform: none; letter-spacing: normal;
+  }
   .param-table tr:hover td { background: rgba(126,200,227,0.04); }
   .param-table .group-header td {
     color: #666; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 1px;
