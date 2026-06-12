@@ -42,11 +42,15 @@ Also exposed as `npm run snapshot` in `speech-balloons/package.json`.
    user's working tree and branch are untouched.
 3. **Install.** `npm ci` in the worktree's `speech-balloons/` with
    `NODE_ENV` unset (so devDependencies, including vite, install).
-4. **Build with versioned base.**
-   `NODE_ENV=production npx vite build --base=/experiments/speech-balloons/<version>/`
-   — the CLI flag overrides the hardcoded base in `vite.config.ts`, so
-   the script works against both pre- and post-labkit refs without
-   editing the checked-out config.
+4. **Build with relative base.**
+   `NODE_ENV=production npx vite build --base=./`
+   — a relative base makes the frozen build location-independent, so it
+   works both at `/experiments/speech-balloons/<version>/` on Pages and
+   at `/<version>/` on the local dev server. (An absolute versioned base
+   was originally specified, but its asset URLs only resolve on Pages.)
+   The CLI flag overrides the base hardcoded in `vite.config.ts`, so the
+   script works against both pre- and post-labkit refs without editing
+   the checked-out config.
 5. **Prune nested snapshots.** Delete any `dist/v[0-9]*/` directories
    from the build output. Because `public/` is copied verbatim into
    `dist/`, a `v2` built from a `main` that already contains
@@ -83,7 +87,7 @@ committing it makes it immune to toolchain and dependency drift.
 ## Testing
 
 - Run `scripts/snapshot.sh v1 main`; verify `public/v1/index.html`
-  references assets under `/experiments/speech-balloons/v1/`.
+  references assets via relative `./assets/...` URLs.
 - Load `/v1/` on the dev server and verify the app boots and renders.
 - After merge/deploy, spot-check the production URL.
 
