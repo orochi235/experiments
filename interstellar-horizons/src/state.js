@@ -92,10 +92,7 @@ export function applyPreset(name) {
     if (labelEl) labelEl.textContent = fmt(v);
   }
 
-  const r = applyPresetPhysics(name, state.atmoDens, state.sunDist, state.stellarTemp);
-  state.stars = r.activeStars;
-  state.stellarColor = r.stellarColor;
-  state.groundColor = r.groundColor;
+  applyPhysics();
 
   // Populate the compact preset summary shown when the presets list is collapsed
   const sumEl = document.getElementById('presetSummary');
@@ -113,6 +110,17 @@ export function applyPreset(name) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('preset-change', { detail: { name } }));
   }
+  scheduleRender();
+}
+
+// Recompute scattering/star physics from the CURRENT slider state without
+// touching the sliders themselves. Slider drags call this; preset selection
+// (applyPreset) resets the sliders first and then comes through here too.
+export function applyPhysics() {
+  const r = applyPresetPhysics(state.preset, state.atmoDens, state.sunDist, state.stellarTemp);
+  state.stars = r.activeStars;
+  state.stellarColor = r.stellarColor;
+  state.groundColor = r.groundColor;
   scheduleRender();
 }
 

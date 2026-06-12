@@ -1,4 +1,4 @@
-import { state, setStateValue, applyPreset, scheduleRender } from '../state.js';
+import { state, setStateValue, applyPreset, applyPhysics, scheduleRender } from '../state.js';
 
 const SLIDERS = [
   { id: 'turbidity',     path: 'T',                  label: 'vTurb',   fmt: v => v.toFixed(1) },
@@ -61,9 +61,11 @@ export function wireControls() {
         state.doy = doy;
       }
 
-      // Planet sliders re-apply preset physics
+      // Planet sliders recompute physics from the new value — without
+      // re-applying the preset, which would snap the slider back to the
+      // preset's default.
       if (s.id === 'atmoDensity' || s.id === 'sunDistance' || s.id === 'stellarTemp') {
-        applyPreset(state.preset);
+        applyPhysics();
       }
 
       scheduleRender();
