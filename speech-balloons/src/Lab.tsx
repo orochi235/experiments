@@ -801,12 +801,11 @@ function CurveBlock({ label, values, min, max, step, defaults, marks, onChange }
 interface PartitionState { x: number; y: number }
 
 // Passive read-only layer that paints a yellow band across the plot to
-// show the bevel-ridge zone. The band's x range comes from the body
-// shape: bevelWidth/Rmax → bevelWidth/Rmin, where Rmin/Rmax are the
-// per-direction medial-axis depths of the bare body. On a circle Rmin
-// === Rmax so the band collapses to a thin line at the partition x;
-// on a rectangle the band visibly spans the real bevel's normalized-x
-// range.
+// show the bevel face. The band spans [0, bevelWidth/Rmin] — from the
+// rim inward to the deepest the bevel reaches on the narrowest body
+// direction. It represents the bevel FACE, not the inner-edge ridge:
+// starting it at bevelWidth/Rmax (the ridge zone) was reverted once
+// already (711bbaf) — don't reintroduce it.
 interface MarksLayerState { band: { xMin: number; xMax: number } | null }
 function createMarksLayer(): CurveLayer<MarksLayerState> {
   return {
@@ -1291,16 +1290,15 @@ function renderRow(
     // to normalize bevelWidth → partition x.
     if (c.key === 'contour' && sampler && typeof params.bevelWidth === 'number') {
       const dMax = Math.max(1, bareBaseMaxBevel(sampler));
-      // Yellow bevel-ridge band: [bw / Rmax, bw / Rmin]. On a circle
-      // Rmin === Rmax so the band collapses to a thin line at the
-      // partition x; on a rectangle the band visibly spans the real
-      // bevel zone's normalized-x range across the perimeter.
+      // Yellow bevel-face band: [0, bw / Rmin]. Contour x: 0 = rim,
+      // 1 = center. The bevel face occupies [0, bw/R] and R varies per
+      // direction; use Rmin (the narrowest direction) so the band covers
+      // every direction's bevel face. (Restores 711bbaf, which the
+      // layered-editor rewrite in bbc78e4 accidentally reverted.)
       let bevelBand: { xMin: number; xMax: number } | null = null;
-      const { Rmin, Rmax } = bareBaseRadiusRange(sampler);
-      if (Rmin > 1e-3 && Rmax > 1e-3) {
-        const xMax = Math.min(1, params.bevelWidth / Rmin);
-        const xMin = Math.min(1, params.bevelWidth / Rmax);
-        bevelBand = { xMin, xMax };
+      const { Rmin } = bareBaseRadiusRange(sampler);
+      if (Rmin > 1e-3) {
+        bevelBand = { xMin: 0, xMax: Math.min(1, params.bevelWidth / Rmin) };
       }
       return (
         <RimContourBlock
