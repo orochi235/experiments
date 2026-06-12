@@ -15,8 +15,38 @@
     "isolatedModules": true,
     "useDefineForClassFields": true,
     "noEmit": true,
+    // Weasel sources reference `process` (debug flags); resolve node's
+    // ambient types from labkit's tree so this project doesn't need its
+    // own @types/node copy.
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types", "../../labkit/node_modules/@types"],
+    // Weasel-ui ships source-only, so tsc follows imports into the weasel
+    // monorepo and needs every alias those sources use. This mirrors the
+    // `paths` block in ../../weasel/tsconfig.json (same entries, prefixed) —
+    // if weasel adds a top-level alias, mirror it here.
+    //
+    // react/react-dom are pinned to labkit's @types copies so all three
+    // repos' sources see ONE React type identity (the tsc analog of the
+    // vite config's `dedupe: ['react', 'react-dom']`).
     "paths": {
-      "@orochi235/weasel-ui": ["../../weasel/packages/weasel-ui/src/index.ts"]
+      "react": ["../../labkit/node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": ["../../labkit/node_modules/@types/react/jsx-runtime.d.ts"],
+      "react-dom": ["../../labkit/node_modules/@types/react-dom/index.d.ts"],
+      "react-dom/client": ["../../labkit/node_modules/@types/react-dom/client.d.ts"],
+      "@orochi235/weasel": ["../../weasel/src/index.ts"],
+      "@orochi235/weasel/routing": ["../../weasel/src/tools/routing/index.ts"],
+      "@orochi235/weasel/*": ["../../weasel/src/*"],
+      "@orochi235/weasel-ui": ["../../weasel/packages/weasel-ui/src/index.ts"],
+      "@orochi235/weasel-svg": ["../../weasel/packages/weasel-svg/src/index.ts"],
+      "@orochi235/weasel-theme": ["../../weasel/packages/weasel-theme/src/index.ts"],
+      "@orochi235/weasel-theme/tokens.css": ["../../weasel/packages/weasel-theme/src/tokens.css"],
+      "core/*": ["../../weasel/src/core/*"],
+      "features/*": ["../../weasel/src/features/*"],
+      "affordances/*": ["../../weasel/src/affordances/*"],
+      "interactions/*": ["../../weasel/src/interactions/*"],
+      "tools/*": ["../../weasel/src/tools/*"],
+      "canvas/*": ["../../weasel/src/canvas/*"],
+      "debug/*": ["../../weasel/src/debug/*"]
     }
   },
   "include": ["src"]

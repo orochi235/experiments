@@ -183,8 +183,8 @@ export function Lab() {
     designRef.current = nextDesign;
     // setConfig is per-key; iterate top-level keys and only set those that changed.
     for (const k of Object.keys(nextDesign) as (keyof DesignState)[]) {
-      if ((current as Record<string, unknown>)[k] !== (nextDesign as Record<string, unknown>)[k]) {
-        setConfig(k, (nextDesign as DesignState)[k] as never);
+      if (current[k] !== nextDesign[k]) {
+        setConfig(k, nextDesign[k] as never);
       }
     }
   }, [setConfig]);
