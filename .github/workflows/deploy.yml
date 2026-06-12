@@ -23,6 +23,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # speech-balloons depends on @labkit/react and @orochi235/weasel as
+      # file:../../<kit> siblings (and labkit itself depends on weasel as
+      # file:../weasel). Recreate the ~/src sibling layout by cloning both
+      # public kits next to the workspace; they track their main branches.
+      - name: Clone sibling kits (weasel + labkit)
+        run: |
+          rm -rf ../weasel ../labkit
+          git clone --depth 1 https://github.com/orochi235/weasel.git ../weasel
+          git clone --depth 1 https://github.com/orochi235/labkit.git ../labkit
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -33,6 +43,21 @@ jobs:
 
       # Install: keep NODE_ENV unset here so devDependencies (vite, etc.) are
       # actually installed. npm ci with NODE_ENV=production silently skips them.
+      # Order matters: weasel (leaf) → labkit (file:../weasel) → experiments.
+      - name: Install weasel deps
+        working-directory: ../weasel
+        run: npm ci
+
+      - name: Install labkit deps
+        working-directory: ../labkit
+        run: npm ci
+
+      # speech-balloons consumes labkit's dist/ (vite serves it as-is rather
+      # than pre-bundling), so the kit must be built before the app.
+      - name: Build labkit
+        working-directory: ../labkit
+        run: npm run build
+
       - name: Install interstellar-horizons deps
         working-directory: interstellar-horizons
         run: npm ci
