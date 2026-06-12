@@ -33,9 +33,13 @@ jobs:
           git clone --depth 1 https://github.com/orochi235/weasel.git ../weasel
           git clone --depth 1 https://github.com/orochi235/labkit.git ../labkit
 
+      # Node ≥23 strips types natively — speech-balloons' vite config
+      # dynamically imports weasel's vite-aliases.ts (raw TS) at config-load
+      # time, which node 20 cannot load. 24 matches the local toolchain
+      # closely enough (local is 26) while being the runner's LTS.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: |
             interstellar-horizons/package-lock.json
