@@ -29,7 +29,7 @@ import {
   type FunctionLayerState,
 } from '@orochi235/weasel-ui';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
-import { remapAcrossPartition, SEAM_X_EPS } from './contourEditor';
+import { interpFlat, migrateSeam, remapAcrossPartition, SEAM_X_EPS } from './contourEditor';
 import {
   BASE_CONTROLS,
   EFFECT_CONTROLS,
@@ -883,24 +883,6 @@ function createPartitionLayer(): CurveLayer<PartitionState> {
   };
 }
 
-// Linear-interp the contour's y at a given x. Mirrors the parser used by
-// SpeechBalloon's contour memo so the synthetic seam y matches what the
-// shading actually sees.
-function interpFlat(flat: readonly number[], x: number): number {
-  const cpts: { x: number; y: number }[] = [];
-  for (let i = 0; i + 1 < flat.length; i += 2) cpts.push({ x: flat[i]!, y: flat[i + 1]! });
-  cpts.sort((a, b) => a.x - b.x);
-  if (cpts.length === 0) return 0;
-  if (x <= cpts[0]!.x) return cpts[0]!.y;
-  if (x >= cpts[cpts.length - 1]!.x) return cpts[cpts.length - 1]!.y;
-  let i = 0;
-  while (i < cpts.length - 1 && cpts[i + 1]!.x < x) i++;
-  const a = cpts[i]!;
-  const b = cpts[i + 1]!;
-  const u = (x - a.x) / (b.x - a.x);
-  return a.y + (b.y - a.y) * u;
-}
-
 function splitFlatAtPartition(flat: readonly number[], b: number): {
   bevel: ControlPoint[];
   spline: ControlPoint[];
@@ -1015,31 +997,18 @@ function RimContourBlock({
   // Partition x in model space [0, 1] derived from the px-valued bevelWidth.
   const b = Math.max(0.05, Math.min(0.95, dMax > 0 ? bevelWidth / dMax : 0.25));
 
-  // One-time per (b, values) migration: ensure a real anchor exists at
-  // x≈b so splitFlatAtPartition / mergeLayerPoints can rely on it.
+  // Keep the seam-anchor invariant (a real anchor at x≈b) when b changes
+  // out from under the contour — the bevel-width slider writes only
+  // `bevelWidth`, so the contour must follow here. A seam at the previous
+  // b MOVES via the same proportional remap as a partition drag; plain
+  // insertion only happens on first mount of a seam-less stored contour.
+  // (Insert-without-remove here was the stray-anchor-per-slider-tick bug.)
+  const prevBRef = useRef(b);
   useEffect(() => {
-    const hasSeam = (() => {
-      for (let i = 0; i + 1 < values.length; i += 2) {
-        if (Math.abs(values[i]! - b) < SEAM_X_EPS) return true;
-      }
-      return false;
-    })();
-    if (hasSeam) return;
-    const seamY = interpFlat(values, b);
-    const next: number[] = [];
-    let inserted = false;
-    const cpts: { x: number; y: number }[] = [];
-    for (let i = 0; i + 1 < values.length; i += 2) cpts.push({ x: values[i]!, y: values[i + 1]! });
-    cpts.sort((a, c) => a.x - c.x);
-    for (const p of cpts) {
-      if (!inserted && p.x > b) {
-        next.push(b, seamY);
-        inserted = true;
-      }
-      next.push(p.x, p.y);
-    }
-    if (!inserted) next.push(b, seamY);
-    onContourChange(next);
+    const bPrev = prevBRef.current;
+    prevBRef.current = b;
+    const next = migrateSeam(values, bPrev, b);
+    if (next) onContourChange(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [b]);
 
