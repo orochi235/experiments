@@ -24,6 +24,7 @@ import {
   polygonsToSvgPath,
   circleToPolygon,
   offsetClosedPolygon,
+  type Point,
   type Polygon,
 } from './clipping';
 import { buildRegions, type InteriorTreatment, type Region } from './bevelRegions';
@@ -1036,8 +1037,9 @@ export function SpeechBalloon({
       color: i === 0 ? fillRender.lightColor : '#ffffff',
     }));
     const entries: Array<{ gradientId: string; region: Region; stops: { offset: number; color: string }[] }> = [];
+    const allRidges: Array<[Point, Point]> = [];
     bodyAndBubblesPolys.forEach((poly, pi) => {
-      const { regions, tMax } = buildRegions({
+      const { regions, tMax, ridges } = buildRegions({
         rim: poly,
         bevelWidthPx: fillRender.bevelWidth,
         interior: fillRender.interiorTreatment,
@@ -1060,8 +1062,9 @@ export function SpeechBalloon({
           stops: computeStops(region, lights, contour, material, exclude),
         });
       });
+      allRidges.push(...ridges);
     });
-    return { entries, lightCount: domeLights.length };
+    return { entries, lightCount: domeLights.length, ridges: allRidges };
   }, [fillRender, bodyAndBubblesPolys, domeLights, contour, runtime.hiddenShadingIds, idPrefix]);
 
   const domeLayers = useMemo(() => {
@@ -1349,9 +1352,9 @@ export function SpeechBalloon({
   // Debug overlay geometry. Body silhouette in red, bevel band inner
   // boundary (geometrically-correct clipper miter inset) in yellow,
   // plus light azimuth rays from the centroid.
-  const domeDebug = useMemo(() => {
+  const debugOverlay = useMemo(() => {
     if (!runtime.domeDebug) return null;
-    if (fillRender.mode !== 'dome' && fillRender.mode !== 'brdf') return null;
+    if (fillRender.mode !== 'dome' && fillRender.mode !== 'brdf' && fillRender.mode !== 'lit-bevel') return null;
     const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return null;
     const cx = bb.x + bb.w / 2;
@@ -1472,9 +1475,13 @@ export function SpeechBalloon({
       medialPath,
       innerMedialPath,
       lights,
+      // lit-bevel only: the straight-skeleton ridges the renderer actually
+      // shades against (the medial paths above are clipper approximations).
+      ridges: litBevel?.ridges ?? null,
     };
   }, [
     runtime.domeDebug,
+    litBevel,
     fillRender.mode,
     fillRender.bevelWidth,
     fillRender.specStrength,
@@ -1880,24 +1887,32 @@ export function SpeechBalloon({
             />
           </>
         )}
-        {domeDebug && (
+        {debugOverlay && (
           <g style={{ pointerEvents: 'none' }}>
             <polygon
-              points={domeDebug.bodyRingPoints}
+              points={debugOverlay.bodyRingPoints}
               fill="none" stroke="#ff3030" strokeWidth={1.5} opacity={0.9}
             />
             <path
-              d={domeDebug.bevelPath}
+              d={debugOverlay.bevelPath}
               fill="none"
               stroke="#ffcc00"
               strokeWidth={1}
               strokeOpacity={0.9}
             />
-            {domeDebug.lights.map((l, i) => (
+            {debugOverlay.ridges?.map(([a, b], i) => (
+              <line
+                key={i}
+                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke="goldenrod" strokeWidth={1} strokeOpacity={0.8}
+                strokeDasharray="3 3"
+              />
+            ))}
+            {debugOverlay.lights.map((l, i) => (
               <Fragment key={i}>
                 {/* Centroid → lit-rim: the bright end of the diffuse axis. */}
                 <line
-                  x1={domeDebug.cx} y1={domeDebug.cy}
+                  x1={debugOverlay.cx} y1={debugOverlay.cy}
                   x2={l.x2} y2={l.y2}
                   stroke="#32cd32" strokeWidth={1.5} opacity={0.4 + 0.6 * l.intensity}
                 />
@@ -1911,8 +1926,8 @@ export function SpeechBalloon({
                     shrinks with elevation as a secondary "further away" cue. */}
                 {(() => {
                   const r = 3 + 5 * Math.cos((l.elevationDeg * Math.PI) / 180);
-                  const dx = domeDebug.cx - l.sourceX;
-                  const dy = domeDebug.cy - l.sourceY;
+                  const dx = debugOverlay.cx - l.sourceX;
+                  const dy = debugOverlay.cy - l.sourceY;
                   const len = Math.hypot(dx, dy);
                   // Ground footprint + pole rendered first so the disc sits on top.
                   const hasLift = l.liftPx > 1;
@@ -1944,8 +1959,8 @@ export function SpeechBalloon({
                   const ny = dy / len;
                   const ax1 = l.sourceX + nx * r;
                   const ay1 = l.sourceY + ny * r;
-                  const ax2 = domeDebug.cx - nx * 8;
-                  const ay2 = domeDebug.cy - ny * 8;
+                  const ax2 = debugOverlay.cx - nx * 8;
+                  const ay2 = debugOverlay.cy - ny * 8;
                   const headLen = 7;
                   const headHalfW = 3;
                   const hx1 = ax2 - nx * headLen + ny * headHalfW;
@@ -1968,11 +1983,11 @@ export function SpeechBalloon({
                     </g>
                   );
                 })()}
-                {domeDebug.isBrdf && (
+                {debugOverlay.isBrdf && (
                   <>
                     {/* Centroid → far-rim: dim half of the BRDF diffuse axis. */}
                     <line
-                      x1={domeDebug.cx} y1={domeDebug.cy}
+                      x1={debugOverlay.cx} y1={debugOverlay.cy}
                       x2={l.farX} y2={l.farY}
                       stroke="#32cd32" strokeWidth={1} strokeDasharray="4 3"
                       opacity={0.25 + 0.35 * l.intensity}
@@ -1993,21 +2008,21 @@ export function SpeechBalloon({
               </Fragment>
             ))}
             <path
-              d={domeDebug.medialPath}
+              d={debugOverlay.medialPath}
               fill="#ff3030"
               stroke="none"
               opacity={0.9}
             />
-            {domeDebug.innerMedialPath && (
+            {debugOverlay.innerMedialPath && (
               <path
-                d={domeDebug.innerMedialPath}
+                d={debugOverlay.innerMedialPath}
                 fill="#ffcc00"
                 stroke="#ffcc00"
                 strokeWidth={0.5}
                 opacity={0.95}
               />
             )}
-            <circle cx={domeDebug.cx} cy={domeDebug.cy} r={4} fill="#ff3030" />
+            <circle cx={debugOverlay.cx} cy={debugOverlay.cy} r={4} fill="#ff3030" />
           </g>
         )}
       </g>

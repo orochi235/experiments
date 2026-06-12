@@ -579,7 +579,7 @@ export function Lab() {
               checked={!!runtime.domeDebug}
               onChange={(e) => setRuntime((r) => ({ ...r, domeDebug: e.target.checked }))}
             />
-            <span>Dome debug overlay</span>
+            <span>Debug overlay</span>
           </label>
           <label className="sb-checkbox">
             <input
