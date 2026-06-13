@@ -138,7 +138,9 @@
     <div class="proj-selector global" id="csToggle">
       <button class="proj-btn global active" data-cs="srgb">sRGB</button>
       <button class="proj-btn global" data-cs="p3">Display P3</button>
-      <button class="proj-btn global" data-cs="rec2020">Rec.2020</button>
+      <!-- Hidden until the probe confirms the browser can tag a rec2020
+           drawing buffer (no browser ships this as of 2026). -->
+      <button class="proj-btn global" data-cs="rec2020" hidden>Rec.2020</button>
     </div>
   </div>
   <button class="proj-btn global reset-all" id="resetView" type="button" title="Drop all URL params and reset everything to defaults">↺ Reset all</button>

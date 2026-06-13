@@ -793,18 +793,20 @@ document.querySelectorAll('#wbToggle .proj-btn').forEach(btn => {
 // Output color-space toggle (sRGB / Display P3 / Rec.2020). The working
 // space stays linear sRGB throughout; switching converts at the toneMap
 // gamut matrix + OETF and retags every drawing buffer so the browser
-// composites the wider-gamut values 1:1 instead of remapping them. Options
-// the browser can't tag a buffer with are disabled at startup — as of 2026
-// no browser ships 'rec2020', so that button is future-proofing that
-// self-enables when support lands.
+// composites the wider-gamut values 1:1 instead of remapping them. A button
+// is shown only once the probe confirms the browser can actually tag a
+// buffer with its color space — speculative options (Rec.2020 starts
+// `hidden` in the markup, since as of 2026 no browser ships it) reveal
+// themselves automatically when support lands, rather than sitting visibly
+// disabled.
 const CS_TO_BUFFER = { srgb: 'srgb', p3: 'display-p3', rec2020: 'rec2020' };
 document.querySelectorAll('#csToggle .proj-btn').forEach(btn => {
   const buffer = CS_TO_BUFFER[btn.dataset.cs];
   if (!colorSpaceSupported(buffer)) {
-    btn.disabled = true;
-    btn.title = `Browser can't output ${buffer} (drawingBufferColorSpace)`;
+    btn.hidden = true;
     return;
   }
+  btn.hidden = false;
   btn.addEventListener('click', () => {
     document.querySelectorAll('#csToggle .proj-btn').forEach(b =>
       b.classList.toggle('active', b === btn));
@@ -905,8 +907,10 @@ const URL_PARAMS = [
     name: 'cs',
     parse: s => ['srgb', 'p3', 'rec2020'].includes(s) ? s : null,
     apply: v => {
+      // Hidden buttons are unsupported in this browser — no click handler
+      // is wired, so skip them and fall back to the sRGB default.
       const btn = document.querySelector(`#csToggle .proj-btn[data-cs="${v}"]`);
-      if (btn && !btn.disabled) btn.click();
+      if (btn && !btn.hidden) btn.click();
     },
     read:  () => state.colorSpace,
   },

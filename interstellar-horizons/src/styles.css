@@ -444,7 +444,6 @@
     font-size: 0.75rem; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
   }
   .proj-btn.active { background: rgba(42, 74, 106, 0.85); border-color: #7ec8e3; color: #fff; }
-  .proj-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .proj-btn:hover:not(.active) { background: rgba(42, 58, 90, 0.85); color: #fff; }
   canvas.dome { display: block; background: #0a0a14; border-radius: 6px; }
   canvas.dome[data-projection="fisheye"] {
