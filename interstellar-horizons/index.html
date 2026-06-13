@@ -26,6 +26,14 @@
   <p class="subtitle">Atmospheric sky color models, compared across the day — Preetham, Nishita, Hosek-Wilkie, and friends</p>
 </header>
 
+<div class="floating-scale control">
+  <label>Planet Scale</label>
+  <div class="proj-selector global" id="scaleToggle">
+    <button class="proj-btn global active" data-scale="visual">Friendly</button>
+    <button class="proj-btn global" data-scale="actual">Proportional</button>
+  </div>
+</div>
+
 <div class="controls atmosphere">
   <div class="controls-label">Atmosphere &amp; Sky</div>
   <div class="control">
@@ -115,13 +123,6 @@
     <div class="proj-selector global" id="starsToggle">
       <button class="proj-btn global active" data-stars="on">On</button>
       <button class="proj-btn global" data-stars="off">Off</button>
-    </div>
-  </div>
-  <div class="control">
-    <label>Planet Scale</label>
-    <div class="proj-selector global" id="scaleToggle">
-      <button class="proj-btn global active" data-scale="visual">Friendly</button>
-      <button class="proj-btn global" data-scale="actual">Proportional</button>
     </div>
   </div>
   <div class="control">
@@ -785,6 +786,7 @@
 </main>
 
 <div class="planet-area">
+  <canvas class="planet-bg-stars" aria-hidden="true"></canvas>
   <nav class="planet-toolbar" id="planetToolbar" role="toolbar" aria-label="Planet presets"></nav>
 </div>
 

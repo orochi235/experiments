@@ -124,6 +124,19 @@ function drawStarfield(ctx, state, w, h, projection) {
   ctx.restore();
 }
 
+// Static deep-space starfield — the planet toolbar's backdrop. Same cached
+// field as the previews, but at constant brightness: there's no local sun
+// in the toolbar's "space" to wash the stars out.
+export function drawBackgroundStarfield(ctx, w, h) {
+  ctx.clearRect(0, 0, w, h);
+  for (const s of getStars()) {
+    ctx.fillStyle = `rgba(255,255,240,${(s.brightness * 0.9).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(s.x * w, s.y * h, s.r, 0, TAU);
+    ctx.fill();
+  }
+}
+
 export function drawDomeOverlay(ctx, state, modelName) {
   const w = ctx.canvas.width, h = ctx.canvas.height;
   ctx.clearRect(0, 0, w, h);

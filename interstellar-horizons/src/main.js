@@ -5,7 +5,7 @@ import { buildPrograms } from './render/programs.js';
 import { setSharedUniforms } from './render/uniforms.js';
 import { wireControls } from './ui/controls.js';
 import { wireProjectionToggles } from './ui/projectionToggle.js';
-import { drawStripOverlay, drawDomeOverlay } from './render/overlay.js';
+import { drawStripOverlay, drawDomeOverlay, drawBackgroundStarfield } from './render/overlay.js';
 import './styles.css';
 
 const MODELS = ['rayleigh', 'preetham', 'nishita', 'hosek', 'ozone', 'cie'];
@@ -720,12 +720,31 @@ document.querySelectorAll('#layoutToggle .proj-btn').forEach(btn => {
   });
 });
 
+// Night-stars backdrop behind the planet selector, gated by the same
+// toggle as the preview starfields.
+const planetBgStars = document.querySelector('.planet-area .planet-bg-stars');
+function redrawPlanetBgStars() {
+  if (!planetBgStars) return;
+  const r = planetBgStars.getBoundingClientRect();
+  planetBgStars.width = Math.max(1, Math.round(r.width));
+  planetBgStars.height = Math.max(1, Math.round(r.height));
+  const ctx = planetBgStars.getContext('2d');
+  if (state.showStars) {
+    drawBackgroundStarfield(ctx, planetBgStars.width, planetBgStars.height);
+  } else {
+    ctx.clearRect(0, 0, planetBgStars.width, planetBgStars.height);
+  }
+}
+redrawPlanetBgStars();
+window.addEventListener('resize', redrawPlanetBgStars);
+
 // Stars toggle (On / Off)
 document.querySelectorAll('#starsToggle .proj-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('#starsToggle .proj-btn').forEach(b =>
       b.classList.toggle('active', b === btn));
     state.showStars = btn.dataset.stars === 'on';
+    redrawPlanetBgStars();
     scheduleRender();
   });
 });
