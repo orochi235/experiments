@@ -20,9 +20,16 @@ void main() {
     if (i >= uNStars) break;
     float sElev = uStarElev[i];
     if (i == 0) primaryElev = sElev;
+    gStarIndex = i;
     vec3 c = modelColor(sElev, uT, viewEl, viewAz - uStarAzOff[i],
                        uAlt, uAlbedo, uOzone);
+#ifdef SPECTRAL_TINT
+    // Spectral models already carry the star's Planck spectrum + white
+    // balance — multiplying by uStarColor would double-tint.
+    rgb += c * uStarIntensity[i];
+#else
     rgb += c * uStarColor[i] * uStarIntensity[i];
+#endif
   }
   rgb = applyScatterTweak(rgb);
   rgb = applyStyle(rgb, primaryElev);

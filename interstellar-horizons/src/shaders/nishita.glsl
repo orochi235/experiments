@@ -1,5 +1,8 @@
 // nishita.glsl — Nishita sky model
 // Depends on: common.glsl
+// Spectral: scatters per wavelength bin lit by the star's Planck spectrum;
+// the main() star loop must not re-tint with uStarColor.
+#define SPECTRAL_TINT
 
 
 // Returns vec2(tFar, tFar) on hit (ray exits sphere at tFar >= 0).
@@ -48,7 +51,8 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
 
   float ds = tMax / float(numSamples);
 
-  vec3  totalR      = vec3(0.0);
+  float totalSpec[NSPEC];
+  for (int b = 0; b < NSPEC; b++) totalSpec[b] = 0.0;
   float opticalDepthR = 0.0;
   float opticalDepthM = 0.0;
 
@@ -93,17 +97,20 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
                    ((1.0 - g * g) * (1.0 + cosViewSun * cosViewSun)) /
                    ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * cosViewSun, 1.5));
 
-    // Per-channel accumulation (Rayleigh is wavelength-dependent; Mie is not)
-    vec3 tau  = uBetaR * (opticalDepthR + odR_sun) +
-                mieCoeff * 1.1 * (opticalDepthM + odM_sun);
-    vec3 attn = exp(-tau);
-
-    totalR += attn * (uBetaR * hr * phaseR + mieCoeff * hm * phaseM);
+    // Per-bin accumulation (Rayleigh is wavelength-dependent; Mie is not)
+    float odR    = opticalDepthR + odR_sun;
+    float tauMie = mieCoeff * 1.1 * (opticalDepthM + odM_sun);
+    float mieS   = mieCoeff * hm * phaseM;
+    for (int b = 0; b < NSPEC; b++) {
+      float beta = uBetaRSpec[b];
+      totalSpec[b] += exp(-(beta * odR + tauMie)) * (beta * hr * phaseR + mieS);
+    }
   }
 
   // Twilight boost: indirect illumination during twilight
   float twilightBoost = sunElev < 0.0 ? exp(sunElev * 4.0) * 0.3 : 0.0;
 
-  vec3 rgb = (totalR + twilightBoost * 0.001) * uSunIntensity;
+  vec3 rgb = (spectralToRGB(totalSpec, uStarTemp[gStarIndex]) +
+              twilightBoost * 0.001) * uSunIntensity;
   return toneMap(rgb, 1.0);
 }

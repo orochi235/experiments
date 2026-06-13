@@ -1,5 +1,8 @@
 // hosek.glsl — Hosek sky model
 // Depends on: common.glsl
+// Spectral: scatters per wavelength bin lit by the star's Planck spectrum;
+// the main() star loop must not re-tint with uStarColor.
+#define SPECTRAL_TINT
 
 // Ray-sphere intersection. Sphere centered at origin, radius r.
 // Returns the positive (far) t, or -1 if no intersection.
@@ -43,7 +46,8 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
   if (tMax < 0.0) return vec3(0.0);
 
   float ds = tMax / float(NUM_SAMPLES);
-  vec3  totalR       = vec3(0.0);
+  float totalSpec[NSPEC];
+  for (int b = 0; b < NSPEC; b++) totalSpec[b] = 0.0;
   float opticalDepthR = 0.0;
   float opticalDepthM = 0.0;
 
@@ -84,17 +88,16 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
                    pow(1.0 + g * g - 2.0 * g * cosViewSun, 1.5);
     float phaseM = cs_num / cs_den;
 
-    // Per-channel accumulation (BETA_R is vec3 for R,G,B)
-    vec3 tau = uBetaR * (opticalDepthR + odR_sun) +
-               mieCoeff * 1.1 * (opticalDepthM + odM_sun);
-    vec3 attn = exp(-tau);
-
-    vec3 scatter = uBetaR * hr * phaseR + mieCoeff * hm * phaseM;
-    totalR += attn * scatter;
-
-    // Multiple scattering approximation (order-2, isotropic)
-    vec3 ms = scatter * 0.075 * (1.0 + albedo * 0.5);
-    totalR += attn * ms;
+    // Per-bin accumulation, plus order-2 isotropic multiple scattering
+    float odR    = opticalDepthR + odR_sun;
+    float tauMie = mieCoeff * 1.1 * (opticalDepthM + odM_sun);
+    float mieS   = mieCoeff * hm * phaseM;
+    float msMul  = 1.0 + 0.075 * (1.0 + albedo * 0.5);
+    for (int b = 0; b < NSPEC; b++) {
+      float beta    = uBetaRSpec[b];
+      float scatter = beta * hr * phaseR + mieS;
+      totalSpec[b] += exp(-(beta * odR + tauMie)) * scatter * msMul;
+    }
   }
 
   // Ground albedo contribution: sunlight hitting ground, reflecting upward
@@ -112,14 +115,19 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
           odM_g += exp(-max(0.0, h) / uHM) * dsG;
         }
       }
-      vec3 tauG       = uBetaR * odR_g + mieCoeff * 1.1 * odM_g;
-      vec3 groundIrrad = exp(-tauG) * sin(sunElev);
-      totalR += albedo * groundIrrad * 0.015 * exp(-uBetaR * opticalDepthR);
+      float tauMieG = mieCoeff * 1.1 * odM_g;
+      float irradMul = sin(sunElev) * albedo * 0.015;
+      for (int b = 0; b < NSPEC; b++) {
+        float beta = uBetaRSpec[b];
+        totalSpec[b] += exp(-(beta * odR_g + tauMieG)) * irradMul *
+                        exp(-beta * opticalDepthR);
+      }
     }
   }
 
   // Twilight contribution
   float twilightBoost = sunElev < 0.0 ? exp(sunElev * 4.0) * 0.3 : 0.0;
-  vec3  rgb = (totalR + twilightBoost * 0.001) * uSunIntensity;
+  vec3 rgb = (spectralToRGB(totalSpec, uStarTemp[gStarIndex]) +
+              twilightBoost * 0.001) * uSunIntensity;
   return toneMap(rgb, 1.0);
 }

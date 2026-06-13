@@ -6,8 +6,15 @@ void main() {
     if (i >= uNStars) break;
     float sElev = sunElevationAt(hour + uStarHourOffset[i]);
     if (i == 0) primaryElev = sElev;
+    gStarIndex = i;
     vec3 c = modelColor(sElev, uT, uViewElDeg, 0.0, uAlt, uAlbedo, uOzone);
+#ifdef SPECTRAL_TINT
+    // Spectral models already carry the star's Planck spectrum + white
+    // balance — multiplying by uStarColor would double-tint.
+    rgb += c * uStarIntensity[i];
+#else
     rgb += c * uStarColor[i] * uStarIntensity[i];
+#endif
   }
   rgb = applyScatterTweak(rgb);
   rgb = applyStyle(rgb, primaryElev);

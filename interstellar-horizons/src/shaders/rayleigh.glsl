@@ -1,5 +1,8 @@
 // rayleigh.glsl — Rayleigh-only sky model (Nishita with Mie=0)
 // Depends on: common.glsl
+// Spectral: scatters per wavelength bin lit by the star's Planck spectrum;
+// the main() star loop must not re-tint with uStarColor.
+#define SPECTRAL_TINT
 
 
 // Returns vec2(tFar, tFar) on hit (ray exits sphere at tFar >= 0).
@@ -48,9 +51,9 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
 
   float ds = tMax / float(numSamples);
 
-  vec3  totalR      = vec3(0.0);
+  float totalSpec[NSPEC];
+  for (int b = 0; b < NSPEC; b++) totalSpec[b] = 0.0;
   float opticalDepthR = 0.0;
-  float opticalDepthM = 0.0;
 
   for (int i = 0; i < numSamples; i++) {
     float t  = (float(i) + 0.5) * ds;
@@ -60,9 +63,7 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
     if (height < 0.0) break; // hit ground
 
     float hr = exp(-height / uHR) * ds;
-    float hm = exp(-height / uHM) * ds;
     opticalDepthR += hr;
-    opticalDepthM += hm;
 
     // Sun ray from this sample point
     vec2 tSunHit = raySphereIntersect(p, sunDir, uAtmoR);
@@ -71,7 +72,6 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
 
     float dsSun     = tSun / float(numSamplesLight);
     float odR_sun   = 0.0;
-    float odM_sun   = 0.0;
     bool  hitGround = false;
 
     for (int j = 0; j < numSamplesLight; j++) {
@@ -80,27 +80,24 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
       float sh = length(s) - uEarthR;
       if (sh < 0.0) { hitGround = true; break; }
       odR_sun += exp(-sh / uHR) * dsSun;
-      odM_sun += exp(-sh / uHM) * dsSun;
     }
     if (hitGround) continue;
 
     // Rayleigh phase: 3/(16π)(1+cos²γ)
     float phaseR = 3.0 / (16.0 * PI) * (1.0 + cosViewSun * cosViewSun);
 
-    // Mie phase: zeroed for Rayleigh-only model
-    float phaseM = 0.0;
-
-    // Per-channel accumulation (Rayleigh is wavelength-dependent; Mie is zeroed)
-    vec3 tau  = uBetaR * (opticalDepthR + odR_sun) +
-                0.0 * 1.1 * (opticalDepthM + odM_sun);
-    vec3 attn = exp(-tau);
-
-    totalR += attn * (uBetaR * hr * phaseR + 0.0 * hm * phaseM);
+    // Per-bin accumulation (Rayleigh only; Mie is zeroed in this model)
+    float odR = opticalDepthR + odR_sun;
+    for (int b = 0; b < NSPEC; b++) {
+      float beta = uBetaRSpec[b];
+      totalSpec[b] += exp(-beta * odR) * beta * hr * phaseR;
+    }
   }
 
   // Twilight boost: indirect illumination during twilight
   float twilightBoost = sunElev < 0.0 ? exp(sunElev * 4.0) * 0.3 : 0.0;
 
-  vec3 rgb = (totalR + twilightBoost * 0.001) * uSunIntensity;
+  vec3 rgb = (spectralToRGB(totalSpec, uStarTemp[gStarIndex]) +
+              twilightBoost * 0.001) * uSunIntensity;
   return toneMap(rgb, 1.0);
 }

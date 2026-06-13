@@ -1,8 +1,11 @@
 // ozone.glsl — Nishita sky model with ozone absorption
 // Depends on: common.glsl
+// Spectral: scatters per wavelength bin lit by the star's Planck spectrum;
+// the main() star loop must not re-tint with uStarColor. Ozone absorption
+// σ(λ) arrives per-bin via uBetaO3Spec (Chappuis-band curve fit through the
+// original RGB cross-sections in uniforms.js).
+#define SPECTRAL_TINT
 
-// Ozone absorption cross-sections (m^-1 per unit density)
-const vec3  OZONE_BETA  = vec3(3.426e-7, 8.298e-7, 0.356e-7);
 const float OZONE_PEAK  = 25000.0;  // peak altitude (m)
 const float OZONE_SCALE = 15000.0;  // scale width (m)
 
@@ -48,10 +51,11 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
 
   float ds = tMax / float(numSamples);
 
-  vec3  totalR       = vec3(0.0);
+  float totalSpec[NSPEC];
+  for (int b = 0; b < NSPEC; b++) totalSpec[b] = 0.0;
   float opticalDepthR = 0.0;
   float opticalDepthM = 0.0;
-  vec3  opticalDepthO = vec3(0.0);
+  float opticalDepthO = 0.0;   // scalar ozone density depth; σ(λ) applied per bin
 
   for (int i = 0; i < numSamples; i++) {
     float t      = (float(i) + 0.5) * ds;
@@ -68,7 +72,7 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
 
     opticalDepthR += hr;
     opticalDepthM += hm;
-    opticalDepthO += OZONE_BETA * ho;
+    opticalDepthO += ho;
 
     // Sun ray from this sample point
     vec2 tSunHit = raySphereIntersect(p, sunDir, uAtmoR);
@@ -78,7 +82,7 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
     float dsSun     = tSun / float(numSamplesLight);
     float odR_sun   = 0.0;
     float odM_sun   = 0.0;
-    vec3  odO_sun   = vec3(0.0);
+    float odO_sun   = 0.0;
     bool  hitGround = false;
 
     for (int j = 0; j < numSamplesLight; j++) {
@@ -88,8 +92,7 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
       if (sh < 0.0) { hitGround = true; break; }
       odR_sun += exp(-sh / uHR) * dsSun;
       odM_sun += exp(-sh / uHM) * dsSun;
-      float oS = exp(-2.0 * abs(sh - OZONE_PEAK) / OZONE_SCALE) * ozone * dsSun;
-      odO_sun += OZONE_BETA * oS;
+      odO_sun += exp(-2.0 * abs(sh - OZONE_PEAK) / OZONE_SCALE) * ozone * dsSun;
     }
     if (hitGround) continue;
 
@@ -102,18 +105,22 @@ vec3 modelColor(float sunElev, float T, float viewElDeg, float viewAzDeg,
                    ((1.0 - g * g) * (1.0 + cosViewSun * cosViewSun)) /
                    ((2.0 + g * g) * pow(1.0 + g * g - 2.0 * g * cosViewSun, 1.5));
 
-    // Per-channel accumulation including ozone optical depth
-    vec3 tau  = uBetaR * (opticalDepthR + odR_sun) +
-                mieCoeff * 1.1 * (opticalDepthM + odM_sun) +
-                opticalDepthO + odO_sun;
-    vec3 attn = exp(-tau);
-
-    totalR += attn * (uBetaR * hr * phaseR + mieCoeff * hm * phaseM);
+    // Per-bin accumulation including ozone optical depth
+    float odR    = opticalDepthR + odR_sun;
+    float odO    = opticalDepthO + odO_sun;
+    float tauMie = mieCoeff * 1.1 * (opticalDepthM + odM_sun);
+    float mieS   = mieCoeff * hm * phaseM;
+    for (int b = 0; b < NSPEC; b++) {
+      float beta = uBetaRSpec[b];
+      float tau  = beta * odR + tauMie + uBetaO3Spec[b] * odO;
+      totalSpec[b] += exp(-tau) * (beta * hr * phaseR + mieS);
+    }
   }
 
   // Twilight boost: indirect illumination during twilight
   float twilightBoost = sunElev < 0.0 ? exp(sunElev * 4.0) * 0.3 : 0.0;
 
-  vec3 rgb = (totalR + twilightBoost * 0.001) * uSunIntensity;
+  vec3 rgb = (spectralToRGB(totalSpec, uStarTemp[gStarIndex]) +
+              twilightBoost * 0.001) * uSunIntensity;
   return toneMap(rgb, 1.0);
 }

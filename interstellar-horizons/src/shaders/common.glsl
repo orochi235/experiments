@@ -56,6 +56,86 @@ uniform vec3 uGroundColor;
 #define GROUND_COLOR uGroundColor
 
 // ============================================================
+// SPECTRAL RENDERING
+// ============================================================
+// The ray-marched models (rayleigh, nishita, ozone, hosek) scatter per
+// wavelength bin instead of per RGB channel: NSPEC bins across the visible
+// range, integrated against the CIE 1931 color-matching functions and lit
+// by each star's actual Planck spectrum. βR(λ) per bin arrives via uniform,
+// fit through the preset's three RGB anchor values so each world keeps its
+// authored scattering signature (JS side, uniforms.js).
+
+const int   NSPEC   = 16;
+const float SPEC_L0 = 380.0;   // nm
+const float SPEC_DL = 21.25;   // nm per bin → 380..720
+
+uniform float uBetaRSpec[NSPEC];   // Rayleigh β(λ), includes atmoDensity
+uniform float uBetaO3Spec[NSPEC];  // ozone absorption σ(λ)
+uniform float uStarTemp[MAX_STARS];
+uniform vec3  uWBRef;              // white-balance reference (divides RGB)
+
+// Set by the main() star loop before each modelColor call, so spectral
+// models can pick the right star's Planck spectrum.
+int gStarIndex = 0;
+
+float specLambda(int b) { return SPEC_L0 + (float(b) + 0.5) * SPEC_DL; }
+
+// Piecewise Gaussian used by the Wyman–Sloan–Shirley CMF fits.
+float wssG(float x, float mu, float s1, float s2) {
+  float t = (x - mu) / (x < mu ? s1 : s2);
+  return exp(-0.5 * t * t);
+}
+
+// CIE 1931 2° color-matching functions (Wyman, Sloan, Shirley 2013 fit).
+vec3 cmf(float l) {
+  float xb = 1.056 * wssG(l, 599.8, 37.9, 31.0)
+           + 0.362 * wssG(l, 442.0, 16.0, 26.7)
+           - 0.065 * wssG(l, 501.1, 20.4, 26.2);
+  float yb = 0.821 * wssG(l, 568.8, 46.9, 40.5)
+           + 0.286 * wssG(l, 530.9, 16.3, 31.1);
+  float zb = 1.217 * wssG(l, 437.0, 11.8, 36.0)
+           + 0.681 * wssG(l, 459.0, 26.0, 13.8);
+  return vec3(xb, yb, zb);
+}
+
+// Planck spectral radiance, arbitrary scale (normalized in spectralToRGB).
+// λ in nm; c2 = hc/k = 14388 μm·K.
+float planck(float l, float T) {
+  float lum = l * 1e-3;
+  float x = 14388.0 / (lum * max(T, 100.0));
+  float l5 = lum * lum * lum * lum * lum;
+  return 1.0 / (l5 * (exp(x) - 1.0));
+}
+
+// XYZ → linear sRGB (same primaries the rest of the pipeline works in;
+// uGamut converts onward to the output space inside toneMap).
+const mat3 XYZ_TO_SRGB = mat3(
+   3.2406, -0.9689,  0.0557,
+  -1.5372,  1.8758, -0.2040,
+  -0.4986,  0.0415,  1.0570
+);
+
+// Integrate per-bin scattered radiance, lit by a Planck spectrum at T,
+// against the CMFs. The spectrum is luminance-normalized (Σ S·ȳ = 1) so
+// overall sky brightness matches the old white-sun convention, and the
+// result is white-balance-divided like uStarColor used to be.
+vec3 spectralToRGB(float spec[NSPEC], float T) {
+  float w[NSPEC];
+  float ynorm = 0.0;
+  for (int b = 0; b < NSPEC; b++) {
+    float l = specLambda(b);
+    w[b] = planck(l, T);
+    ynorm += w[b] * cmf(l).y;
+  }
+  vec3 xyz = vec3(0.0);
+  for (int b = 0; b < NSPEC; b++) {
+    xyz += spec[b] * w[b] * cmf(specLambda(b));
+  }
+  xyz /= max(ynorm, 1e-9);
+  return (XYZ_TO_SRGB * xyz) / uWBRef;
+}
+
+// ============================================================
 // UTILITIES
 // ============================================================
 

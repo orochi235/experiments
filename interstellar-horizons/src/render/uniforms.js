@@ -50,6 +50,48 @@ function convertAuthoredColor(c, gamut) {
   });
 }
 
+// ============================================================
+// Spectral scattering curves
+// ============================================================
+// The spectral models need β(λ) per wavelength bin (NSPEC bins, must match
+// common.glsl). Presets author scattering as RGB triplets anchored at
+// (680, 550, 440) nm; a log-quadratic Lagrange fit through those three
+// points gives a smooth positive spectrum that reproduces each preset's
+// authored signature exactly at the anchors (λ⁻⁴-like for Earth, inverted
+// for Mars dust, etc.) and extrapolates sanely to the bin edges.
+const NSPEC = 16;
+const SPEC_LAMBDAS = Array.from({ length: NSPEC }, (_, b) => 380 + (b + 0.5) * 21.25);
+
+function spectralFromAnchors(b680, b550, b440) {
+  const xs = [680, 550, 440];
+  const ys = [b680, b550, b440].map(v => Math.log(Math.max(v, 1e-30)));
+  return SPEC_LAMBDAS.map(l => {
+    let s = 0;
+    for (let i = 0; i < 3; i++) {
+      let li = 1;
+      for (let j = 0; j < 3; j++) if (j !== i) li *= (l - xs[j]) / (xs[i] - xs[j]);
+      s += ys[i] * li;
+    }
+    return Math.exp(s);
+  });
+}
+
+// Ozone (Chappuis band) σ(λ): fixed curve through the cross-sections the
+// RGB version of ozone.glsl used — peaks in the orange, near-zero in blue.
+const BETA_O3_SPEC = new Float32Array(spectralFromAnchors(3.426e-7, 8.298e-7, 0.356e-7));
+
+// βR(λ) depends on the active preset (BETA_R already includes atmoDensity).
+// Cache on the anchor values so the fit only reruns when physics change.
+let betaRSpecCache = null, betaRSpecKey = '';
+function betaRSpec() {
+  const key = BETA_R.join(',');
+  if (key !== betaRSpecKey) {
+    betaRSpecCache = new Float32Array(spectralFromAnchors(BETA_R[0], BETA_R[1], BETA_R[2]));
+    betaRSpecKey = key;
+  }
+  return betaRSpecCache;
+}
+
 // Set every "shared" uniform from current state. Per-panel uniforms (uResolution,
 // uProjection, uViewElDeg, uHourStart/End, etc.) are set separately by the caller
 // after this returns.
@@ -102,6 +144,7 @@ export function setSharedUniforms(gl, prog, state) {
     d65:      [1.0, 0.9459627329192546, 0.9939689578713969],
   };
   const ref = REF[state.whiteBalance] ?? REF.physical;
+  const temp = new Float32Array(4);
   for (let i = 0; i < n; i++) {
     const s = state.stars[i];
     elev[i] = s._elev ?? 0;
@@ -111,12 +154,21 @@ export function setSharedUniforms(gl, prog, state) {
     color[i*3 + 2] = s.color[2] / ref[2];
     intensity[i] = s.intensity;
     hourOff[i]   = s.hourOffset;
+    temp[i]      = s.temp || 5778;
   }
   gl.uniform1fv(u(gl, prog, 'uStarElev'), elev);
   gl.uniform1fv(u(gl, prog, 'uStarAzOff'), azOff);
   gl.uniform3fv(u(gl, prog, 'uStarColor'), color);
   gl.uniform1fv(u(gl, prog, 'uStarIntensity'), intensity);
   gl.uniform1fv(u(gl, prog, 'uStarHourOffset'), hourOff);
+
+  // Spectral path (rayleigh/nishita/ozone/hosek): per-bin β curves, star
+  // Planck temperatures, and the white-balance reference the shader divides
+  // by (the same one baked into uStarColor above for the RGB models).
+  gl.uniform1fv(u(gl, prog, 'uBetaRSpec'), betaRSpec());
+  gl.uniform1fv(u(gl, prog, 'uBetaO3Spec'), BETA_O3_SPEC);
+  gl.uniform1fv(u(gl, prog, 'uStarTemp'), temp);
+  gl.uniform3fv(u(gl, prog, 'uWBRef'), new Float32Array(ref));
 
   // Scatter tweak (from preset.scatterTweak, stored in state)
   const tweak = state.scatterTweak;
