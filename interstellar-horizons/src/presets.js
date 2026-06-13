@@ -6,7 +6,28 @@ const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
 // Ground colors are 0-255 RGB. Loosely informed by each world's canonical
 // surface tone — Mars rust, Hoth ice, Tatooine sand, etc.
+// Real-life worlds are ordered by ascending distance from the sun, with a
+// planet's moons immediately following the planet (Titan after Saturn).
+// Object key order drives the planet toolbar; the default preset is still
+// 'earth' (set in state.js / main.js).
 export const PRESETS = {
+  mercury: {
+    planetR: 2440e3, atmoR: 2540e3, hr: 8000, hm: 1200,
+    // Exosphere only (~10⁻¹⁴ bar): atmoDensity ≈ 0 gives the true black
+    // sky. betaR is wavelength-flat so the toolbar orb reads as gray
+    // regolith rather than implying Rayleigh blue.
+    betaR: [5e-6, 5e-6, 5e-6], betaM: 5e-6, sunIntensity: 20,
+    atmoDensity: 1e-6, sunDist: 0.39, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 1, ozone: 0, albedo: 0.09, scatterTweak: null,
+    groundColor: [110, 105, 100],
+  },
+  venus: {
+    planetR: 6052e3, atmoR: 6300e3, hr: 15000, hm: 3000,
+    betaR: [8e-6, 10e-6, 11e-6], betaM: 80e-6, sunIntensity: 8,
+    atmoDensity: 90, sunDist: 0.72, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 10, ozone: 0, albedo: 0.7, scatterTweak: null,
+    groundColor: [170, 130, 65],
+  },
   earth: {
     planetR: 6371e3, atmoR: 6471e3, hr: 8000, hm: 1200,
     betaR: [5.5e-6, 13.0e-6, 22.4e-6], betaM: 21e-6, sunIntensity: 20,
@@ -21,20 +42,6 @@ export const PRESETS = {
     turbidity: 8, ozone: 0, albedo: 0.25, scatterTweak: null,
     groundColor: [140, 80, 45],
   },
-  venus: {
-    planetR: 6052e3, atmoR: 6300e3, hr: 15000, hm: 3000,
-    betaR: [8e-6, 10e-6, 11e-6], betaM: 80e-6, sunIntensity: 8,
-    atmoDensity: 90, sunDist: 0.72, stars: [{temp: 5778, intensity: 1}],
-    turbidity: 10, ozone: 0, albedo: 0.7, scatterTweak: null,
-    groundColor: [170, 130, 65],
-  },
-  titan: {
-    planetR: 2575e3, atmoR: 2775e3, hr: 20000, hm: 5000,
-    betaR: [6e-6, 9e-6, 5e-6], betaM: 100e-6, sunIntensity: 4,
-    atmoDensity: 1.5, sunDist: 9.5, stars: [{temp: 5778, intensity: 1}],
-    turbidity: 10, ozone: 0, albedo: 0.2, scatterTweak: null,
-    groundColor: [150, 110, 70],
-  },
   jupiter: {
     planetR: 69911e3, atmoR: 70411e3, hr: 27000, hm: 4000,
     betaR: [3e-6, 7e-6, 15e-6], betaM: 50e-6, sunIntensity: 6,
@@ -48,6 +55,13 @@ export const PRESETS = {
     atmoDensity: 2.5, sunDist: 9.5, stars: [{temp: 5778, intensity: 1}],
     turbidity: 4, ozone: 0, albedo: 0.47, scatterTweak: null,
     groundColor: [200, 180, 140],
+  },
+  titan: {
+    planetR: 2575e3, atmoR: 2775e3, hr: 20000, hm: 5000,
+    betaR: [6e-6, 9e-6, 5e-6], betaM: 100e-6, sunIntensity: 4,
+    atmoDensity: 1.5, sunDist: 9.5, stars: [{temp: 5778, intensity: 1}],
+    turbidity: 10, ozone: 0, albedo: 0.2, scatterTweak: null,
+    groundColor: [150, 110, 70],
   },
   arrakis: {
     planetR: 6200e3, atmoR: 6280e3, hr: 7000, hm: 1500,
