@@ -3,6 +3,10 @@
      flash-of-fallback-then-reflow. A timeout in the inline script in
      index.html removes this class after 1.5s as a safety net. */
   html.fonts-loading body { visibility: hidden; }
+  /* Never let the page itself scroll sideways — wide content must scroll
+     inside its own container or wrap. `clip` (not `hidden`) so this doesn't
+     become a scroll container, which would break sticky positioning. */
+  html, body { overflow-x: clip; }
   body {
     position: relative;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -55,10 +59,10 @@
     align-self: flex-start;
     background: rgba(0, 0, 0, 0.20);
     border-radius: 28px;
-    /* Padding-left = 20 so the title's text aligns with every other section's
-       text column (h1 margin-left was 20). The negative bottom margin makes
-       the banner float over the planet selector below. */
-    padding: 18px 32px 20px 20px;
+    /* Padding-left = 14 so the title's text aligns with the model-card
+       title rail (.strip-title text column). The negative bottom margin
+       makes the banner float over the planet selector below. */
+    padding: 12px 32px 20px 14px;
     margin: 0 0 -36px 0;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
@@ -290,16 +294,34 @@
   .legend {
     font-size: 0.75rem; color: #666; margin-top: 16px; line-height: 1.6;
   }
+  /* No overflow-x here: above the 720px breakpoint the table fits its
+     container (cells wrap under width pressure), and a scroll container
+     would break the sticky header row. The mobile media query restores
+     horizontal scrolling where the table genuinely can't fit. */
   .param-table-wrap {
     margin-top: 20px; background: #16213e; border-radius: 10px;
-    padding: 16px 20px; overflow-x: auto;
+    padding: 16px 20px;
   }
+  /* border-collapse: separate (not collapse) so cell borders travel with
+     the sticky header instead of being left behind on scroll. */
   .param-table {
-    width: 100%; border-collapse: collapse; font-size: 0.78rem; white-space: nowrap;
+    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.78rem;
   }
   .param-table th, .param-table td {
     padding: 6px 10px; text-align: center; border-bottom: 1px solid #1a1a2e;
   }
+  /* Freeze headers on both axes; only the data portion scrolls. The header
+     row sticks while the page scrolls; the first column sticks while the
+     table scrolls horizontally (mobile). Align the big corner title and the
+     small column headers on a shared text baseline. */
+  .param-table thead th {
+    vertical-align: baseline;
+    position: sticky; top: 0; background: #16213e; z-index: 2;
+  }
+  .param-table th:first-child, .param-table td:first-child {
+    position: sticky; left: 0; background: #16213e;
+  }
+  .param-table thead th:first-child { z-index: 3; }
   .param-table th { color: #7ec8e3; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; font-size: 0.7rem; }
   .param-table th:first-child, .param-table td:first-child { text-align: left; color: #ccc; font-weight: 500; }
   /* Section title lives inline in the matrix's corner cell — keep the
@@ -615,10 +637,11 @@ body[data-layout="standard"] > .param-table-wrap { order: 100; }
 .planet-area > .planet-toolbar { position: relative; z-index: 1; }
 .planet-icon {
   flex: 0 0 auto;
-  /* Grid: orb in the upper area (centered vertically), label pinned to the
-     bottom regardless of orb scale. */
+  /* Grid: orb centered in a fixed-height row (60px × max --scale 1.7), so
+     every caption starts at the same y. A caption that wraps grows downward
+     instead of shifting its orb/name out of alignment with the others. */
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: 102px auto;
   justify-items: center;
   gap: 8px;
   background: transparent;
@@ -630,7 +653,7 @@ body[data-layout="standard"] > .param-table-wrap { order: 100; }
   scroll-snap-align: center;
 }
 .planet-icon .planet-orb { align-self: center; }
-.planet-icon .planet-label { align-self: end; }
+.planet-icon .planet-label { align-self: start; }
 .planet-orb {
   display: block;
   width: calc(60px * var(--scale, 1));
@@ -1139,6 +1162,10 @@ canvas.dome.gl { cursor: zoom-in; }
   .controls { padding: 12px 12px; gap: 14px 20px; }
   /* Planet toolbar bleeds to the new (narrower) body content edge */
   .planet-toolbar { margin: 0 0 12px; padding: 12px 0; }
+
+  /* Below this width the parameter matrix can't fit even with wrapping —
+     let it scroll horizontally (first column stays frozen via sticky). */
+  .param-table-wrap { overflow-x: auto; }
 
   /* Wall preview grid: drop to 2 columns */
   body[data-layout="standard"] .model-grid {
