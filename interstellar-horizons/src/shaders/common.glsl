@@ -71,16 +71,33 @@ vec3 YxyToRGB(float Y, float x, float y) {
   return vec3(r, g, b);
 }
 
-// Reinhard tone mapping + sRGB gamma. Input: linear light. Output: 0-255 range.
+// Working-space (linear sRGB primaries) → output-space linear RGB.
+// Identity when the canvas is sRGB; the linear sRGB→P3 / sRGB→Rec.2020
+// matrix when the buffer is tagged wide-gamut. Applied in linear light,
+// before any clamp, so out-of-sRGB-gamut colors survive into the wider gamut.
+uniform mat3 uGamut;
+// Output transfer curve: 0 = sRGB piecewise (sRGB and Display P3 share it),
+// 1 = BT.2020 OETF (4.5x linear toe, α·x^0.45 − (α−1) above β).
+uniform int uOETF;
+
+// Reinhard tone mapping + output encoding. Input: linear light. Output: 0-255.
 vec3 toneMap(vec3 rgb, float exposure) {
-  vec3 c = rgb * exposure;
+  vec3 c = uGamut * (rgb * exposure);
   // Reinhard per-channel
   c = c / (1.0 + c);
-  // sRGB gamma (piecewise)
-  vec3 lo = 12.92 * c;
-  vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
-  c = mix(lo, hi, vec3(greaterThan(c, vec3(0.0031308))));
-  return clamp(c, 0.0, 1.0) * 255.0;
+  vec3 enc;
+  if (uOETF == 1) {
+    // BT.2020 (α = 1.09929682680944, β = 0.018053968510807)
+    vec3 lo = 4.5 * c;
+    vec3 hi = 1.09929682680944 * pow(max(c, vec3(0.0)), vec3(0.45)) - 0.09929682680944;
+    enc = mix(lo, hi, vec3(greaterThan(c, vec3(0.018053968510807))));
+  } else {
+    // sRGB piecewise gamma
+    vec3 lo = 12.92 * c;
+    vec3 hi = 1.055 * pow(max(c, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055;
+    enc = mix(lo, hi, vec3(greaterThan(c, vec3(0.0031308))));
+  }
+  return clamp(enc, 0.0, 1.0) * 255.0;
 }
 
 // ============================================================

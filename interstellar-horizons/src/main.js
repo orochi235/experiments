@@ -1,5 +1,6 @@
 import { state, setRenderFn, scheduleRender, applyPreset } from './state.js';
-import { createGL, makeFullscreenTriangle, recomputeDerived } from './render/gl.js';
+import { createGL, makeFullscreenTriangle, recomputeDerived,
+         setDrawingBufferColorSpace, colorSpaceSupported } from './render/gl.js';
 import { buildPrograms } from './render/programs.js';
 import { setSharedUniforms } from './render/uniforms.js';
 import { wireControls } from './ui/controls.js';
@@ -770,6 +771,30 @@ document.querySelectorAll('#wbToggle .proj-btn').forEach(btn => {
   });
 });
 
+// Output color-space toggle (sRGB / Display P3 / Rec.2020). The working
+// space stays linear sRGB throughout; switching converts at the toneMap
+// gamut matrix + OETF and retags every drawing buffer so the browser
+// composites the wider-gamut values 1:1 instead of remapping them. Options
+// the browser can't tag a buffer with are disabled at startup — as of 2026
+// no browser ships 'rec2020', so that button is future-proofing that
+// self-enables when support lands.
+const CS_TO_BUFFER = { srgb: 'srgb', p3: 'display-p3', rec2020: 'rec2020' };
+document.querySelectorAll('#csToggle .proj-btn').forEach(btn => {
+  const buffer = CS_TO_BUFFER[btn.dataset.cs];
+  if (!colorSpaceSupported(buffer)) {
+    btn.disabled = true;
+    btn.title = `Browser can't output ${buffer} (drawingBufferColorSpace)`;
+    return;
+  }
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#csToggle .proj-btn').forEach(b =>
+      b.classList.toggle('active', b === btn));
+    state.colorSpace = btn.dataset.cs;
+    setDrawingBufferColorSpace(buffer);
+    scheduleRender();
+  });
+});
+
 // ============================================================
 // URL <-> state synchronization
 // ============================================================
@@ -856,6 +881,15 @@ const URL_PARAMS = [
       if (btn) btn.click();
     },
     read:  () => state.whiteBalance,
+  },
+  {
+    name: 'cs',
+    parse: s => ['srgb', 'p3', 'rec2020'].includes(s) ? s : null,
+    apply: v => {
+      const btn = document.querySelector(`#csToggle .proj-btn[data-cs="${v}"]`);
+      if (btn && !btn.disabled) btn.click();
+    },
+    read:  () => state.colorSpace,
   },
 ];
 

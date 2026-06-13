@@ -2,10 +2,49 @@
 // uniform location caching. All panels reuse the same VAO (the verts are
 // generic enough that no per-program attribute binding is needed).
 
+// Every live context, so a color-space toggle can retag all drawing buffers.
+const CONTEXTS = [];
+let currentColorSpace = 'srgb';
+
 export function createGL(canvas) {
   const gl = canvas.getContext('webgl2', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
   if (!gl) throw new Error('WebGL2 not available');
+  CONTEXTS.push(gl);
+  if (currentColorSpace !== 'srgb' && 'drawingBufferColorSpace' in gl) {
+    gl.drawingBufferColorSpace = currentColorSpace;
+  }
   return gl;
+}
+
+// 'srgb' | 'display-p3'. Tags every drawing buffer so the browser composites
+// our (already gamut-converted) pixel values without remapping them.
+export function setDrawingBufferColorSpace(cs) {
+  currentColorSpace = cs;
+  for (const gl of CONTEXTS) {
+    if ('drawingBufferColorSpace' in gl) gl.drawingBufferColorSpace = cs;
+  }
+}
+
+// Runtime probe: can the drawing buffer actually be tagged with this color
+// space in this browser? Per WebIDL, assigning an unsupported enum value to
+// drawingBufferColorSpace is silently ignored (or throws), so attempt the
+// assignment on a real context and check whether it stuck.
+let scratchGL = null;
+export function colorSpaceSupported(cs) {
+  if (cs === 'srgb') return true;
+  if (typeof WebGL2RenderingContext === 'undefined' ||
+      !('drawingBufferColorSpace' in WebGL2RenderingContext.prototype)) return false;
+  const gl = CONTEXTS[0] ||
+    (scratchGL ??= document.createElement('canvas').getContext('webgl2'));
+  if (!gl) return false;
+  const prev = gl.drawingBufferColorSpace;
+  let ok = false;
+  try {
+    gl.drawingBufferColorSpace = cs;
+    ok = gl.drawingBufferColorSpace === cs;
+  } catch { ok = false; }
+  try { gl.drawingBufferColorSpace = prev; } catch { /* leave as-is */ }
+  return ok;
 }
 
 export function compileShader(gl, type, src) {

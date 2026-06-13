@@ -27,6 +27,10 @@ export const state = {
   showStars: true,
   // 'visual' (default) | 'actual' — planet toolbar orb sizing mode
   planetScale: 'visual',
+  // Output color space: 'srgb' (default) | 'p3' (Display P3 wide gamut).
+  // Working space stays linear sRGB; toneMap converts via uGamut and the
+  // drawing buffer is tagged display-p3 so the browser composites 1:1.
+  colorSpace: 'srgb',
   // 'physical' = blackbody RGB as-is (Sol = warm-ish white)
   // 'adapted'  = divide every star color by Sol's blackbody so 5778K reads
   //              as neutral white — matches how a tourist's eye would adapt
