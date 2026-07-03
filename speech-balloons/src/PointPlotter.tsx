@@ -12,7 +12,7 @@ import {
   type AnchorRenderProps,
   type ControlPoint,
   type CurveEditorProps,
-} from '@labkit/react/weasel-ui';
+} from '@weasel-js/labkit/weasel-ui';
 
 export type { ControlPoint };
 

@@ -23,15 +23,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # speech-balloons depends on @labkit/react and @orochi235/weasel as
-      # file:../../<kit> siblings (and labkit itself depends on weasel as
-      # file:../weasel). Recreate the ~/src sibling layout by cloning both
-      # public kits next to the workspace; they track their main branches.
-      - name: Clone sibling kits (weasel + labkit)
+      # speech-balloons depends on @weasel-js/labkit as a
+      # file:../../weasel/packages/labkit sibling (labkit lives inside the
+      # weasel monorepo since 2026-06). Recreate the ~/src sibling layout by
+      # cloning weasel next to the workspace; it tracks its main branch.
+      - name: Clone sibling kit (weasel)
         run: |
-          rm -rf ../weasel ../labkit
+          rm -rf ../weasel
           git clone --depth 1 https://github.com/orochi235/weasel.git ../weasel
-          git clone --depth 1 https://github.com/orochi235/labkit.git ../labkit
 
       # Node ≥23 strips types natively — speech-balloons' vite config
       # dynamically imports weasel's vite-aliases.ts (raw TS) at config-load
@@ -47,20 +46,16 @@ jobs:
 
       # Install: keep NODE_ENV unset here so devDependencies (vite, etc.) are
       # actually installed. npm ci with NODE_ENV=production silently skips them.
-      # Order matters: weasel (leaf) → labkit (file:../weasel) → experiments.
+      # weasel's root install covers all workspaces, including packages/labkit.
       - name: Install weasel deps
         working-directory: ../weasel
         run: npm ci
 
-      - name: Install labkit deps
-        working-directory: ../labkit
-        run: npm ci
-
       # speech-balloons consumes labkit's dist/ (vite serves it as-is rather
-      # than pre-bundling), so the kit must be built before the app.
+      # than pre-bundling), and dist/ is gitignored — build it before the app.
       - name: Build labkit
-        working-directory: ../labkit
-        run: npm run build
+        working-directory: ../weasel
+        run: npm run build -w @weasel-js/labkit
 
       - name: Install interstellar-horizons deps
         working-directory: interstellar-horizons

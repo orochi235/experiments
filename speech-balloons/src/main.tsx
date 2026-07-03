@@ -1,13 +1,13 @@
 // Weasel-theme tokens are required by weasel-ui's CurveEditor (and other
-// passthrough components). @labkit/react's bundled styles.css doesn't include
-// them, so the consumer pulls them in directly. Path resolved by vite via the
-// weasel monorepo's alias generator (see vite.config.ts → weaselAliases).
-import '@orochi235/weasel-theme/tokens.css';
-import '@labkit/react/styles.css';
+// passthrough components). @weasel-js/labkit's bundled styles.css doesn't
+// include them, so the consumer pulls them in directly. Path resolved by vite
+// via the weasel monorepo's alias generator (see vite.config.ts → weaselAliases).
+import '@weasel-js/theme/tokens.css';
+import '@weasel-js/labkit/styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SingletonExperimentProvider } from '@labkit/react/state';
-import { localStorageAdapter } from '@labkit/react';
+import { SingletonExperimentProvider } from '@weasel-js/labkit/state';
+import { localStorageAdapter } from '@weasel-js/labkit';
 import { Lab } from './Lab';
 import { initialDesign, initialRuntime } from './initialState';
 import './styles.css';

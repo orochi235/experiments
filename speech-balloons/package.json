@@ -14,18 +14,17 @@
     "snapshot": "scripts/snapshot.sh"
   },
   "dependencies": {
-    "@labkit/react": "file:../../labkit",
-    "@orochi235/weasel": "file:../../weasel",
+    "@weasel-js/labkit": "file:../../weasel/packages/labkit",
     "clipper2-ts": "^2.0.1-17",
     "opentype.js": "^2.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "wawoff2": "^2.0.1"
   },
   "devDependencies": {
     "@types/opentype.js": "^1.3.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "@vitest/coverage-v8": "^4.1.7",
     "typescript": "^5.6.3",

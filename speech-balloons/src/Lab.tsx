@@ -15,8 +15,8 @@ import {
   TextRow,
   useExperimentState,
   useLabStore,
-} from '@labkit/react';
-import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@labkit/react/undo';
+} from '@weasel-js/labkit';
+import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@weasel-js/labkit/undo';
 import { SpeechBalloon, bareBaseRadiusRange } from './SpeechBalloon';
 import { ShadingLayersPanel } from './ShadingLayersPanel';
 import { bareBaseMaxBevel, buildBaseSampler, type BaseSampler } from './geometry';
@@ -27,7 +27,7 @@ import {
   type ControlPoint,
   type CurveLayer,
   type FunctionLayerState,
-} from '@orochi235/weasel-ui';
+} from '@weasel-js/ui';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
 import { interpFlat, migrateSeam, remapAcrossPartition, SEAM_X_EPS } from './contourEditor';
 import {
