@@ -1016,18 +1016,38 @@ describe('buildRegions — concave rims', () => {
     expect(centersX[1]).toBeCloseTo(230, 0);
   });
 
-  it('tail-on-rect at small b: the tail forms its own shallow island with x0 < 1', () => {
-    const { regions, tMax } = buildRegions({
+  it('tail-on-rect at small b: the tail stays fused to the body as a single island', () => {
+    const { regions } = buildRegions({
       rim: tailRect, bevelWidthPx: 8, interior: 'dome-blob', cornerStepDeg: 12,
     });
     const blobs = regions.filter((r) => r.kind === 'blob');
-    // Tail base is ~30 px wide → local collapse ~t≈9–12 > b=8, so the tail
-    // pinches off as its own island next to the body island.
-    expect(blobs.length).toBe(2);
+    // The tail is a single reentrant bump on one edge, not a narrow waist
+    // joining two separate high regions: its local plateau IS the pinch
+    // point, so its above-b region never disconnects from the body's.
+    // (Islands require two maxima above a saddle — see the asymmetric
+    // dumbbell test below for the shallow-island case.) Probed at b = 5…49.5
+    // (tMax = 50): always exactly one blob island with x0 = 1.
+    expect(blobs.length).toBe(1);
+    expect(blobs[0]!.x0).toBeCloseTo(1, 3);
+  });
+
+  it('asymmetric dumbbell: the shallow island x0 sits below the deep island x0', () => {
+    // 100×100 square + 60×60 square joined by a 20-tall neck: saddle t=10,
+    // plateaus t=50 and t=30 → at b=15 two islands with x0 = 1 and 30/50.
+    const asymDumbbell: Polygon = [
+      { x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 40 }, { x: 180, y: 40 },
+      { x: 180, y: 20 }, { x: 240, y: 20 }, { x: 240, y: 80 }, { x: 180, y: 80 },
+      { x: 180, y: 60 }, { x: 100, y: 60 }, { x: 100, y: 100 }, { x: 0, y: 100 },
+    ];
+    const { regions, tMax } = buildRegions({
+      rim: asymDumbbell, bevelWidthPx: 15, interior: 'dome-blob', cornerStepDeg: 12,
+    });
+    expect(tMax).toBeCloseTo(50, 2);
+    const blobs = regions.filter((r) => r.kind === 'blob');
+    expect(blobs).toHaveLength(2);
     const xs = blobs.map((r) => r.x0).sort((a, b2) => a - b2);
-    expect(xs[1]).toBeCloseTo(1, 3);             // body island reaches tMax
-    expect(xs[0]).toBeGreaterThan(8 / tMax);     // tail island above the seam…
-    expect(xs[0]).toBeLessThan(0.5);             // …but far below the body plateau
+    expect(xs[1]).toBeCloseTo(1, 3);        // 100-square reaches global tMax
+    expect(xs[0]).toBeCloseTo(30 / 50, 2);  // 60-square plateaus at t=30
   });
 
   it('flat interior on dumbbell: two solid islands', () => {
