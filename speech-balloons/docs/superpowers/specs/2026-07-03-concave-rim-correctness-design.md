@@ -60,6 +60,10 @@ Rewrite `computeStraightSkeleton` as the Felkel–Obdržálek wavefront:
   valid for reflex vertices.
 - **Simultaneous events** are ε-clustered (multiple splits at one point,
   vertex events) and processed as a group before the wavefront advances.
+  (*Implementation note 2026-07-03: the shipped engine achieves this
+  differently — one event per round with full event recomputation, so
+  coincident events fire on consecutive rounds at the same `t`. Same
+  outcome, simpler invariants.*)
 
 **Interface change.** After a split, one input edge's skeleton face can be
 bounded by many arcs — the two-chain `SkeletonCell { left, right }` model
@@ -97,7 +101,10 @@ boundary segments.
 - **panel** (`roof-panels`) = face ∩ { t ≥ b }, one per piece; existing
   sliver guard (≥ 0.5 px depth) retained.
 - **Interior islands.** At `t = b` the interior can be several disjoint
-  islands (a split event pinches a tail's interior off from the body's).
+  islands (a waisted silhouette — dumbbell, wobbled oval — whose saddle
+  drops below `b`; *correction 2026-07-03: a plain tail cannot island,
+  since its local plateau is exactly the pinch point — the original
+  "tail pinches off" example here was wrong*).
   For `dome-blob` / `flat`, chain the iso-t crossings into closed offset
   loops; each island becomes its own region:
   - center = the island's wavefront-collapse point (its deepest ridge
@@ -109,9 +116,10 @@ boundary segments.
 
 Contour-x remains `x = t / tMax` with the **polygon-global** `tMax`.
 Height stays a single function of physical inset distance across the whole
-surface: a shallow tail island gets a shorter, flatter dome than the body,
-as on a real chamfered solid. Per-island normalization (tail doming to
-full height) is rejected as less physical.
+surface: a shallow island (the smaller lobe of an asymmetric waist) gets a
+shorter, flatter dome than the body, as on a real chamfered solid.
+Per-island normalization (a shallow lobe doming to full height) is
+rejected as less physical.
 
 `x0`/`x1` on strips and panels keep their current formulas
 (`stripEnd / tMax`, `tDeath / tMax`); islands' radial stops sample the

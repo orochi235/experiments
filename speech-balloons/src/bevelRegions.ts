@@ -234,9 +234,12 @@ export function buildRegions(opts: {
   }
 
   // Interior islands: the region beyond the seam can be several disjoint
-  // pieces (a tail pinches off from the body via a split event). Union the
-  // per-face above-pieces with clipper — piece edges coincide along shared
-  // skeleton arcs, so the union dissolves them into per-island loops.
+  // pieces — a waisted silhouette (dumbbell, wobbled oval) has two depth
+  // maxima whose connecting saddle drops below b. (A plain tail can NOT
+  // island: its local plateau IS the pinch point — see the tail test in
+  // bevelRegions.test.ts.) Union the per-face above-pieces with clipper —
+  // piece edges coincide along shared skeleton arcs, so the union dissolves
+  // them into per-island loops.
   if (opts.interior !== 'roof-panels' && b < tMax * 0.99 && abovePieces.length > 0) {
     const islands = unionPolygons(abovePieces);
     for (const island of islands) {
