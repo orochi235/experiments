@@ -1,66 +1,108 @@
 # Speech Balloon Lab — handoff
 
-Branch: `port-to-labkit`.
+Branch: `concave-rim`.
 
-## Recent work: analytic lit-bevel renderer — DONE, browser-verified
+## Recent work: concave-rim correctness (split-event straight skeleton) — DONE, browser-verified
 
-**Spec:** `docs/superpowers/specs/2026-06-09-analytic-lit-bevel-design.md`
-**Plan:** `docs/superpowers/plans/2026-06-09-analytic-lit-bevel.md`
-**Commits:** `c184919` → `3fc9876` (spec/plan docs at `4c5286f`/`a92d181`)
+**Spec:** `docs/superpowers/specs/2026-07-03-concave-rim-correctness-design.md`
+**Plan:** `docs/superpowers/plans/2026-07-03-concave-rim-correctness.md`
+**Commits:** `76e3714` (spec) → this one; core work `1b7a64c` → `8bdf70f`
 
-What landed: the `lit-bevel` fill mode was rebuilt from scratch. The SVG-filter
-heightmap pipeline (`feDiffuseLighting`, `feConvolveMatrix`, bevel-rings offscreen
-canvas) was deleted and replaced with a pure analytic region renderer.
+What landed: the lit-bevel renderer's geometry layer was rewritten so concave
+silhouettes (tails, cloud lobes, lightning notches) shade correctly. Before
+this, the naive edge-collapse skeleton had no split events, so the tail
+rendered flat and phantom wedge creases radiated from the tail join into the
+body interior (see `screenshots-clean/lit-bevel-01-smoke.png` for the old
+state).
 
-Three new modules:
-- `src/straightSkeleton.ts` — wavefront straight-skeleton for polygon offsets
-- `src/bevelRegions.ts` — `buildRegions`: decomposes a rim polyline into strip
-  bands (one per rim edge), corner fans (one per convex corner), and a single
-  interior region (roof-panels / dome-blob / flat)
-- `src/litBevelShading.ts` — `computeStops`: analytic Phong lighting (ambient +
-  N directional lights + specular) sampled along each region's gradient axis;
-  returns gradient stops
+- **`src/straightSkeleton.ts` — SLAV engine with split events.** Wavefront
+  simulation over a list of active vertices; handles edge events *and* split
+  events (a reflex vertex's bisector hitting a non-adjacent wavefront edge).
+  Candidate events are recomputed from scratch after every processed event —
+  polygons are small, and recomputation eliminates stale-queue bugs. Vertex
+  motion is recorded as arcs which are chained into per-edge `SkeletonFace`
+  outlines (`faces`, not the old two-chain cells). `Skeleton.method` is a
+  diagnostic: `'slav'` normally, `'naive'` when the v1 edge-collapse-only
+  engine had to take over (self-intersections, stalled wavefronts, budget
+  overruns — degraded-but-stable, never a crash).
+- **`src/bevelRegions.ts` — face-based region construction.** Each skeleton
+  face is clipped at the bevel seam by an iso-t line (t is affine within a
+  face) into a band strip and optional roof panel. The interior beyond the
+  seam is assembled by clipper union of the per-face above-pieces, yielding
+  **one interior region per island** — a waisted silhouette whose depth field
+  has two maxima above a saddle produces two independent interiors, each with
+  its own gradient frame and per-island `x0` (shallower pockets get a
+  truncated, dimmer blob profile). Per-component above-clips prevent panel
+  strokes from tracing Sutherland–Hodgman bridges (the stray-1px-line bug).
+- **Tail-pinch closing seams** are emitted into the ridge output so the debug
+  overlay shows the skeleton re-routing around a tail (ridge down the tail
+  spine + closing seams at the join).
 
-`SpeechBalloon.tsx` changes: the lit-bevel rendering branch replaces the old
-`<filter>` / heightmap block with a `useMemo` (`litBevel`) that calls
-`buildRegions` + `computeStops` per polygon, and emits one `<path>` per region
-with a `<linearGradient>` or `<radialGradient>` fill. Band regions go under
-`data-shading-id="lit-bevel.band"`, interior regions under
-`data-shading-id="lit-bevel.interior"`. The `feDiffuseLighting` element is
-gone (`document.querySelector('feDiffuseLighting')` returns null).
+Four engine fixes found during implementation:
+1. **`splitTarget` via `posAt`** — the split-event target edge is located by
+   walking the *current* wavefront positions (`posAt(v, t)`), not birth
+   positions, so splits land on the right live edge.
+2. **Zero-length collapse handling** — already-zero-length, non-growing edges
+   (vertex events leave coincident vertices) are collapsed instead of
+   generating degenerate events.
+3. **`trajThrough` re-anchoring** — new vertices born at an event are
+   re-anchored through their actual birth point, so the near-parallel
+   straight-line trajectory fallback's anchor error never leaks into face
+   outlines (phantom-vertex fix, pinned by test at `d0e8718`).
+4. **`retireNullRing`** — a wavefront ring whose vertices have all gone
+   trajectory-less and coincident is retired cleanly instead of stalling the
+   simulation.
 
-`src/controls.ts` changes: heightmap controls removed; new "Lit bevel — material"
-block (Bevel height / Ambient / Diffuse / Specular / Shininess / Key light color /
-Specular color) and "Lit bevel — interior" block (Interior select: roof-panels /
-dome-blob / flat; Corner step).
+`src/SpeechBalloon.tsx` was intentionally untouched — its `litBevel` memo
+consumes `buildRegions`, whose contract didn't change.
 
-Unit tests: 96 pass (vitest).
+Unit tests: **125 pass** (vitest, 8 files). `npm run typecheck` clean.
 
-### Browser verification status (2026-06-10)
+### Browser verification status (2026-07-03)
 
-1. **Smoke** — PASS. No JS errors (favicon 404 only). `!!document.querySelector('feDiffuseLighting')` → `false`. Path count: **61** paths in `lit-bevel.band` + `lit-bevel.interior` groups (within spec range). Lit bevel band and structured interior render correctly.
+Dev server at localhost:5180, rectangle 280×140 + pointed tail unless noted.
+All keeper screenshots in `screenshots-clean/concave-*.png`.
 
-2. **Azimuth sweep** — PASS. Bright rim band correctly follows azimuth: az=0° lights the right edge, az=180° lights the left, az=45° lights the top-right corner. No visible popping or discontinuities at corner fans at 45°.
-
-3. **Elevation** — PASS. At el=85° shading flattens toward near-uniform. At el=15° band contrast is strong and directional (vivid lit/shadow sides). Correct.
-
-4. **Interior treatments** — PASS. All three render distinctly: `roof-panels` shows interior panel creases; `dome-blob` gives a smooth radial gradient; `flat` is a uniform interior with only the bevel band active.
-
-5. **Contour responsiveness** — PASS. Clicking "Flip horizontally" in the contour editor immediately recomputes the shading (bevel profile inverts, lighting changes). Live update confirmed.
-
-6. **Other bodies** — PASS. Switching to polygon (hexagon) renders correctly with lit-bevel; per-facet bevel strips visible, no crashes. Path count drops to 14 (fewer rim vertices → fewer regions). Cloud and oval not separately tested.
-
-7. **Shading panel** — PASS (fixed). The panel rows for lit-bevel (`Ambient`, `Key light`, `Fill light`, `Specular`, `Bevel band`, `Interior`) appear correctly after switching from dome mode. Toggling "Key light" visibly darkens the lit side; toggling "Bevel band" hides the band paths. Mode round-trips (dome → lit-bevel → dome) swap the row list correctly.
-
-8. **A/B dome vs lit-bevel** — PASS. Mode switch produces visually distinct results at identical azimuth/elevation/bevelWidth: dome is a soft radial gradient; lit-bevel shows a physically-modeled bevel band + structured interior.
-
-9. **DOM sanity** — PASS. Path count is stable at 61 for rectangle base across multiple render cycles. The 6 `data-shading-id` groups are exactly `lit-bevel.ambient`, `lit-bevel.light-0`, `lit-bevel.light-1`, `lit-bevel.specular`, `lit-bevel.band`, `lit-bevel.interior` — correct, light-count-independent.
+1. **Tail integration** — PASS. Fill lit-bevel, interior roof-panels, bevel
+   width 12: the bevel band flows around the tail join and down the tail's
+   flanks; the tail shades (lit flank + spine crease), no phantom wedge
+   creases into the body interior. Compare `concave-01-tail-band.png` against
+   the old `lit-bevel-01-smoke.png` (flat tail + creases).
+2. **Debug overlay** — PASS. Goldenrod skeleton ridges re-route around the
+   tail: a ridge runs down the tail's spine and the tail-pinch closing seams
+   appear at the join. `concave-02-ridges.png`.
+3. **Azimuth sweep at the tail** — PASS. Bottom tail, azimuth 225° / 315°
+   (±45° around 270°): tail flanks light/shade like ordinary rim faces and
+   mirror correctly, no popping. `concave-03-az-225.png`, `concave-03-az-315.png`.
+4. **Interior islands** — PASS. Oval 380×150 + wobble morph (frequency 2,
+   amplitude 30, phase 0.10) pinches into a dumbbell; at bevel width 48 with
+   interior dome-blob the DOM shows **2** paths under
+   `[data-shading-id="lit-bevel.interior"]`, each with its own radial
+   gradient. An asymmetric 3-island variant additionally showed the shallow
+   middle pocket with a truncated (dimmer, x0 < 1) blob profile vs. the deep
+   lobes. Islands rendering at all implies `method` stayed `'slav'` (the
+   naive fallback cannot produce them). `concave-04-islands.png`.
+   Note: a plain rectangle+tail never islands (single depth maximum) — the
+   plan's original check was corrected accordingly.
+5. **Lightning + cloud** — PASS. Lightning tail on rectangle: zigzag notches
+   shade facet-by-facet, no crashes (`concave-05-lightning.png`). Cloud body
+   (8 lobes, depth 0.4) + lightning tail, roof-panels interior: busy concave
+   silhouette shades cleanly, no black/empty regions, no stray 1-px lines
+   crossing region gaps (`concave-06-cloud.png`).
+6. **Convex regression** — PASS. Rounded rect (roundness 0.5) shows the same
+   band structure as `lit-bevel-01-smoke.png` with the tail now shaded
+   (`concave-07-regression.png`). Hexagon (polygon body) renders clean
+   mitered per-edge bevel faces + roof panels — a strict improvement over
+   `lit-bevel-06-polygon.png`.
+7. **Console** — PASS. 0 errors / 0 warnings across the whole session.
 
 ### Visual notes
 
-- Hairline seams between band regions are present but minimal — the 1 px same-paint stroke overlap from the implementation nearly eliminates them.
-- Corner fans at 45° azimuth show no visible popping; transitions are smooth.
-- The shading panel correctly swaps group headers on mode change (fixed in same commit as item 7).
+- Bevel width is clamped by `bareBaseMaxBevel` (max inradius of the bare base
+  shape), so the interior can never be fully drowned via the slider.
+- A tail attached at a concave notch produces a visible crease from the join —
+  that is the real tail-pinch closing seam (also drawn by the debug overlay),
+  not an artifact.
 
 ---
 
@@ -80,8 +122,10 @@ Two repos:
   - `src/contourEditor.ts` — `remapAcrossPartition` helper.
   - `src/ShadingLayersPanel.tsx` — debug panel.
   - `src/shadingLayers.ts` — pure grouping helper.
-  - `src/straightSkeleton.ts` — wavefront straight-skeleton (new).
-  - `src/bevelRegions.ts` — region decomposition for lit-bevel (new).
+  - `src/straightSkeleton.ts` — split-event straight skeleton (SLAV engine,
+    faces + ridges + `method` diagnostic; naive edge-collapse fallback).
+  - `src/bevelRegions.ts` — face iso-t region decomposition for lit-bevel
+    (band strips, roof panels, per-island interiors).
   - `src/litBevelShading.ts` — analytic Phong stop computation (new).
 
 Note: `src/distanceTransform` was referenced in earlier planning docs but
