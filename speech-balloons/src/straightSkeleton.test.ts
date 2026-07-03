@@ -212,6 +212,32 @@ describe('computeStraightSkeleton — concave (split events)', () => {
     expect(hasPoint(skel, 2, pinchX, 50)).toBe(true);
   });
 
+  it('two tails on one edge: multi-phantom null-ring pairing partitions exactly', () => {
+    const twoTails: Polygon = [
+      { x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 100 },
+      { x: 320, y: 100 }, { x: 300, y: 140 }, { x: 290, y: 100 },
+      { x: 120, y: 100 }, { x: 100, y: 140 }, { x: 90, y: 100 },
+      { x: 0, y: 100 },
+    ];
+    const skel = computeStraightSkeleton(twoTails);
+    expect(skel.method).toBe('slav');
+    expect(facesArea(skel)).toBeCloseTo(polygonArea(twoTails), 0);
+    assertFaceInvariants(skel, twoTails);
+  });
+
+  it('symmetric opposing notches: vertex event where two reflex fronts meet', () => {
+    // 200×100 rect with matching 20-deep notches centered on top and bottom.
+    const opposing: Polygon = [
+      { x: 0, y: 0 }, { x: 90, y: 0 }, { x: 100, y: 20 }, { x: 110, y: 0 },
+      { x: 200, y: 0 }, { x: 200, y: 100 }, { x: 110, y: 100 },
+      { x: 100, y: 80 }, { x: 90, y: 100 }, { x: 0, y: 100 },
+    ];
+    const skel = computeStraightSkeleton(opposing);
+    expect(skel.method).toBe('slav');
+    expect(facesArea(skel)).toBeCloseTo(polygonArea(opposing), 0);
+    assertFaceInvariants(skel, opposing);
+  });
+
   it('self-intersecting input falls back to naive without crashing', () => {
     const bowtie: Polygon = [
       { x: 0, y: 0 }, { x: 100, y: 100 }, { x: 100, y: 0 }, { x: 0, y: 100 },

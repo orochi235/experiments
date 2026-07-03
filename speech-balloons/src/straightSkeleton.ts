@@ -45,10 +45,18 @@ function vertexTrajectory(
   e: { a: Point; n: Point }, f: { a: Point; n: Point },
 ): Traj | null {
   const det = e.n.x * f.n.y - e.n.y * f.n.x;
-  if (Math.abs(det) < 1e-12) {
+  if (Math.abs(det) < 1e-9) {
     // Parallel normals. If they point the same way it's a collinear continuation
     // that survived the pre-filter (near-collinear pair) — return the straight
     // inward trajectory along f's normal. Antiparallel (spike) stays null.
+    // The threshold is widened from the naive 1e-12 on purpose: near-parallel
+    // same-direction pairs with a tiny nonzero det would otherwise take the
+    // "true intersection" branch below, where dividing by that near-zero det
+    // causes catastrophic cancellation (speeds blowing up to ~1e9). The
+    // straight-line fallback here is safe even though it discards the true
+    // (numerically unstable) intersection point, because new vertices are
+    // always re-anchored through their actual birth point afterward
+    // (see trajThrough), so the fallback's anchor error never leaks in.
     if (e.n.x * f.n.x + e.n.y * f.n.y > 0) {
       return { p0: f.a, d: f.n };
     }
@@ -90,6 +98,15 @@ function cleanPolygon(poly: Polygon): Point[] {
 }
 
 const EPS_T = 1e-9;
+// EPS_MATCH is deliberately 100x looser than the 1e-6 px floor used elsewhere
+// to decide whether an arc/vertex-motion is nonzero-length: junction points
+// reach this comparison via several accumulated trajectory evaluations
+// (split events re-anchoring through birth points, chained offset-line
+// intersections), so float error can grow well past 1e-6 by the time two
+// arc endpoints that are "the same junction" are compared here. All of these
+// thresholds — 1e-6, 1e-4, EPS_T, EPS_DENOM below — are absolute px/dimensionless
+// constants, not scaled to input size; they're only valid at the roughly
+// 10–1000 px rim scale this lab's balloons operate at.
 const EPS_MATCH = 1e-4; // px — junction identity when chaining arcs into faces
 
 interface OrigEdge { index: number; a: Point; n: Point; u: Point }
@@ -189,6 +206,7 @@ function slavSkeleton(pts: Point[]): Skeleton {
         aT: t, aP: pv, bT: t, bP: pw,
         left: v.nextEdge.index, right: v.prevEdge.index,
       });
+      ridges.push([pv, pw]);
     }
   };
 
@@ -247,11 +265,13 @@ function slavSkeleton(pts: Point[]): Skeleton {
       if (plus.length !== 1 || minus.length !== 1) {
         throw new Error('skeleton: degenerate ring pairing failed');
       }
+      const pv = { x: o.x + a * uL.x, y: o.y + a * uL.y };
+      const pw = { x: o.x + b * uL.x, y: o.y + b * uL.y };
       arcs.push({
-        aT: t, aP: { x: o.x + a * uL.x, y: o.y + a * uL.y },
-        bT: t, bP: { x: o.x + b * uL.x, y: o.y + b * uL.y },
+        aT: t, aP: pv, bT: t, bP: pw,
         left: plus[0]!.edge, right: minus[0]!.edge,
       });
+      ridges.push([pv, pw]);
     }
     return true;
   };
@@ -274,6 +294,10 @@ function slavSkeleton(pts: Point[]): Skeleton {
     }
     return null;
   };
+
+  // denom above is a dimensionless (unit-normal-dot-product) quantity, unlike
+  // the px-scale thresholds elsewhere, so it gets its own epsilon.
+  const EPS_DENOM = 1e-9;
 
   const MAX_EVENTS = 8 * n;
   for (let ev = 0; ; ev++) {
@@ -322,7 +346,7 @@ function slavSkeleton(pts: Point[]): Skeleton {
         if (e === v.prevEdge || e === v.nextEdge) continue;
         // Reflex bisector meets e's offset line when (p(t) − a)·n = t.
         const denom = 1 - (v.traj.d.x * e.n.x + v.traj.d.y * e.n.y);
-        if (denom <= EPS_T) continue;
+        if (denom <= EPS_DENOM) continue;
         const num = (v.traj.p0.x - e.a.x) * e.n.x + (v.traj.p0.y - e.a.y) * e.n.y;
         const tc = num / denom;
         if (tc < tNow - EPS_T || tc < v.birthT - EPS_T) continue;
@@ -405,6 +429,11 @@ function slavSkeleton(pts: Point[]): Skeleton {
       cur = step.p;
     }
     if (!closed) throw new Error(`skeleton: face ${e.index} failed to chain`);
+    for (const c of mine) {
+      if (!used.has(c) && Math.hypot(c.aP.x - c.bP.x, c.aP.y - c.bP.y) > EPS_MATCH) {
+        throw new Error(`skeleton: face ${e.index} left arcs unconsumed`);
+      }
+    }
     const tDeath = outline.reduce((m, fp) => Math.max(m, fp.t), 0);
     faces.push({ edgeIndex: e.index, n: e.n, outline, tDeath });
   }
