@@ -2,11 +2,14 @@
 // first simplified by turning-angle tolerance (dense sampler output → a
 // moderate vertex count; "corner fans" emerge as runs of short edges whose
 // azimuths step by ≤ cornerStep). The straight skeleton of the simplified rim
-// then yields one cell per edge, which is cut at the bevel seam into a band
-// strip and (optionally) a roof panel.
+// then yields one face per edge, which is clipped at the bevel seam (an iso-t
+// line, since t is affine within a face) into a band strip and (optionally) a
+// roof panel. The interior beyond the seam is assembled from the per-face
+// "above" pieces via a clipper union, which naturally dissolves shared seams
+// into one ring per disjoint island.
 import type { Point, Polygon } from './clipping';
-import { computeStraightSkeleton, type TrajPoint } from './straightSkeleton';
-type Cell = { edgeIndex: number; n: Point; left: TrajPoint[]; right: TrajPoint[]; tDeath: number };
+import { unionPolygons } from './clipping';
+import { computeStraightSkeleton, type FacePoint } from './straightSkeleton';
 
 function angleDiff(a: number, b: number): number {
   let d = a - b;
@@ -68,33 +71,56 @@ export interface BuildRegionsResult {
   ridges: Array<[Point, Point]>;   // for debug overlays
 }
 
-// Boundary points with t ≤ tCut, plus an interpolated point exactly at tCut.
-function cutTraj(traj: TrajPoint[], tCut: number): TrajPoint[] {
-  const out: TrajPoint[] = [];
-  for (let i = 0; i < traj.length; i++) {
-    const tp = traj[i]!;
-    if (tp.t <= tCut + 1e-9) { out.push(tp); continue; }
-    const prev = traj[i - 1]!;
-    const u = (tCut - prev.t) / (tp.t - prev.t);
-    out.push({
-      t: tCut,
-      p: { x: prev.p.x + (tp.p.x - prev.p.x) * u, y: prev.p.y + (tp.p.y - prev.p.y) * u },
-    });
-    break;
+const EPS_T = 1e-9;
+
+// Clip a face outline against t ≤ b ('below') or t ≥ b ('above'). t is affine
+// within a face, so the cut is a straight line and linear interpolation along
+// boundary segments is exact. Sutherland–Hodgman: a cut that would produce
+// multiple components yields zero-width bridges along the seam, which render
+// identically (same paint, nonzero fill rule).
+function clipFace(outline: FacePoint[], b: number, side: 'below' | 'above'): FacePoint[] {
+  const keep = (t: number) => (side === 'below' ? t <= b + EPS_T : t >= b - EPS_T);
+  const out: FacePoint[] = [];
+  for (let i = 0; i < outline.length; i++) {
+    const p = outline[i]!;
+    const q = outline[(i + 1) % outline.length]!;
+    const pin = keep(p.t);
+    if (pin) out.push(p);
+    if (pin !== keep(q.t)) {
+      const u = (b - p.t) / (q.t - p.t);
+      out.push({
+        t: b,
+        p: { x: p.p.x + (q.p.x - p.p.x) * u, y: p.p.y + (q.p.y - p.p.y) * u },
+      });
+    }
   }
-  return out;
+  return out.filter((fp, i) => {
+    if (i === 0) return true;
+    const prev = out[i - 1]!;
+    return Math.hypot(fp.p.x - prev.p.x, fp.p.y - prev.p.y) > 1e-6;
+  });
 }
 
-function rangeTraj(traj: TrajPoint[], t0: number, t1: number): TrajPoint[] {
-  const upper = cutTraj(traj, t1);
-  const head = cutTraj(traj, t0);
-  const start = head[head.length - 1]!;
-  return [start, ...upper.filter((tp) => tp.t > t0 + 1e-9)];
+function ringArea(poly: Polygon): number {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i]!, q = poly[(i + 1) % poly.length]!;
+    a += p.x * q.y - q.x * p.y;
+  }
+  return Math.abs(a) / 2;
 }
 
-// left ascending then right descending: closes along the rim edge (or seam).
-const ring = (left: TrajPoint[], right: TrajPoint[]): Polygon =>
-  [...left.map((tp) => tp.p), ...right.map((tp) => tp.p).reverse()];
+function pointInPolygon(p: Point, poly: Polygon): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]!, b = poly[j]!;
+    if (a.y > p.y !== b.y > p.y
+      && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
 
 export function buildRegions(opts: {
   rim: Polygon;
@@ -104,86 +130,102 @@ export function buildRegions(opts: {
 }): BuildRegionsResult {
   const rim = simplifyRim(opts.rim, opts.cornerStepDeg);
   const skel = computeStraightSkeleton(rim);
-  // TEMPORARY (removed in Task 2): rebuild two-chain cells from face outlines.
-  const cells: Cell[] = skel.faces.map((f) => {
-    // outline = [A, B, ...right ascending..., ...left descending...]; find the
-    // apex (max t) index to split back into chains.
-    let apex = 2;
-    for (let i = 2; i < f.outline.length; i++) {
-      if (f.outline[i]!.t > f.outline[apex]!.t) apex = i;
-    }
-    return {
-      edgeIndex: f.edgeIndex,
-      n: f.n,
-      left: [f.outline[0]!, ...f.outline.slice(apex).reverse()],
-      right: [f.outline[1]!, ...f.outline.slice(2, apex + 1)],
-      tDeath: f.tDeath,
-    };
-  });
   const tMax = Math.max(skel.tMax, 1e-6);
   const b = Math.min(Math.max(opts.bevelWidthPx, 0.5), tMax * 0.999);
   const xb = b / tMax;
   const regions: Region[] = [];
-  const innerRing: Point[] = [];
+  const abovePieces: Polygon[] = [];
 
-  for (const cell of cells) {
-    if (cell.left.length < 2 || cell.right.length < 2) continue; // degenerate
-    const stripEnd = Math.min(b, cell.tDeath);
-    const leftCut = cutTraj(cell.left, stripEnd);
-    const rightCut = cutTraj(cell.right, stripEnd);
-    const outline = ring(leftCut, rightCut);
-    if (outline.length < 3) continue;
-    const a = leftCut[0]!.p, c = rightCut[0]!.p;
-    const mid = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
-    const azimuthDeg = (Math.atan2(-cell.n.y, -cell.n.x) * 180) / Math.PI;
-    regions.push({
-      kind: 'strip', outline, azimuthDeg,
-      x0: 0, x1: stripEnd / tMax,
-      frame: {
-        kind: 'linear', from: mid,
-        to: { x: mid.x + cell.n.x * stripEnd, y: mid.y + cell.n.y * stripEnd },
-      },
-    });
-    innerRing.push(leftCut[leftCut.length - 1]!.p);
+  for (const face of skel.faces) {
+    if (face.outline.length < 3) continue;
+    const rimMid = {
+      x: (face.outline[0]!.p.x + face.outline[1]!.p.x) / 2,
+      y: (face.outline[0]!.p.y + face.outline[1]!.p.y) / 2,
+    };
+    const azimuthDeg = (Math.atan2(-face.n.y, -face.n.x) * 180) / Math.PI;
+    const stripEnd = Math.min(b, face.tDeath);
+
+    const strip = clipFace(face.outline, stripEnd, 'below');
+    if (strip.length >= 3) {
+      regions.push({
+        kind: 'strip',
+        outline: strip.map((fp) => fp.p),
+        azimuthDeg,
+        x0: 0,
+        x1: stripEnd / tMax,
+        frame: {
+          kind: 'linear',
+          from: rimMid,
+          to: { x: rimMid.x + face.n.x * stripEnd, y: rimMid.y + face.n.y * stripEnd },
+        },
+      });
+    }
 
     // Sliver guard: a panel shallower than half a pixel is the capped-b case
     // (bevelWidth ≥ total collapse) — render it as strip-only.
-    if (opts.interior === 'roof-panels' && cell.tDeath > b + 0.5) {
-      const leftHi = rangeTraj(cell.left, b, cell.tDeath);
-      const rightHi = rangeTraj(cell.right, b, cell.tDeath);
-      const panelOutline = ring(leftHi, rightHi);
-      if (panelOutline.length >= 3) {
-        const seamMid = {
-          x: (leftHi[0]!.p.x + rightHi[0]!.p.x) / 2,
-          y: (leftHi[0]!.p.y + rightHi[0]!.p.y) / 2,
-        };
-        const depth = cell.tDeath - b;
-        regions.push({
-          kind: 'panel', outline: panelOutline, azimuthDeg,
-          x0: xb, x1: cell.tDeath / tMax,
-          frame: {
-            kind: 'linear', from: seamMid,
-            to: { x: seamMid.x + cell.n.x * depth, y: seamMid.y + cell.n.y * depth },
-          },
-        });
+    if (face.tDeath > b + 0.5) {
+      const above = clipFace(face.outline, b, 'above');
+      if (above.length >= 3) {
+        abovePieces.push(above.map((fp) => fp.p));
+        if (opts.interior === 'roof-panels') {
+          const seamMid = { x: rimMid.x + face.n.x * b, y: rimMid.y + face.n.y * b };
+          const depth = face.tDeath - b;
+          regions.push({
+            kind: 'panel',
+            outline: above.map((fp) => fp.p),
+            azimuthDeg,
+            x0: xb,
+            x1: face.tDeath / tMax,
+            frame: {
+              kind: 'linear',
+              from: seamMid,
+              to: { x: seamMid.x + face.n.x * depth, y: seamMid.y + face.n.y * depth },
+            },
+          });
+        }
       }
     }
   }
 
-  if (innerRing.length >= 3 && opts.interior !== 'roof-panels' && b < tMax * 0.99) {
-    const cx = innerRing.reduce((s, p) => s + p.x, 0) / innerRing.length;
-    const cy = innerRing.reduce((s, p) => s + p.y, 0) / innerRing.length;
-    if (opts.interior === 'dome-blob') {
-      regions.push({
-        kind: 'blob', outline: innerRing, azimuthDeg: 0,
-        x0: 1, x1: xb, // radial: offset 0 at center (x=1) → offset 1 at seam (x_b)
-        frame: { kind: 'radial', center: { x: cx, y: cy }, radius: tMax - b },
-      });
-    } else {
-      regions.push({
-        kind: 'flat', outline: innerRing, azimuthDeg: 0,
-        x0: 1, x1: 1, frame: { kind: 'solid' },
-      });
+  // Interior islands: the region beyond the seam can be several disjoint
+  // pieces (a tail pinches off from the body via a split event). Union the
+  // per-face above-pieces with clipper — piece edges coincide along shared
+  // skeleton arcs, so the union dissolves them into per-island loops.
+  if (opts.interior !== 'roof-panels' && b < tMax * 0.99 && abovePieces.length > 0) {
+    const islands = unionPolygons(abovePieces);
+    for (const island of islands) {
+      if (island.length < 3 || ringArea(island) < 1) continue;
+      // Island plateau: centroid of the deepest skeleton points inside the
+      // island (an elongated body collapses to a ridge segment, not a point).
+      let tIsland = 0;
+      for (const f of skel.faces) {
+        for (const fp of f.outline) {
+          if (fp.t > tIsland + 1e-6 && pointInPolygon(fp.p, island)) tIsland = fp.t;
+        }
+      }
+      if (tIsland <= b) continue;
+      let cx = 0, cy = 0, cn = 0;
+      for (const f of skel.faces) {
+        for (const fp of f.outline) {
+          if (fp.t >= tIsland - 1e-6 && pointInPolygon(fp.p, island)) {
+            cx += fp.p.x; cy += fp.p.y; cn++;
+          }
+        }
+      }
+      if (cn === 0) continue;
+      const center = { x: cx / cn, y: cy / cn };
+      if (opts.interior === 'dome-blob') {
+        regions.push({
+          kind: 'blob', outline: island, azimuthDeg: 0,
+          x0: tIsland / tMax, x1: xb,
+          frame: { kind: 'radial', center, radius: Math.max(tIsland - b, 1e-6) },
+        });
+      } else {
+        regions.push({
+          kind: 'flat', outline: island, azimuthDeg: 0,
+          x0: tIsland / tMax, x1: tIsland / tMax, frame: { kind: 'solid' },
+        });
+      }
     }
   }
 

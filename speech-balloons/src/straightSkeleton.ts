@@ -11,9 +11,6 @@ import type { Point, Polygon } from './clipping';
 
 export interface FacePoint { t: number; p: Point }
 
-/** @deprecated Task-1 bridge for bevelRegions' chain cutters; deleted in Task 2. */
-export type TrajPoint = FacePoint;
-
 export interface SkeletonFace {
   edgeIndex: number;    // input edge (vertex i → i+1) that sweeps this face
   n: Point;             // unit inward normal of that edge
@@ -32,8 +29,8 @@ export interface Skeleton {
 interface SkeletonCell {
   edgeIndex: number;
   n: Point;
-  left: TrajPoint[];
-  right: TrajPoint[];
+  left: FacePoint[];
+  right: FacePoint[];
   tDeath: number;
 }
 
