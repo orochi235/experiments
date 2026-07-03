@@ -73,32 +73,71 @@ export interface BuildRegionsResult {
 
 const EPS_T = 1e-9;
 
-// Clip a face outline against t ≤ b ('below') or t ≥ b ('above'). t is affine
-// within a face, so the cut is a straight line and linear interpolation along
-// boundary segments is exact. Sutherland–Hodgman: a cut that would produce
-// multiple components yields zero-width bridges along the seam, which render
-// identically (same paint, nonzero fill rule).
-function clipFace(outline: FacePoint[], b: number, side: 'below' | 'above'): FacePoint[] {
-  const keep = (t: number) => (side === 'below' ? t <= b + EPS_T : t >= b - EPS_T);
+function crossingAt(p: FacePoint, q: FacePoint, b: number): FacePoint {
+  const u = Math.min(1, Math.max(0, (b - p.t) / (q.t - p.t)));
+  return {
+    t: b,
+    p: { x: p.p.x + (q.p.x - p.p.x) * u, y: p.p.y + (q.p.y - p.p.y) * u },
+  };
+}
+
+// Drop consecutive duplicates, including the wrap-around pair.
+function dedupeRing(ring: FacePoint[]): FacePoint[] {
+  const out = ring.filter((fp, i) => {
+    if (i === 0) return true;
+    const prev = ring[i - 1]!;
+    return Math.hypot(fp.p.x - prev.p.x, fp.p.y - prev.p.y) > 1e-6;
+  });
+  while (out.length > 1) {
+    const first = out[0]!, last = out[out.length - 1]!;
+    if (Math.hypot(first.p.x - last.p.x, first.p.y - last.p.y) > 1e-6) break;
+    out.pop();
+  }
+  return out;
+}
+
+// Clip a face outline against t ≤ b. t is affine within a face, so the cut is
+// a straight line and linear interpolation along boundary segments is exact.
+// The below-region of a face is always connected (it contains the whole rim
+// edge), so a single Sutherland–Hodgman ring is safe here.
+function clipFaceBelow(outline: FacePoint[], b: number): FacePoint[] {
+  const keep = (t: number) => t <= b + EPS_T;
   const out: FacePoint[] = [];
   for (let i = 0; i < outline.length; i++) {
     const p = outline[i]!;
     const q = outline[(i + 1) % outline.length]!;
     const pin = keep(p.t);
     if (pin) out.push(p);
-    if (pin !== keep(q.t)) {
-      const u = (b - p.t) / (q.t - p.t);
-      out.push({
-        t: b,
-        p: { x: p.p.x + (q.p.x - p.p.x) * u, y: p.p.y + (q.p.y - p.p.y) * u },
-      });
-    }
+    if (pin !== keep(q.t)) out.push(crossingAt(p, q, b));
   }
-  return out.filter((fp, i) => {
-    if (i === 0) return true;
-    const prev = out[i - 1]!;
-    return Math.hypot(fp.p.x - prev.p.x, fp.p.y - prev.p.y) > 1e-6;
-  });
+  return dedupeRing(out);
+}
+
+// Pieces of a face with t ≥ b. Each connected component of the above-region
+// meets the face boundary in exactly one maximal run of kept vertices, closed
+// by a single seam chord — so one ring per run, no zero-width bridges (which
+// the renderer's 1px same-paint stroke would otherwise trace as visible lines).
+export function clipFaceAbovePieces(outline: FacePoint[], b: number): FacePoint[][] {
+  const n = outline.length;
+  const kept = outline.map((fp) => fp.t >= b - EPS_T);
+  if (kept.every(Boolean)) return [dedupeRing(outline)];
+  const pieces: FacePoint[][] = [];
+  // Walk from each below→above transition to the matching above→below one.
+  for (let i = 0; i < n; i++) {
+    if (kept[i] || !kept[(i + 1) % n]) continue;
+    const piece: FacePoint[] = [];
+    // Entering crossing on edge i → i+1.
+    piece.push(crossingAt(outline[i]!, outline[(i + 1) % n]!, b));
+    let j = (i + 1) % n;
+    while (kept[j]) {
+      piece.push(outline[j]!);
+      j = (j + 1) % n;
+    }
+    // Leaving crossing on edge j-1 → j.
+    piece.push(crossingAt(outline[(j - 1 + n) % n]!, outline[j]!, b));
+    pieces.push(dedupeRing(piece));
+  }
+  return pieces;
 }
 
 function ringArea(poly: Polygon): number {
@@ -135,6 +174,9 @@ export function buildRegions(opts: {
   const xb = b / tMax;
   const regions: Region[] = [];
   const abovePieces: Polygon[] = [];
+  // Above-pieces are wasted work unless roof-panels needs them directly, or
+  // islands will consume them (skipped entirely once b caps out near tMax).
+  const needsAbove = opts.interior === 'roof-panels' || b < tMax * 0.99;
 
   for (const face of skel.faces) {
     if (face.outline.length < 3) continue;
@@ -145,7 +187,7 @@ export function buildRegions(opts: {
     const azimuthDeg = (Math.atan2(-face.n.y, -face.n.x) * 180) / Math.PI;
     const stripEnd = Math.min(b, face.tDeath);
 
-    const strip = clipFace(face.outline, stripEnd, 'below');
+    const strip = clipFaceBelow(face.outline, stripEnd);
     if (strip.length >= 3) {
       regions.push({
         kind: 'strip',
@@ -163,11 +205,13 @@ export function buildRegions(opts: {
 
     // Sliver guard: a panel shallower than half a pixel is the capped-b case
     // (bevelWidth ≥ total collapse) — render it as strip-only.
-    if (face.tDeath > b + 0.5) {
-      const above = clipFace(face.outline, b, 'above');
-      if (above.length >= 3) {
-        abovePieces.push(above.map((fp) => fp.p));
+    if (face.tDeath > b + 0.5 && needsAbove) {
+      const pieces = clipFaceAbovePieces(face.outline, b);
+      for (const above of pieces) {
+        if (above.length < 3) continue;
         if (opts.interior === 'roof-panels') {
+          // Same azimuth/x0/x1/frame for every piece of a face — the frame is
+          // anchored to the face's seam line, which is exact for every piece.
           const seamMid = { x: rimMid.x + face.n.x * b, y: rimMid.y + face.n.y * b };
           const depth = face.tDeath - b;
           regions.push({
@@ -182,6 +226,8 @@ export function buildRegions(opts: {
               to: { x: seamMid.x + face.n.x * depth, y: seamMid.y + face.n.y * depth },
             },
           });
+        } else {
+          abovePieces.push(above.map((fp) => fp.p));
         }
       }
     }

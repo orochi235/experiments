@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { simplifyRim } from './bevelRegions';
+import { simplifyRim, clipFaceAbovePieces } from './bevelRegions';
 import type { Polygon } from './clipping';
 
 function circlePoly(n: number, r = 50, cx = 100, cy = 100): Polygon {
@@ -109,5 +109,38 @@ describe('buildRegions', () => {
     if (top.frame.kind === 'linear') {
       expect(top.frame.to.y).toBeGreaterThan(top.frame.from.y); // inward = +y for the top edge
     }
+  });
+});
+
+describe('clipFaceAbovePieces', () => {
+  // Synthetic W-shaped face: boundary dips below the seam in the middle,
+  // so {t ≥ b} is two components. (Shape: rim edge at t=0 from (0,0)→(100,0),
+  // then up the right side to t=30, across with a dip to t=10 at x=50, and
+  // back down the left side.)
+  const outline = [
+    { t: 0, p: { x: 0, y: 0 } },
+    { t: 0, p: { x: 100, y: 0 } },
+    { t: 30, p: { x: 90, y: 30 } },
+    { t: 10, p: { x: 50, y: 10 } },
+    { t: 30, p: { x: 10, y: 30 } },
+  ];
+
+  it('splits a dipping face into one ring per component', () => {
+    const pieces = clipFaceAbovePieces(outline, 20);
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) {
+      expect(piece.length).toBeGreaterThanOrEqual(3);
+      // Every crossing sits exactly on the seam.
+      for (const fp of piece) expect(fp.t).toBeGreaterThanOrEqual(20 - 1e-9);
+    }
+  });
+
+  it('returns a single ring when nothing dips below the seam', () => {
+    const pieces = clipFaceAbovePieces(outline, 5);
+    expect(pieces).toHaveLength(1);
+  });
+
+  it('returns no pieces when the whole face is below', () => {
+    expect(clipFaceAbovePieces(outline, 40)).toHaveLength(0);
   });
 });
