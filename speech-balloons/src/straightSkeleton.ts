@@ -1,12 +1,15 @@
-// Straight skeleton of a simple polygon via wavefront simulation, edge-collapse
-// events only. Under uniform inset, each wavefront vertex travels along its
-// angle bisector — a linear trajectory p(t) = p0 + t·d obtained by intersecting
-// the two adjacent edges' offset lines. An edge dies when its two endpoint
-// trajectories meet; its neighbors then become adjacent and spawn a new vertex.
+// Straight skeleton of a simple polygon via wavefront simulation. Under
+// uniform inset, each wavefront vertex travels along its angle bisector — a
+// linear trajectory p(t) = p0 + t·d obtained by intersecting the two adjacent
+// edges' offset lines. An edge dies when its two endpoint trajectories meet
+// (edge event); a reflex vertex's bisector can also hit a non-adjacent
+// wavefront edge, splitting the wavefront in two (split event).
 //
-// Reflex (concave) vertices are NOT split-event-correct: their bisectors are
-// traced naively, matching the project's miter-offset behavior. Per the
-// 2026-06-09 spec, concave rims render degraded-but-stable in v1.
+// Primary engine: SLAV (list of active vertices) with both event kinds,
+// recomputing candidate events from scratch after every processed event —
+// the polygons are small, and recomputation eliminates stale-queue bugs.
+// Fallback: the v1 naive edge-collapse-only engine, kept for inputs the SLAV
+// engine rejects (self-intersections, stalled wavefronts, budget overruns).
 import type { Point, Polygon } from './clipping';
 
 export interface FacePoint { t: number; p: Point }
@@ -84,6 +87,329 @@ function cleanPolygon(poly: Polygon): Point[] {
     const dot = ux0 * ux1 + uy0 * uy1;
     return !(cross < 1e-6 && dot > 0);
   });
+}
+
+const EPS_T = 1e-9;
+const EPS_MATCH = 1e-4; // px — junction identity when chaining arcs into faces
+
+interface OrigEdge { index: number; a: Point; n: Point; u: Point }
+
+interface WfVertex {
+  traj: Traj | null;      // null = degenerate (antiparallel neighbors); can't move
+  birthT: number;
+  birthP: Point;
+  prevEdge: OrigEdge;     // wavefront edge entering this vertex
+  nextEdge: OrigEdge;     // wavefront edge leaving this vertex
+  prev: WfVertex;
+  next: WfVertex;
+}
+
+// A vertex-lifetime segment. Each arc bounds exactly two faces: the face of
+// the edge on its left (nextEdge) and on its right (prevEdge).
+interface Arc { aT: number; aP: Point; bT: number; bP: Point; left: number; right: number }
+
+function windingSign(pts: Point[]): number {
+  let area2 = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!, q = pts[(i + 1) % pts.length]!;
+    area2 += p.x * q.y - q.x * p.y;
+  }
+  return area2 > 0 ? 1 : -1;
+}
+
+function isReflex(v: WfVertex, sign: number): boolean {
+  const cross = v.prevEdge.u.x * v.nextEdge.u.y - v.prevEdge.u.y * v.nextEdge.u.x;
+  return cross * sign < -1e-12;
+}
+
+function slavSkeleton(pts: Point[]): Skeleton {
+  const n = pts.length;
+  const sign = windingSign(pts);
+  const edges: OrigEdge[] = pts.map((a, i) => {
+    const b = pts[(i + 1) % n]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+    return { index: i, a, n: { x: -u.y * sign, y: u.x * sign }, u };
+  });
+
+  const initial: WfVertex[] = pts.map((p, i) => ({
+    traj: null, birthT: 0, birthP: p,
+    prevEdge: edges[(i - 1 + n) % n]!, nextEdge: edges[i]!,
+    prev: null as unknown as WfVertex, next: null as unknown as WfVertex,
+  }));
+  for (let i = 0; i < n; i++) {
+    initial[i]!.prev = initial[(i - 1 + n) % n]!;
+    initial[i]!.next = initial[(i + 1) % n]!;
+    initial[i]!.traj = vertexTrajectory(initial[i]!.prevEdge, initial[i]!.nextEdge);
+  }
+
+  const alive = new Set<WfVertex>(initial);
+  const arcs: Arc[] = [];
+  const ridges: Array<[Point, Point]> = [];
+  let tNow = 0;
+
+  const posAt = (v: WfVertex, t: number): Point => (v.traj ? at(v.traj, t) : v.birthP);
+
+  // Trajectory for a vertex born at p at time t between edges e and f. A true
+  // bisector trajectory already passes through p (both offset lines meet
+  // there); the parallel-same-direction fallback in vertexTrajectory anchors
+  // at f.a instead — right direction, wrong point — so re-anchor through p.
+  const trajThrough = (e: OrigEdge, f: OrigEdge, p: Point, t: number): Traj | null => {
+    const tr = vertexTrajectory(e, f);
+    if (!tr) return null;
+    const q = at(tr, t);
+    if (Math.hypot(q.x - p.x, q.y - p.y) > 1e-6) {
+      return { p0: { x: p.x - tr.d.x * t, y: p.y - tr.d.y * t }, d: tr.d };
+    }
+    return tr;
+  };
+
+  const die = (v: WfVertex, t: number, p: Point) => {
+    alive.delete(v);
+    if (Math.hypot(p.x - v.birthP.x, p.y - v.birthP.y) > 1e-6) {
+      arcs.push({
+        aT: v.birthT, aP: v.birthP, bT: t, bP: p,
+        left: v.nextEdge.index, right: v.prevEdge.index,
+      });
+      ridges.push([v.birthP, p]);
+    }
+  };
+
+  // Retire a 2-vertex LAV: the wavefront between two vertices is a zero-area
+  // 2-gon that dies instantly. Both vertices die at their current positions,
+  // and the coincident final wavefront segment becomes a closing arc between
+  // the two remaining faces (this is the ridge segment of e.g. a rectangle).
+  const retire2 = (v: WfVertex, t: number) => {
+    const w = v.next;
+    const pv = posAt(v, t), pw = posAt(w, t);
+    die(v, t, pv);
+    die(w, t, pw);
+    if (Math.hypot(pv.x - pw.x, pv.y - pw.y) > 1e-6) {
+      arcs.push({
+        aT: t, aP: pv, bT: t, bP: pw,
+        left: v.nextEdge.index, right: v.prevEdge.index,
+      });
+    }
+  };
+
+  // A LAV containing a null-trajectory vertex is pinned: antiparallel fronts
+  // have fused, which only happens once that LAV has collapsed onto a line.
+  // Retire it in place — every vertex dies at its position, and overlapping
+  // opposite-facing front intervals pair into closing arcs. This generalizes
+  // retire2's closing arc to rings whose sides are subdivided by fused
+  // parallel fronts (e.g. a body pinched by a tail: the bottom front is two
+  // collinear edges' fronts joined by a ridge-carrying phantom vertex).
+  // Returns false if the ring is not yet collinear (same-t events pending).
+  const retireNullRing = (v0: WfVertex, t: number): boolean => {
+    const ring: WfVertex[] = [];
+    for (let v = v0; ; v = v.next) { ring.push(v); if (v.next === v0) break; }
+    const pos = ring.map((v) => posAt(v, t));
+    // Line through the two most distant positions.
+    let iA = 0, iB = 0, dMax = 0;
+    for (let i = 0; i < pos.length; i++) {
+      for (let j = i + 1; j < pos.length; j++) {
+        const d = Math.hypot(pos[j]!.x - pos[i]!.x, pos[j]!.y - pos[i]!.y);
+        if (d > dMax) { dMax = d; iA = i; iB = j; }
+      }
+    }
+    if (dMax < 1e-6) { // point collapse
+      for (let i = 0; i < ring.length; i++) die(ring[i]!, t, pos[i]!);
+      return true;
+    }
+    const uL = { x: (pos[iB]!.x - pos[iA]!.x) / dMax, y: (pos[iB]!.y - pos[iA]!.y) / dMax };
+    const nL = { x: -uL.y, y: uL.x };
+    const o = pos[iA]!;
+    if (pos.some((p) => Math.abs((p.x - o.x) * nL.x + (p.y - o.y) * nL.y) > 1e-6)) return false;
+
+    for (let i = 0; i < ring.length; i++) die(ring[i]!, t, pos[i]!);
+
+    // Closing arcs: cut the line at every front endpoint; each elementary
+    // interval must be covered by exactly one front from each side.
+    const sOf = (p: Point) => (p.x - o.x) * uL.x + (p.y - o.y) * uL.y;
+    interface Span { lo: number; hi: number; side: number; edge: number }
+    const spans: Span[] = [];
+    for (let i = 0; i < ring.length; i++) {
+      const sA = sOf(pos[i]!), sB = sOf(pos[(i + 1) % ring.length]!);
+      if (Math.abs(sB - sA) < 1e-6) continue;
+      const e = ring[i]!.nextEdge;
+      const side = e.n.x * nL.x + e.n.y * nL.y;
+      if (Math.abs(side) < 0.5) throw new Error('skeleton: degenerate ring: skew front');
+      spans.push({ lo: Math.min(sA, sB), hi: Math.max(sA, sB), side: Math.sign(side), edge: e.index });
+    }
+    const cuts = spans.flatMap((sp) => [sp.lo, sp.hi]).sort((a, b) => a - b);
+    for (let k = 0; k + 1 < cuts.length; k++) {
+      const a = cuts[k]!, b = cuts[k + 1]!;
+      if (b - a < 1e-6) continue;
+      const mid = (a + b) / 2;
+      const covers = spans.filter((sp) => sp.lo <= mid && mid <= sp.hi);
+      const plus = covers.filter((sp) => sp.side > 0);
+      const minus = covers.filter((sp) => sp.side < 0);
+      if (plus.length !== 1 || minus.length !== 1) {
+        throw new Error('skeleton: degenerate ring pairing failed');
+      }
+      arcs.push({
+        aT: t, aP: { x: o.x + a * uL.x, y: o.y + a * uL.y },
+        bT: t, bP: { x: o.x + b * uL.x, y: o.y + b * uL.y },
+        left: plus[0]!.edge, right: minus[0]!.edge,
+      });
+    }
+    return true;
+  };
+
+  // Find the alive wavefront segment carried by original edge `e` in v's own
+  // LAV whose offset span at time t contains s. Returns the segment's start
+  // vertex, or null (event invalidated by earlier topology changes).
+  const splitTarget = (v: WfVertex, e: OrigEdge, s: Point, t: number): WfVertex | null => {
+    let cur = v.next;
+    while (cur !== v) {
+      // Null-trajectory endpoints are stationary, not invalid: a segment whose
+      // endpoint came from an antiparallel merge can still be split.
+      if (cur.nextEdge === e && cur.next !== v) {
+        const pa = posAt(cur, t), pb = posAt(cur.next, t);
+        const lo = (s.x - pa.x) * e.u.x + (s.y - pa.y) * e.u.y;
+        const hi = (pb.x - s.x) * e.u.x + (pb.y - s.y) * e.u.y;
+        if (lo > -1e-6 && hi > -1e-6) return cur;
+      }
+      cur = cur.next;
+    }
+    return null;
+  };
+
+  const MAX_EVENTS = 8 * n;
+  for (let ev = 0; ; ev++) {
+    if (ev >= MAX_EVENTS) throw new Error('skeleton: event budget exceeded');
+
+    // Retire every LAV already reduced to ≤ 2 vertices, plus every LAV that
+    // has gone degenerate (collinear ring pinned by a null-trajectory vertex).
+    let retired = true;
+    while (retired) {
+      retired = false;
+      for (const v of alive) {
+        if (v.next === v) { die(v, tNow, posAt(v, tNow)); retired = true; break; }
+        if (v.next.next === v) { retire2(v, tNow); retired = true; break; }
+        if (!v.traj && retireNullRing(v, tNow)) { retired = true; break; }
+      }
+    }
+    if (alive.size === 0) break;
+
+    // --- scan for the earliest event (recomputed from scratch each round) ---
+    let bestT = Infinity;
+    let bestEdgeV: WfVertex | null = null;
+    for (const v of alive) {
+      const w = v.next;
+      if (!v.traj || !w.traj) continue;
+      const u = v.nextEdge.u;
+      const c0 = (w.traj.p0.x - v.traj.p0.x) * u.x + (w.traj.p0.y - v.traj.p0.y) * u.y;
+      const c1 = (w.traj.d.x - v.traj.d.x) * u.x + (w.traj.d.y - v.traj.d.y) * u.y;
+      let tc: number;
+      if (c0 + c1 * tNow < 1e-9 && c1 <= 1e-12) {
+        // Already zero-length and not growing (vertex events leave coincident
+        // pairs whose segment merely translates, c1 = 0): collapse now.
+        tc = tNow;
+      } else {
+        if (c1 >= -1e-12) continue; // not shrinking
+        tc = -c0 / c1;
+        if (tc < tNow - EPS_T) continue;
+        if (tc < Math.max(v.birthT, w.birthT) - EPS_T) continue;
+      }
+      if (tc < bestT - EPS_T) { bestT = tc; bestEdgeV = v; }
+    }
+
+    let bestSplit: { t: number; v: WfVertex; edge: OrigEdge; s: Point } | null = null;
+    for (const v of alive) {
+      if (!v.traj || !isReflex(v, sign)) continue;
+      for (const e of edges) {
+        if (e === v.prevEdge || e === v.nextEdge) continue;
+        // Reflex bisector meets e's offset line when (p(t) − a)·n = t.
+        const denom = 1 - (v.traj.d.x * e.n.x + v.traj.d.y * e.n.y);
+        if (denom <= EPS_T) continue;
+        const num = (v.traj.p0.x - e.a.x) * e.n.x + (v.traj.p0.y - e.a.y) * e.n.y;
+        const tc = num / denom;
+        if (tc < tNow - EPS_T || tc < v.birthT - EPS_T) continue;
+        // Edge events win ties; among splits keep the earliest.
+        if (tc >= bestT - EPS_T) continue;
+        if (bestSplit && tc >= bestSplit.t - EPS_T) continue;
+        const s = at(v.traj, tc);
+        if (!splitTarget(v, e, s, tc)) continue;
+        bestSplit = { t: tc, v, edge: e, s };
+      }
+    }
+
+    if (bestSplit) {
+      tNow = bestSplit.t;
+      const { v, edge, s } = bestSplit;
+      const a = splitTarget(v, edge, s, tNow);
+      if (!a) throw new Error('skeleton: split target vanished');
+      const b = a.next;
+      const prev = v.prev, next = v.next;
+      die(v, tNow, s);
+      // LAV 1: … prev → x → b …   LAV 2: … a → y → next …
+      const x: WfVertex = {
+        traj: trajThrough(v.prevEdge, edge, s, tNow), birthT: tNow, birthP: s,
+        prevEdge: v.prevEdge, nextEdge: edge,
+        prev, next: b,
+      };
+      const y: WfVertex = {
+        traj: trajThrough(edge, v.nextEdge, s, tNow), birthT: tNow, birthP: s,
+        prevEdge: edge, nextEdge: v.nextEdge,
+        prev: a, next,
+      };
+      prev.next = x; b.prev = x;
+      a.next = y; next.prev = y;
+      alive.add(x); alive.add(y);
+    } else if (bestEdgeV) {
+      tNow = bestT;
+      const v = bestEdgeV, w = v.next;
+      const pv = at(v.traj!, tNow), pw = at(w.traj!, tNow);
+      const m = { x: (pv.x + pw.x) / 2, y: (pv.y + pw.y) / 2 };
+      const prev = v.prev, next = w.next;
+      die(v, tNow, m);
+      die(w, tNow, m);
+      const x: WfVertex = {
+        traj: trajThrough(v.prevEdge, w.nextEdge, m, tNow), birthT: tNow, birthP: m,
+        prevEdge: v.prevEdge, nextEdge: w.nextEdge,
+        prev, next,
+      };
+      prev.next = x; next.prev = x;
+      alive.add(x);
+    } else {
+      throw new Error('skeleton: wavefront stalled');
+    }
+  }
+
+  // ---- face reconstruction: chain each edge's arcs from rim end to rim start ----
+  let tMax = 0;
+  for (const arc of arcs) tMax = Math.max(tMax, arc.aT, arc.bT);
+
+  const near = (p: Point, q: Point) => Math.hypot(p.x - q.x, p.y - q.y) < EPS_MATCH;
+
+  const faces: SkeletonFace[] = [];
+  for (const e of edges) {
+    const A = pts[e.index]!;
+    const B = pts[(e.index + 1) % n]!;
+    const mine = arcs.filter((c) => c.left === e.index || c.right === e.index);
+    const used = new Set<Arc>();
+    const outline: FacePoint[] = [{ t: 0, p: A }, { t: 0, p: B }];
+    let cur = B;
+    let closed = false;
+    for (let guard = 0; guard <= mine.length; guard++) {
+      let step: FacePoint | null = null;
+      for (const c of mine) {
+        if (used.has(c)) continue;
+        if (near(c.aP, cur)) { step = { t: c.bT, p: c.bP }; used.add(c); break; }
+        if (near(c.bP, cur)) { step = { t: c.aT, p: c.aP }; used.add(c); break; }
+      }
+      if (!step) break;
+      if (near(step.p, A)) { closed = true; break; }
+      outline.push(step);
+      cur = step.p;
+    }
+    if (!closed) throw new Error(`skeleton: face ${e.index} failed to chain`);
+    const tDeath = outline.reduce((m, fp) => Math.max(m, fp.t), 0);
+    faces.push({ edgeIndex: e.index, n: e.n, outline, tDeath });
+  }
+
+  return { faces, ridges, tMax, method: 'slav' };
 }
 
 function naiveCells(pts: Point[]): { cells: SkeletonCell[]; ridges: Array<[Point, Point]>; tMax: number } {
@@ -238,5 +564,11 @@ function naiveSkeleton(pts: Point[]): Skeleton {
 export function computeStraightSkeleton(poly: Polygon): Skeleton {
   const pts = cleanPolygon(poly);
   if (pts.length < 3) return { faces: [], ridges: [], tMax: 0, method: 'naive' };
-  return naiveSkeleton(pts);
+  try {
+    return slavSkeleton(pts);
+  } catch {
+    // Degraded-but-stable: v1 behavior for inputs the SLAV engine rejects
+    // (self-intersections, stalled wavefronts, budget overruns).
+    return naiveSkeleton(pts);
+  }
 }
