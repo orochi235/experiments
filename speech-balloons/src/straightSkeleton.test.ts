@@ -204,6 +204,12 @@ describe('computeStraightSkeleton — concave (split events)', () => {
     const tail4 = skel.faces.find((f) => f.edgeIndex === 4)!;
     expect(tail3.tDeath).toBeCloseTo(tPinch, 3);
     expect(tail4.tDeath).toBeCloseTo(tPinch, 3);
+    // After the pinch, faces 2 and 5 (the two collinear bottom-edge fronts)
+    // meet along a ridge running straight down the inward normal from the
+    // pinch point (pinchX, 100 − tPinch) until both die against the top
+    // front at t = 50 — pinning the phantom vertex's re-anchored trajectory.
+    const pinchX = 100 + tPinch * (Math.sqrt(17) - Math.sqrt(5)) / 6;
+    expect(hasPoint(skel, 2, pinchX, 50)).toBe(true);
   });
 
   it('self-intersecting input falls back to naive without crashing', () => {
