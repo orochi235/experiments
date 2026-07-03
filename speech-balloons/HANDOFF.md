@@ -1,6 +1,6 @@
 # Speech Balloon Lab — handoff
 
-Branch: `concave-rim`.
+Branch: `main` (the `concave-rim` feature branch merged 2026-07-03 and was deleted).
 
 ## Recent work: concave-rim correctness (split-event straight skeleton) — DONE, browser-verified
 
