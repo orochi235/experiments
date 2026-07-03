@@ -6,6 +6,7 @@
 // strip and (optionally) a roof panel.
 import type { Point, Polygon } from './clipping';
 import { computeStraightSkeleton, type TrajPoint } from './straightSkeleton';
+type Cell = { edgeIndex: number; n: Point; left: TrajPoint[]; right: TrajPoint[]; tDeath: number };
 
 function angleDiff(a: number, b: number): number {
   let d = a - b;
@@ -103,13 +104,29 @@ export function buildRegions(opts: {
 }): BuildRegionsResult {
   const rim = simplifyRim(opts.rim, opts.cornerStepDeg);
   const skel = computeStraightSkeleton(rim);
+  // TEMPORARY (removed in Task 2): rebuild two-chain cells from face outlines.
+  const cells: Cell[] = skel.faces.map((f) => {
+    // outline = [A, B, ...right ascending..., ...left descending...]; find the
+    // apex (max t) index to split back into chains.
+    let apex = 2;
+    for (let i = 2; i < f.outline.length; i++) {
+      if (f.outline[i]!.t > f.outline[apex]!.t) apex = i;
+    }
+    return {
+      edgeIndex: f.edgeIndex,
+      n: f.n,
+      left: [f.outline[0]!, ...f.outline.slice(apex).reverse()],
+      right: [f.outline[1]!, ...f.outline.slice(2, apex + 1)],
+      tDeath: f.tDeath,
+    };
+  });
   const tMax = Math.max(skel.tMax, 1e-6);
   const b = Math.min(Math.max(opts.bevelWidthPx, 0.5), tMax * 0.999);
   const xb = b / tMax;
   const regions: Region[] = [];
   const innerRing: Point[] = [];
 
-  for (const cell of skel.cells) {
+  for (const cell of cells) {
     if (cell.left.length < 2 || cell.right.length < 2) continue; // degenerate
     const stripEnd = Math.min(b, cell.tDeath);
     const leftCut = cutTraj(cell.left, stripEnd);

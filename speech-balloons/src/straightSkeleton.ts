@@ -9,20 +9,32 @@
 // 2026-06-09 spec, concave rims render degraded-but-stable in v1.
 import type { Point, Polygon } from './clipping';
 
-export interface TrajPoint { t: number; p: Point }
+export interface FacePoint { t: number; p: Point }
 
-export interface SkeletonCell {
-  edgeIndex: number;   // edge from input vertex i to i+1
-  n: Point;            // unit inward normal of the edge
-  left: TrajPoint[];   // trajectory of the edge's START vertex, t ascending
-  right: TrajPoint[];  // trajectory of the edge's END vertex, t ascending
-  tDeath: number;      // inset at which the edge vanished (== tMax if it survived)
+/** @deprecated Task-1 bridge for bevelRegions' chain cutters; deleted in Task 2. */
+export type TrajPoint = FacePoint;
+
+export interface SkeletonFace {
+  edgeIndex: number;    // input edge (vertex i → i+1) that sweeps this face
+  n: Point;             // unit inward normal of that edge
+  outline: FacePoint[]; // closed ring; [0] = edge start, [1] = edge end (both t=0)
+  tDeath: number;       // max inset on the face
 }
 
 export interface Skeleton {
-  cells: SkeletonCell[];           // one per input edge, input order
+  faces: SkeletonFace[];
   ridges: Array<[Point, Point]>;   // bisector segments, for debug overlays
   tMax: number;                    // inset at which the wavefront fully collapsed
+  method: 'slav' | 'naive';        // diagnostic: which engine produced this
+}
+
+// Internal to the naive engine (and its converter).
+interface SkeletonCell {
+  edgeIndex: number;
+  n: Point;
+  left: TrajPoint[];
+  right: TrajPoint[];
+  tDeath: number;
 }
 
 interface Traj { p0: Point; d: Point }
@@ -52,34 +64,34 @@ function vertexTrajectory(
 
 const at = (tr: Traj, t: number): Point => ({ x: tr.p0.x + tr.d.x * t, y: tr.p0.y + tr.d.y * t });
 
-export function computeStraightSkeleton(poly: Polygon): Skeleton {
-  // Drop zero-length edges, then drop collinear (redundant) vertices: a vertex
-  // whose two incident edges are nearly parallel in the same direction adds no
-  // geometry and its null trajectory breaks cell coverage.
+// Drop zero-length edges, then drop collinear (redundant) vertices: a vertex
+// whose two incident edges are nearly parallel in the same direction adds no
+// geometry and its null trajectory breaks face coverage.
+function cleanPolygon(poly: Polygon): Point[] {
   const rawPts = poly.filter((p, i) => {
     const q = poly[(i + 1) % poly.length]!;
     return Math.hypot(q.x - p.x, q.y - p.y) > 1e-6;
   });
-  const pts = rawPts.filter((p, i) => {
+  return rawPts.filter((p, i) => {
     const m = rawPts.length;
     const prev = rawPts[(i - 1 + m) % m]!;
     const next = rawPts[(i + 1) % m]!;
-    // Unit direction of edge arriving at p (prev→p) and leaving p (p→next).
     const dx0 = p.x - prev.x, dy0 = p.y - prev.y;
     const len0 = Math.hypot(dx0, dy0);
     const dx1 = next.x - p.x, dy1 = next.y - p.y;
     const len1 = Math.hypot(dx1, dy1);
-    if (len0 < 1e-6 || len1 < 1e-6) return true; // keep; zero-len handled above
+    if (len0 < 1e-6 || len1 < 1e-6) return true;
     const ux0 = dx0 / len0, uy0 = dy0 / len0;
     const ux1 = dx1 / len1, uy1 = dy1 / len1;
-    // Cross product of unit directions ≈ 0 and dot > 0 → collinear continuation.
     const cross = Math.abs(ux0 * uy1 - uy0 * ux1);
     const dot = ux0 * ux1 + uy0 * uy1;
     return !(cross < 1e-6 && dot > 0);
   });
+}
+
+function naiveCells(pts: Point[]): { cells: SkeletonCell[]; ridges: Array<[Point, Point]>; tMax: number } {
   const n = pts.length;
-  const empty: Skeleton = { cells: [], ridges: [], tMax: 0 };
-  if (n < 3) return empty;
+  if (n < 3) return { cells: [], ridges: [], tMax: 0 };
 
   // Inward normal from winding (screen coords, y-down).
   let area2 = 0;
@@ -189,4 +201,45 @@ export function computeStraightSkeleton(poly: Polygon): Skeleton {
   }
 
   return { cells, ridges, tMax: tNow };
+}
+
+// Old two-chain cells → face outlines. left runs A→apex ascending, right runs
+// B→apex ascending, so the ring [A, B, ...right minus B..., ...left minus A
+// reversed...] walks the boundary with the rim edge first.
+function facesFromCells(cells: SkeletonCell[]): SkeletonFace[] {
+  const faces: SkeletonFace[] = [];
+  for (const cell of cells) {
+    if (cell.left.length < 1 || cell.right.length < 1) continue;
+    const outline: FacePoint[] = [
+      { t: cell.left[0]!.t, p: cell.left[0]!.p },
+      { t: cell.right[0]!.t, p: cell.right[0]!.p },
+      ...cell.right.slice(1).map((tp) => ({ t: tp.t, p: tp.p })),
+      ...cell.left.slice(1).map((tp) => ({ t: tp.t, p: tp.p })).reverse(),
+    ];
+    // Dedupe consecutive coincident points (apexes often coincide).
+    const ring = outline.filter((fp, i) => {
+      if (i === 0) return true;
+      const prev = outline[i - 1]!;
+      return Math.hypot(fp.p.x - prev.p.x, fp.p.y - prev.p.y) > 1e-6;
+    });
+    if (ring.length < 3) continue;
+    faces.push({
+      edgeIndex: cell.edgeIndex,
+      n: cell.n,
+      outline: ring,
+      tDeath: cell.tDeath,
+    });
+  }
+  return faces;
+}
+
+function naiveSkeleton(pts: Point[]): Skeleton {
+  const { cells, ridges, tMax } = naiveCells(pts);
+  return { faces: facesFromCells(cells), ridges, tMax, method: 'naive' };
+}
+
+export function computeStraightSkeleton(poly: Polygon): Skeleton {
+  const pts = cleanPolygon(poly);
+  if (pts.length < 3) return { faces: [], ridges: [], tMax: 0, method: 'naive' };
+  return naiveSkeleton(pts);
 }

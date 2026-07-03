@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeStraightSkeleton } from './straightSkeleton';
+import { computeStraightSkeleton, type Skeleton } from './straightSkeleton';
 import type { Polygon } from './clipping';
 
 const square: Polygon = [
@@ -19,83 +19,73 @@ function polygonArea(poly: { x: number; y: number }[]): number {
   return Math.abs(a) / 2;
 }
 
-function cellOutline(cell: { left: { p: { x: number; y: number } }[]; right: { p: { x: number; y: number } }[] }) {
-  return [...cell.left.map((tp) => tp.p), ...cell.right.map((tp) => tp.p).reverse()];
+function facesArea(skel: Skeleton): number {
+  return skel.faces.reduce(
+    (s, f) => s + polygonArea(f.outline.map((fp) => fp.p)),
+    0,
+  );
 }
 
-describe('computeStraightSkeleton', () => {
-  it('square: every edge dies at t=50 at the center', () => {
-    const skel = computeStraightSkeleton(square);
-    expect(skel.cells).toHaveLength(4);
-    expect(skel.tMax).toBeCloseTo(50, 4);
-    for (const cell of skel.cells) {
-      expect(cell.tDeath).toBeCloseTo(50, 4);
-      const last = cell.left[cell.left.length - 1]!.p;
-      expect(last.x).toBeCloseTo(50, 3);
-      expect(last.y).toBeCloseTo(50, 3);
+function hasPoint(skel: Skeleton, edgeIndex: number, x: number, y: number): boolean {
+  const f = skel.faces.find((f) => f.edgeIndex === edgeIndex)!;
+  return f.outline.some((fp) => Math.hypot(fp.p.x - x, fp.p.y - y) < 1e-3);
+}
+
+// Shared invariants: rim edge first (two t=0 points), t bounded by tDeath ≤ tMax.
+function assertFaceInvariants(skel: Skeleton): void {
+  for (const f of skel.faces) {
+    expect(f.outline.length).toBeGreaterThanOrEqual(3);
+    expect(f.outline[0]!.t).toBeCloseTo(0, 9);
+    expect(f.outline[1]!.t).toBeCloseTo(0, 9);
+    for (const fp of f.outline) {
+      expect(Number.isFinite(fp.t)).toBe(true);
+      expect(Number.isFinite(fp.p.x)).toBe(true);
+      expect(Number.isFinite(fp.p.y)).toBe(true);
+      expect(fp.t).toBeLessThanOrEqual(f.tDeath + 1e-6);
     }
+    expect(f.tDeath).toBeLessThanOrEqual(skel.tMax + 1e-6);
+  }
+}
+
+describe('computeStraightSkeleton — convex', () => {
+  it('square: every face peaks at t=50 at the center', () => {
+    const skel = computeStraightSkeleton(square);
+    expect(skel.faces).toHaveLength(4);
+    expect(skel.tMax).toBeCloseTo(50, 4);
+    for (const f of skel.faces) {
+      expect(f.tDeath).toBeCloseTo(50, 4);
+      expect(f.outline.some((fp) => Math.hypot(fp.p.x - 50, fp.p.y - 50) < 1e-3)).toBe(true);
+    }
+    assertFaceInvariants(skel);
   });
 
-  it('rectangle: short edges die at t=50 at the ridge endpoints', () => {
+  it('rectangle: short edges collapse at the ridge endpoints', () => {
     const skel = computeStraightSkeleton(rect);
     expect(skel.tMax).toBeCloseTo(50, 4);
-    // edges are [top, right, bottom, left]; right (idx 1) and left (idx 3)
-    // are the short ones and collapse at the ridge endpoints (150,50)/(50,50).
-    const right = skel.cells[1]!;
-    const left = skel.cells[3]!;
-    expect(right.tDeath).toBeCloseTo(50, 4);
-    expect(left.tDeath).toBeCloseTo(50, 4);
-    const rEnd = right.left[right.left.length - 1]!.p;
-    const lEnd = left.left[left.left.length - 1]!.p;
-    expect(rEnd.x).toBeCloseTo(150, 3);
-    expect(rEnd.y).toBeCloseTo(50, 3);
-    expect(lEnd.x).toBeCloseTo(50, 3);
-    expect(lEnd.y).toBeCloseTo(50, 3);
+    // edges are [top, right, bottom, left]
+    expect(hasPoint(skel, 1, 150, 50)).toBe(true);
+    expect(hasPoint(skel, 3, 50, 50)).toBe(true);
+    assertFaceInvariants(skel);
   });
 
-  it('cell areas partition the polygon (regular hexagon)', () => {
+  it('face areas partition the polygon (regular hexagon)', () => {
     const hex: Polygon = Array.from({ length: 6 }, (_, i) => {
       const a = (i / 6) * 2 * Math.PI;
       return { x: 100 + 50 * Math.cos(a), y: 100 + 50 * Math.sin(a) };
     });
     const skel = computeStraightSkeleton(hex);
-    const total = skel.cells.reduce((s, c) => s + polygonArea(cellOutline(c)), 0);
-    expect(total).toBeCloseTo(polygonArea(hex), 0); // within 0.5 px²
+    expect(facesArea(skel)).toBeCloseTo(polygonArea(hex), 0);
+    assertFaceInvariants(skel);
   });
-
-  it('every cell boundary is parameterized: t ascends and starts at 0', () => {
-    const skel = computeStraightSkeleton(rect);
-    for (const cell of skel.cells) {
-      for (const side of [cell.left, cell.right]) {
-        expect(side[0]!.t).toBe(0);
-        for (let i = 1; i < side.length; i++) {
-          expect(side[i]!.t).toBeGreaterThanOrEqual(side[i - 1]!.t - 1e-9);
-        }
-      }
-    }
-  });
-
-  // Shared invariant helper: cell sides start at t=0, end at tDeath, length >= 2.
-  function assertCellInvariants(cells: ReturnType<typeof computeStraightSkeleton>['cells']): void {
-    for (const cell of cells) {
-      for (const side of [cell.left, cell.right]) {
-        expect(side.length).toBeGreaterThanOrEqual(2);
-        expect(side[0]!.t).toBeCloseTo(0, 9);
-        expect(side[side.length - 1]!.t).toBeCloseTo(cell.tDeath, 6);
-      }
-    }
-  }
 
   it('collinear-run regression: polygon area is fully partitioned', () => {
-    // Three collinear vertices on the bottom edge; after merging, 4 cells expected.
     const poly: Polygon = [
       { x: 0, y: 0 }, { x: 33, y: 0 }, { x: 66, y: 0 },
       { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 },
     ];
     const skel = computeStraightSkeleton(poly);
-    const total = skel.cells.reduce((s, c) => s + polygonArea(cellOutline(c)), 0);
-    expect(total).toBeCloseTo(10000, 0); // within 0.5 px²
-    assertCellInvariants(skel.cells);
+    expect(facesArea(skel)).toBeCloseTo(10000, 0);
+    assertFaceInvariants(skel);
   });
 
   it('irregular convex polygon: area partitioned and invariants hold', () => {
@@ -104,8 +94,7 @@ describe('computeStraightSkeleton', () => {
       { x: 150, y: 140 }, { x: 40, y: 110 },
     ];
     const skel = computeStraightSkeleton(poly);
-    const total = skel.cells.reduce((s, c) => s + polygonArea(cellOutline(c)), 0);
-    expect(total).toBeCloseTo(polygonArea(poly), 0); // within 0.5 px²
-    assertCellInvariants(skel.cells);
+    expect(facesArea(skel)).toBeCloseTo(polygonArea(poly), 0);
+    assertFaceInvariants(skel);
   });
 });
