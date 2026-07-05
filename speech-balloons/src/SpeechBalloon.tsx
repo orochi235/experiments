@@ -1835,7 +1835,7 @@ export function SpeechBalloon({
                 key={i}
                 data-shading-id={pushShading({
                   id: `lit-bevel.light-${i}`,
-                  label: i === 0 ? 'Key light' : 'Fill light',
+                  label: `Light ${i + 1}`,
                   group: 'lit-bevel',
                 })}
               />
