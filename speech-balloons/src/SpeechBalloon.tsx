@@ -30,12 +30,16 @@ import {
 } from './clipping';
 import { buildRegions, type InteriorTreatment, type Region } from './bevelRegions';
 import { computeStops, type LitBevelTerm } from './litBevelShading';
+import { discPosition, pointerToAzEl } from './lightGizmo';
 interface Props {
   design: DesignState;
   runtime: RuntimeState;
   zoom?: number;
   onShadingItems?: (items: ShadingItem[]) => void;
   highlightedShadingId?: string | null;
+  // Gizmo drag: patch light i's direction. Presence of the callback +
+  // runtime.showLightHandles gates the interactive layer.
+  onUpdateLight?: (index: number, patch: { az: number; el: number }) => void;
 }
 
 // --- Text measurement (avoids a double-render bbox roundtrip) -------------
@@ -499,6 +503,7 @@ export function SpeechBalloon({
   zoom: zoomProp,
   onShadingItems,
   highlightedShadingId,
+  onUpdateLight,
 }: Props) {
   // Body dimensions: either design-time width/height or fit-to-content.
   const { W, H } = useMemo(() => {
@@ -1480,6 +1485,34 @@ export function SpeechBalloon({
     domeLights,
   ]);
 
+  // Draggable light handles. Same projection as the debug overlay's
+  // lollipops, but always available (gated only by the panel toggle and the
+  // parent's callback), and drawn on top of everything.
+  const lightHandles = useMemo(() => {
+    if (!onUpdateLight || runtime.showLightHandles === false) return null;
+    if (!fillEffect) return null;
+    const bb = bareBaseBBox(sampler);
+    if (bb.w <= 0 || bb.h <= 0) return null;
+    const cx = bb.x + bb.w / 2;
+    const cy = bb.y + bb.h / 2;
+    const dist = 0.75 * Math.max(bb.w, bb.h);
+    return {
+      cx, cy, dist,
+      discs: domeLights.map((l, i) => {
+        const ce = Math.cos((l.el * Math.PI) / 180);
+        const azr = (l.az * Math.PI) / 180;
+        return {
+          ...discPosition(l.az, l.el, cx, cy, dist),
+          r: 3 + 5 * ce,
+          groundX: cx + dist * ce * Math.cos(azr),
+          groundY: cy + dist * ce * Math.sin(azr),
+          color: l.color,
+          index: i,
+        };
+      }),
+    };
+  }, [onUpdateLight, runtime.showLightHandles, fillEffect, sampler, domeLights]);
+
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
   const pxH = (H + 2 * reach) * zoom;
@@ -2041,6 +2074,40 @@ export function SpeechBalloon({
           </text>
         ));
       })()}
+
+      {lightHandles && (
+        <g className="sb-light-handles">
+          {lightHandles.discs.map((d) => (
+            <g key={d.index}>
+              <line
+                x1={d.groundX} y1={d.groundY} x2={d.x} y2={d.y}
+                stroke="#ffd54a" strokeWidth={1} strokeDasharray="2 3" opacity={0.4}
+                pointerEvents="none"
+              />
+              <circle
+                cx={d.x} cy={d.y} r={d.r + 4}
+                fill="transparent"
+                stroke="#ffd54a" strokeWidth={1.5} strokeOpacity={0.9}
+                onPointerDown={(e) => {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  e.preventDefault();
+                }}
+                onPointerMove={(e) => {
+                  if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                  const svg = e.currentTarget.ownerSVGElement!;
+                  const ctm = svg.getScreenCTM();
+                  if (!ctm) return;
+                  const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+                  const { az, el } = pointerToAzEl(pt.x, pt.y, lightHandles.cx, lightHandles.cy, lightHandles.dist);
+                  onUpdateLight?.(d.index, { az: Math.round(az), el: Math.round(el) });
+                }}
+                onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
+              />
+              <circle cx={d.x} cy={d.y} r={d.r} fill={d.color} stroke="#111" strokeWidth={0.75} pointerEvents="none" />
+            </g>
+          ))}
+        </g>
+      )}
     </svg>
   );
 }

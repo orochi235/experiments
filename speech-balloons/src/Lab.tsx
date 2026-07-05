@@ -680,6 +680,12 @@ export function Lab() {
                 zoom={view.zoom}
                 onShadingItems={setShadingItems}
                 highlightedShadingId={highlightedShadingId}
+                onUpdateLight={(i, patch) =>
+                  setDesign((d) => ({
+                    ...d,
+                    lights: d.lights.map((l, k) => (k === i ? { ...l, ...patch } : l)),
+                  }))
+                }
               />
             </div>
             <div className="sb-zoom-bar">

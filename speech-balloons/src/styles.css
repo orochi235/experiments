@@ -365,3 +365,5 @@ input[type=range]::-moz-range-thumb {
 .sb-lights-add { width: 100%; margin-top: 6px; }
 .sb-lights-handles-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
 .sb-shading-panel__empty { font-size: 12px; opacity: 0.6; }
+.sb-light-handles circle { cursor: grab; }
+.sb-light-handles circle:active { cursor: grabbing; }
