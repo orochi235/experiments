@@ -29,6 +29,8 @@ import {
   type FunctionLayerState,
 } from '@weasel-js/ui';
 import { TailMinimap, tailColor, type MinimapTail } from './TailMinimap';
+import { LightsPanel } from './LightsPanel';
+import { ensureLights } from './lightRig';
 import { interpFlat, migrateSeam, remapAcrossPartition, SEAM_X_EPS } from './contourEditor';
 import {
   BASE_CONTROLS,
@@ -321,6 +323,7 @@ export function Lab() {
         alert('Not a valid speech-balloon snapshot — needs {design, runtime}.');
         return;
       }
+      ensureLights(parsed.design as unknown as Record<string, unknown>);
       setDesign(parsed.design);
       setRuntime(parsed.runtime);
     } catch (err) {
@@ -715,6 +718,12 @@ export function Lab() {
                 onRemoveTail={(id) => removeEffect(id)}
               />
             </div>
+            <LightsPanel
+              lights={design.lights}
+              onChange={(next) => setDesign((d) => ({ ...d, lights: next }))}
+              showHandles={runtime.showLightHandles !== false}
+              onShowHandles={(show) => setRuntime((r) => ({ ...r, showLightHandles: show }))}
+            />
             <EffectLayerStack
               title="Tails"
               hideHead

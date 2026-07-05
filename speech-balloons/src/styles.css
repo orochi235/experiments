@@ -357,4 +357,11 @@ input[type=range]::-moz-range-thumb {
   border-color: rgba(255, 0, 255, 0.6);
 }
 .sb-shading-panel__row.is-hidden { opacity: 0.45; text-decoration: line-through; }
+
+.sb-light-group__head { display: flex; align-items: center; justify-content: space-between; }
+.sb-light-group__title { margin: 0; font-size: 12px; text-transform: uppercase; opacity: 0.7; }
+.sb-light-group__remove { background: none; border: none; cursor: pointer; color: inherit; opacity: 0.6; }
+.sb-light-group__remove:disabled { opacity: 0.2; cursor: default; }
+.sb-lights-add { width: 100%; margin-top: 6px; }
+.sb-lights-handles-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
 .sb-shading-panel__empty { font-size: 12px; opacity: 0.6; }
