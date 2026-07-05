@@ -6,6 +6,13 @@ export type FillMode = 'aqua' | 'dome' | 'brdf' | 'lit-bevel';
 export type ParamValue = number | string | boolean | number[];
 export type ParamBag = Record<string, ParamValue>;
 
+export interface LightInstance {
+  az: number;        // degrees, 0..359
+  el: number;        // degrees, 0..90
+  intensity: number; // 0..2
+  color: string;     // hex
+}
+
 export interface EffectInstance {
   id: number;
   kind: EffectKind;
@@ -24,12 +31,16 @@ export interface RuntimeState {
   // for each entry, so the contributor is suppressed without changing
   // the registry the panel reads from.
   hiddenShadingIds?: string[];
+  // Light gizmo visibility (view preference — not undoable design state).
+  // undefined means true.
+  showLightHandles?: boolean;
 }
 
 export interface DesignState {
   base: BalloonBase;
   baseParams: ParamBag;
   effects: EffectInstance[];
+  lights: LightInstance[]; // scene light rig, min 1 max 6 (see lightRig.ts)
   width: number;
   height: number;
   padX: number; // used when fitToContent is on
