@@ -18,10 +18,12 @@ panel and on canvas, consumed by every shading mode.
 
 ## Decisions (from brainstorm)
 
-- **Scope:** all four fill modes consume the rig. Lit-bevel and dome use
-  every light; BRDF and aqua are architecturally single-light and read
-  `lights[0]` only (aqua: azimuth only). No multi-light rework of
-  BRDF/aqua in this cycle.
+- **Scope:** all four fill modes consume the rig. Lit-bevel, dome, **and
+  BRDF** use every light — implementation revealed `brdfLayers` already
+  loops over the full `domeLights` array (diffuse/specular/rim per light),
+  so keying BRDF to `lights[0]` would have been a regression, not a
+  simplification. Only aqua is single-light and reads `lights[0].az`.
+  (Supersedes the brainstorm's "BRDF reads lights[0]" assumption.)
 - **Per-light properties:** azimuth, elevation, intensity, color.
 - **Editing surfaces:** inline panel section (per-light slider groups)
   **plus** draggable on-canvas gizmos. Both ship in this cycle; the plan
@@ -80,7 +82,9 @@ In `main.tsx`'s existing migration pass over stored workspaces
 - **Dome:** per-light az/el/intensity as today, color ignored — dome's
   shading is highlight/shadow tint-pair based. Documented in code where
   the rig is consumed.
-- **BRDF:** reads `lights[0].az` / `lights[0].el`. Other lights ignored.
+- **BRDF:** consumes the full rig as today (per-light diffuse/specular/rim
+  layers); per-light intensity already scales each layer. Color ignored
+  (BRDF layers tint with `highlightColor`).
 - **Aqua:** reads `lights[0].az`. Elevation/intensity/color ignored.
 - **Shading panel:** lit-bevel light rows derive from `lights.length`
   (labels "Light 1…N"). The debug overlay's light lollipops likewise
@@ -126,8 +130,7 @@ Unit (vitest):
 - Migration: old fill params → expected rig (dome/brdf and aqua variants;
   missing-fill fallback; already-migrated designs untouched; params
   removed from the bag).
-- Renderer selection: BRDF/aqua consume `lights[0]` only (pure helper
-  extracted so this is testable without DOM).
+- Renderer selection: aqua consumes `lights[0].az` only.
 - `computeStops` with two differently-colored lights produces
   per-light-tinted sums (extends existing litBevelShading tests).
 - Gizmo math: pointer position ↔ az/el round-trip at representative
@@ -139,8 +142,8 @@ Browser verification (dev server + Playwright, screenshots to
   contributions visible, shading-panel rows read "Light 1…3".
 - Dome with 3 lights: additive wedges render, no regression at 2 lights
   vs. pre-change screenshots.
-- BRDF/aqua: moving light 0 re-aims shading; adding light 3 changes
-  nothing in these modes.
+- BRDF: adding a third light adds a visible diffuse contribution; aqua:
+  moving light 0 re-aims the gradient, adding lights changes nothing.
 - Gizmo drag: azimuth + elevation respond per the projection; drag is one
   undo step; handles hide when toggled off.
 - Persistence: reload round-trips the rig; a seeded pre-migration
