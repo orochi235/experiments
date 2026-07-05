@@ -1491,6 +1491,7 @@ export function SpeechBalloon({
   const lightHandles = useMemo(() => {
     if (!onUpdateLight || runtime.showLightHandles === false) return null;
     if (!fillEffect) return null;
+    if (!design.lights || design.lights.length === 0) return null;
     const bb = bareBaseBBox(sampler);
     if (bb.w <= 0 || bb.h <= 0) return null;
     const cx = bb.x + bb.w / 2;
@@ -1511,7 +1512,7 @@ export function SpeechBalloon({
         };
       }),
     };
-  }, [onUpdateLight, runtime.showLightHandles, fillEffect, sampler, domeLights]);
+  }, [onUpdateLight, runtime.showLightHandles, fillEffect, sampler, domeLights, design.lights]);
 
   const zoom = Math.max(0.1, zoomProp ?? 1.2);
   const pxW = (W + 2 * reach) * zoom;
@@ -2099,7 +2100,7 @@ export function SpeechBalloon({
                   if (!ctm) return;
                   const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
                   const { az, el } = pointerToAzEl(pt.x, pt.y, lightHandles.cx, lightHandles.cy, lightHandles.dist);
-                  onUpdateLight?.(d.index, { az: Math.round(az), el: Math.round(el) });
+                  onUpdateLight?.(d.index, { az: Math.round(az) % 360, el: Math.round(el) });
                 }}
                 onPointerUp={(e) => e.currentTarget.releasePointerCapture(e.pointerId)}
               />

@@ -681,10 +681,11 @@ export function Lab() {
                 onShadingItems={setShadingItems}
                 highlightedShadingId={highlightedShadingId}
                 onUpdateLight={(i, patch) =>
-                  setDesign((d) => ({
-                    ...d,
-                    lights: d.lights.map((l, k) => (k === i ? { ...l, ...patch } : l)),
-                  }))
+                  setDesign((d) => {
+                    const cur = d.lights[i];
+                    if (cur && cur.az === patch.az && cur.el === patch.el) return d; // no-op → same ref, per-key guard skips
+                    return { ...d, lights: d.lights.map((l, k) => (k === i ? { ...l, ...patch } : l)) };
+                  })
                 }
               />
             </div>
