@@ -1067,13 +1067,15 @@ export function SpeechBalloon({
     const centroid: [number, number] = [bb.x + bb.w / 2, bb.y + bb.h / 2];
 
     const out: Array<{
+      lightIndex: number;
       clipD: string;
       cx: number; cy: number; r: number;
       intensity: number;
       stops: GradientStop[];
     }> = [];
 
-    for (const light of domeLights) {
+    for (let li = 0; li < domeLights.length; li++) {
+      const light = domeLights[li]!;
       const arcs = computeLitArcs(angleSampler, light.az, light.el, 240, rimTiltRad);
       for (const arc of arcs) {
         // computeLitArcs may return wrapped arcs (end < start). Normalize.
@@ -1097,6 +1099,7 @@ export function SpeechBalloon({
             contour,
           });
           out.push({
+            lightIndex: li,
             clipD,
             cx: centroid[0],
             cy: centroid[1],
@@ -1123,6 +1126,7 @@ export function SpeechBalloon({
   // Rim) on top of the solid base body fill that stands in for Ambient.
   type BrdfLayer = {
     key: string;
+    label: string;
     clipD: string;
     gradient:
       | { type: 'linear'; x1: number; y1: number; x2: number; y2: number }
@@ -1160,6 +1164,7 @@ export function SpeechBalloon({
       // N·L = 0 at the terminator, that hard edge is zero by construction.
       out.push({
         key: `${li}-d`,
+        label: `Light ${li + 1} diffuse`,
         clipD: litWedgeD,
         gradient: { type: 'linear', x1: litRim.x, y1: litRim.y, x2: farRim.x, y2: farRim.y },
         stops: sampleLightStops({
@@ -1184,6 +1189,7 @@ export function SpeechBalloon({
         const hotY = cy + rSpec * (litRim.y - cy);
         out.push({
           key: `${li}-s`,
+          label: `Light ${li + 1} specular`,
           clipD: litWedgeD,
           gradient: { type: 'radial', cx: hotX, cy: hotY, r: Math.max(2, fillRender.specSize) },
           stops: sampleSpecularStops(fillRender.specPower),
@@ -1200,6 +1206,7 @@ export function SpeechBalloon({
       if (fillRender.rimStrength > 0) {
         out.push({
           key: `${li}-r`,
+          label: `Light ${li + 1} rim`,
           clipD: litWedgeD,
           gradient: { type: 'radial', cx, cy, r: rLit },
           stops: sampleRimStops(contour, fillRender.rimPower),
@@ -1704,18 +1711,29 @@ export function SpeechBalloon({
                   className={pulseIf('body')}
                 />
                 <g style={{ mixBlendMode: 'screen', isolation: 'isolate' }}>
-                  {domeLayers.map((_, i) => {
-                    const id = `dome.light-${i}`;
-                    const label = i === 0 ? 'Key light' : i === 1 ? 'Fill light' : `Light ${i + 1}`;
+                  {/* One panel row per LIGHT; each row's <g> wraps every
+                      wedge slice that light produced (domeLayers is
+                      slice-granular). A light left fully unlit still gets
+                      its (empty) row so panel rows track the rig 1:1. */}
+                  {domeLights.map((_, li) => {
+                    const id = `dome.light-${li}`;
                     return (
-                      <path
-                        key={i}
-                        d={bodyPath}
-                        fill={`url(#${idPrefix}-dome-grad-${i})`}
-                        clipPath={`url(#${idPrefix}-dome-clip-${i})`}
-                        data-shading-id={pushShading({ id, label, group: 'dome' })}
+                      <g
+                        key={li}
+                        data-shading-id={pushShading({ id, label: `Light ${li + 1}`, group: 'dome' })}
                         className={pulseIf(id)}
-                      />
+                      >
+                        {domeLayers.map((layer, i) =>
+                          layer.lightIndex === li ? (
+                            <path
+                              key={i}
+                              d={bodyPath}
+                              fill={`url(#${idPrefix}-dome-grad-${i})`}
+                              clipPath={`url(#${idPrefix}-dome-clip-${i})`}
+                            />
+                          ) : null
+                        )}
+                      </g>
                     );
                   })}
                 </g>
@@ -1789,7 +1807,7 @@ export function SpeechBalloon({
                         d={bodyPath}
                         fill={`url(#${idPrefix}-brdf-grad-${layer.key})`}
                         clipPath={`url(#${idPrefix}-brdf-clip-${layer.key})`}
-                        data-shading-id={pushShading({ id, label: layer.key, group: 'brdf' })}
+                        data-shading-id={pushShading({ id, label: layer.label, group: 'brdf' })}
                         className={pulseIf(id)}
                       />
                     );

@@ -1,9 +1,85 @@
 # Speech Balloon Lab — handoff
 
-Branch: `light-rig` (not yet merged; branched off `main` after the
-`concave-rim` merge).
+Branch: `main` (light-rig work merged).
 
-## Recent work: user-editable light rig — DONE, browser-verified
+## Recent work: QA sweep (task D) — DONE, browser-verified (2026-07-05)
+
+The queued sweep from the concave-rim spec: the shading-panel dome row bug,
+plus seams / corner fans / extreme params across all four fill modes.
+Keeper screenshots in `screenshots-clean/qa-*.png`. Unit tests still 143
+pass; typecheck clean; console clean across the whole sweep session (only
+the known favicon 404).
+
+### Fixed
+
+- **Dome shading-panel slice mislabeling** (the queued bug, traced to
+  `d8815fb`): `domeLayers` is slice-granular (one entry per light × lit-arc
+  × subdivision — ~96 slices/light), and the paint loop pushed one panel row
+  per SLICE labeled as if the index were a light index ("Key light", "Fill
+  light", "Light 3…N" for hundreds of rows). Now each `domeLayers` entry
+  carries `lightIndex`, and the paint loop wraps each light's slices in one
+  `<g data-shading-id="dome.light-{i}">` pushing one row per LIGHT, labeled
+  "Light 1…N" (matching the lit-bevel convention from `b0489e4`). Hide
+  (display:none on the group) and highlight (pulse class) verified against
+  the whole light. A light in the rig always gets its row, even if fully
+  unlit. `qa-01-dome-rows-fix.png`.
+- **BRDF shading-panel rows showed raw layer keys** ("0-d", "1-s", "2-r")
+  because the paint loop used `label: layer.key`. `BrdfLayer` now carries a
+  `label` ("Light N diffuse/specular/rim"). Found by the sweep's 6-light
+  BRDF config.
+- **Handoff misstatement corrected below:** BRDF does NOT consume per-light
+  color — the spec (Renderer consumption section) says color is ignored and
+  BRDF layers tint with `highlightColor`; the code matches the spec. The
+  previous handoff claimed otherwise.
+
+### Sweep matrix (all PASS unless noted as a finding)
+
+1. Dome, 6 lights at extreme elevations (0°, 5°, 55°, 85°, 90°, plus an
+   intensity-0 light): no NaN/Infinity in any path or gradient, 6 panel
+   rows, el-0 light correctly produces a half-rim slice set (77 vs 96).
+   `qa-02-dome-6lights.png`.
+2. Lit-bevel, rectangle roundness 0 (sharp miters): crisp corner faces, no
+   corner-fan artifacts, bands flow around the tail notch.
+   `qa-04-litbevel-sharp.png`.
+3. Lit-bevel, bevelWidth 200 on a 280×140 body: `bareBaseMaxBevel` clamp
+   engages (≈3% pixel delta vs width 22 — band boundary only), no geometry
+   blowup. `qa-05-litbevel-maxbevel.png`.
+4. Lit-bevel, cloud body + lightning tail (concave stress): 198 paths, no
+   NaN, faceted-but-correct lobe shading. `qa-06-litbevel-cloud-lightning.png`.
+5. BRDF, 6 colored lights: 6 × (diffuse/specular/rim) layers, no NaN.
+   Near-white wash is expected additive saturation with 5 bright lights,
+   not a defect (per-light color is ignored by design).
+   `qa-08-brdf-6lights.png`.
+6. Aqua, cloud + lightning: renders correctly. `qa-07-aqua-cloud.png`.
+7. Extreme body: 40×30 at shear 25° with a 60px tail — degraded but
+   stable, no NaN. `qa-09-tiny-sheared.png`.
+8. Spikes morph + lit-bevel (~80 concave vertices): 404 paths, no NaN,
+   stable; shading is coarsely faceted at this rim complexity (see
+   findings). `qa-10-spikes-litbevel.png`.
+9. Fresh-default regression after the fixes: default two-light dome scene
+   shows exactly Body fill + Light 1 + Light 2.
+
+### Findings (documented, NOT fixed here)
+
+- **Dome slice-boundary fan streaks:** at zoom ≥2 the key light's wedge
+  shows radial banding — adjacent slices abut with per-slice gradient
+  steps/AA hairlines, visible as a sunburst fan near the wedge apex
+  (`qa-03-dome-seams-zoom.png`). The lit-bevel remedy (1px same-paint
+  stroke) does NOT transfer: dome slices paint alpha gradients under
+  screen blending, so overlap double-brightens. A real fix needs design
+  work (e.g. per-light offscreen compositing or smoother per-slice stop
+  interpolation).
+- **Cloud shape side nubs:** the cloud base silhouette grows small
+  capsule-shaped protrusions at its horizontal extremes (visible in both
+  lit-bevel and aqua, so base geometry, not shading — pre-existing, shape
+  generator). `qa-07-aqua-cloud.png`.
+- **Light gizmos off-canvas at defaults:** with the default scene, canvas
+  size, and zoom, BOTH default lights' discs project outside the canvas
+  clip — the gizmo feature is invisible until a light is re-aimed from the
+  panel or the canvas is enlarged. Generalizes the known "off-canvas discs"
+  item below (it's not just the high-el key light).
+
+## Earlier: user-editable light rig — DONE, browser-verified
 
 **Spec:** `docs/superpowers/specs/2026-07-03-light-rig-design.md`
 **Plan:** `docs/superpowers/plans/2026-07-04-light-rig.md`
@@ -30,9 +106,11 @@ controls and `fillRender` but still read by the migration.
     (light 1 was previously forced white).
   - **dome** — az/el/intensity of every light; color ignored (dome keeps its
     tint-pair model of highlight/shadow tints).
-  - **BRDF** — was **already multi-light** before this cycle; it consumes the
-    full rig including per-light color. The spec was corrected mid-cycle on
-    this point — keying BRDF to `lights[0]` would have regressed it.
+  - **BRDF** — was **already multi-light** before this cycle; it consumes
+    az/el/intensity of every light. Per-light color is ignored (layers tint
+    with `highlightColor`), per the spec's renderer-consumption section.
+    The spec was corrected mid-cycle on the multi-light point — keying BRDF
+    to `lights[0]` would have regressed it.
   - **aqua** — reads `lights[0].az` only; other lights and all other fields
     are inert by design.
 - **`LightsPanel`** (`src/LightsPanel.tsx`): per-light az/el/intensity/color
@@ -76,10 +154,10 @@ controls and `fillRender` but still read by the migration.
   by browser-verification check 1, fixed at `b0489e4`: rows are now
   "Light 1…N" (spec-correct). Note this renames the old "Key light"/"Fill
   light" rows in two-light scenes too.
-- **Pre-existing, queued for the QA sweep (task D):** `ShadingLayersPanel`
-  mislabels dome gradient SLICES as "Light N" — one row per slice, not per
-  light, so dome mode can show hundreds of bogus rows. Predates this branch
-  (traced to `d8815fb`); deliberately not fixed here.
+- **Pre-existing, was queued for the QA sweep (task D):** `ShadingLayersPanel`
+  mislabeled dome gradient SLICES as "Light N" — one row per slice, not per
+  light, so dome mode could show hundreds of bogus rows. Predates this branch
+  (traced to `d8815fb`); **fixed in the task D sweep above.**
 
 Unit tests: **143 pass** (vitest, 10 files). `npm run typecheck` clean.
 
@@ -183,5 +261,7 @@ all flow through labkit's experiment provider; localStorage key is
 
 ## Open issues
 
-- `ShadingLayersPanel` dome slice-mislabeling (see "Bugs found during this
-  work" above) — queued for the QA sweep (task D).
+- QA-sweep findings (see the task D section at the top): dome
+  slice-boundary fan streaks at zoom, cloud-shape side nubs, light gizmos
+  off-canvas at default scene/zoom. All cosmetic, none queued to a task
+  yet.
