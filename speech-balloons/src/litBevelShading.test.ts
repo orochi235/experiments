@@ -131,4 +131,23 @@ describe('computeStops', () => {
     // (2) radially non-constant: center (x=1, first stop) ≠ seam (x=0.4, last stop)
     expect(stops0[0]!.color).not.toBe(stops0[stops0.length - 1]!.color);
   });
+
+  it('tints each light with its own color', () => {
+    const lights: LitBevelLight[] = [
+      { az: 270, el: 55, intensity: 1, color: '#ff0000' },
+      { az: 90, el: 55, intensity: 1, color: '#0000ff' },
+    ];
+    // White albedo, ambient 0, specular 0: stop colors must pick up red on the
+    // flank facing the red light's azimuth (270) and blue on the flank facing
+    // the blue light's azimuth (90), rather than rendering both identically.
+    const material = mat({ ambient: 0, specular: 0 });
+    const west = computeStops(stripAt(270), lights, rampContour, material);
+    const east = computeStops(stripAt(90), lights, rampContour, material);
+    const red = (s: { color: string }) => parseInt(s.color.slice(1, 3), 16);
+    const blue = (s: { color: string }) => parseInt(s.color.slice(5, 7), 16);
+    const westEnd = west[west.length - 1]!;
+    const eastEnd = east[east.length - 1]!;
+    expect(red(westEnd)).toBeGreaterThan(blue(westEnd));
+    expect(blue(eastEnd)).toBeGreaterThan(red(eastEnd));
+  });
 });

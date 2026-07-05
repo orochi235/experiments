@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useId, useMemo, useRef } from 'react';
-import type { DesignState, FillMode, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
+import type { DesignState, FillMode, LightInstance, ParamBag, RuntimeState, ShadingItem, TailShape } from './types';
+import { defaultLights } from './lightRig';
 import {
   bareBaseMaxBevel,
   buildBaseSampler,
@@ -906,8 +907,6 @@ export function SpeechBalloon({
       amount: (p.amount as number) ?? 0.6,
       shadowColor: (p.shadowColor as string) ?? '#000000',
       highlightColor: (p.highlightColor as string) ?? '#ffffff',
-      lightAzimuth: (p.lightAzimuth as number) ?? 270,
-      lightElevation: (p.lightElevation as number) ?? 55,
       bevelWidth: (p.bevelWidth as number) ?? 22,
       domeGloss: (p.domeGloss as number) ?? 0.35,
       specStrength: (p.specStrength as number) ?? 0.5,
@@ -917,7 +916,6 @@ export function SpeechBalloon({
       rimStrength: (p.rimStrength as number) ?? 0.4,
       rimPower: (p.rimPower as number) ?? 3,
       // Aqua-only params
-      lightAngle: (p.lightAngle as number) ?? 270,
       glossStrength: (p.glossStrength as number) ?? 0.55,
       rimContrast: (p.rimContrast as number) ?? 0.4,
       highlightTint: (p.highlightTint as string) ?? '#ffffff',
@@ -927,7 +925,6 @@ export function SpeechBalloon({
       diffuse: (p.diffuse as number) ?? 1.0,
       specular: (p.specular as number) ?? 0.6,
       shininess: (p.shininess as number) ?? 30,
-      lightColor: (p.lightColor as string) ?? '#ffffff',
       specularColor: (p.specularColor as string) ?? '#ffffff',
       interiorTreatment: ((p.interiorTreatment as string) === 'dome-blob' ? 'dome-blob'
         : (p.interiorTreatment as string) === 'flat' ? 'flat'
@@ -937,11 +934,19 @@ export function SpeechBalloon({
     };
   }, [fillEffect]);
 
+  // Scene light rig. defaultLights() guard covers snapshots that predate the
+  // rig (import of a raw pre-rig snapshot bypasses the storage migration —
+  // labkit hydrates stored configs wholesale, no per-key merge).
+  const domeLights: LightInstance[] = useMemo(
+    () => (design.lights && design.lights.length > 0 ? design.lights : defaultLights()),
+    [design.lights],
+  );
+
   // Pre-compute the aqua paint-server geometry: gradient direction in
   // objectBoundingBox coordinates + the five color stops mixed from base/tints.
   const aquaPaint = useMemo(() => {
     if (fillRender.mode !== 'aqua') return null;
-    const rad = (fillRender.lightAngle * Math.PI) / 180;
+    const rad = (domeLights[0]!.az * Math.PI) / 180;
     const dx = Math.cos(rad);
     const dy = Math.sin(rad);
     // (x1, y1) at the highlight side; (x2, y2) at the shadow side. Both in
@@ -965,21 +970,7 @@ export function SpeechBalloon({
       [1.0, mixCss(base, sh, rim)],
     ];
     return { x1, y1, x2, y2, bodyStops };
-  }, [fillRender.mode, fillRender.lightAngle, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
-
-  // Multi-light dome. Two lights for v1: a key light from the user-controlled
-  // azimuth/elevation and a hardcoded fill from the opposite side. Each
-  // light's lit perimeter arc is clipped, a linear gradient along its
-  // azimuth fills that wedge, and they composite additively below.
-  // TODO: expose lights as a customizable list per fill effect.
-  const domeLights = useMemo(() => {
-    const keyAz = fillRender.lightAzimuth;
-    const keyEl = fillRender.lightElevation;
-    return [
-      { az: keyAz, el: keyEl, intensity: 1.0 },
-      { az: (keyAz + 180) % 360, el: 25, intensity: 0.35 },
-    ];
-  }, [fillRender.lightAzimuth, fillRender.lightElevation]);
+  }, [fillRender.mode, domeLights, fillRender.base, fillRender.highlightTint, fillRender.shadowTint, fillRender.rimContrast]);
 
   // Wrap the existing arc-length sampler in an angle-keyed one so the dome
   // helpers can ask for the perimeter point along a ray from centroid.
@@ -1032,10 +1023,7 @@ export function SpeechBalloon({
     domeLights.forEach((_, i) => {
       if (hidden.has(`lit-bevel.light-${i}`)) exclude.add(`light-${i}`);
     });
-    const lights = domeLights.map((l, i) => ({
-      az: l.az, el: l.el, intensity: l.intensity,
-      color: i === 0 ? fillRender.lightColor : '#ffffff',
-    }));
+    const lights = domeLights;
     const entries: Array<{ gradientId: string; region: Region; stops: { offset: number; color: string }[] }> = [];
     const allRidges: Array<[Point, Point]> = [];
     bodyAndBubblesPolys.forEach((poly, pi) => {

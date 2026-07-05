@@ -34,7 +34,6 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     { key: 'base', label: 'Base color', kind: 'color', default: '#3b82f6' },
 
     { kind: 'header', label: 'Aqua', hideWhen: (p) => p.mode !== 'aqua' },
-    { key: 'lightAngle', label: 'Light angle', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'aqua', unit: '°' },
     { key: 'glossStrength', label: 'Gloss strength', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.55, hideWhen: (p) => p.mode !== 'aqua' },
     { key: 'rimContrast', label: 'Rim contrast', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.4, hideWhen: (p) => p.mode !== 'aqua' },
     { key: 'highlightTint', label: 'Highlight tint', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'aqua' },
@@ -46,8 +45,6 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
 
     { kind: 'header', label: 'Dome', hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel' },
     { key: 'bevelWidth', label: 'Bevel width', kind: 'range', min: 0, max: 100, step: 0.5, default: 22, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel', maxFn: ({ W, H, sampler }) => sampler ? Math.max(1, Math.floor(bareBaseMaxBevel(sampler))) : Math.floor(Math.min(W, H) / 3), unit: 'px' },
-    { key: 'lightAzimuth', label: 'Azimuth', kind: 'range', min: 0, max: 359, step: 1, default: 270, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel', unit: '°' },
-    { key: 'lightElevation', label: 'Elevation', kind: 'range', min: 0, max: 90, step: 1, default: 55, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' && p.mode !== 'lit-bevel', unit: '°' },
     { key: 'domeGloss', label: 'Gloss', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.35, hideWhen: (p) => p.mode !== 'dome' },
     { key: 'specStrength', label: 'Specular', kind: 'range', min: 0, max: 1, step: 0.02, default: 0.5, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf' },
     { key: 'specSize', label: 'Specular size', kind: 'range', min: 2, max: 80, step: 0.5, default: 18, hideWhen: (p) => p.mode !== 'dome' && p.mode !== 'brdf', unit: 'px' },
@@ -60,15 +57,14 @@ export const EFFECT_CONTROLS: Record<EffectKind, LabControl[]> = {
     // lit-bevel: analytic region renderer. The rim polyline is decomposed
     // into band strips / corner fans / interior panels (straight skeleton);
     // each region is one gradient path whose stops carry the final summed
-    // linear-light color. Shares bevelWidth / lightAzimuth / lightElevation /
-    // contour with the other modes.
+    // linear-light color. Shares bevelWidth / contour with the other modes;
+    // lighting comes from the scene light rig (design.lights), not fill params.
     { kind: 'header', label: 'Lit bevel — material', hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'surfaceScale', label: 'Bevel height', kind: 'range', min: 0, max: 100, step: 0.5, default: 20, hideWhen: (p) => p.mode !== 'lit-bevel', unit: 'px' },
     { key: 'ambient', label: 'Ambient', kind: 'range', min: 0, max: 1, step: 0.01, default: 0.25, hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'diffuse', label: 'Diffuse', kind: 'range', min: 0, max: 2, step: 0.02, default: 1.0, hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'specular', label: 'Specular', kind: 'range', min: 0, max: 2, step: 0.02, default: 0.6, hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'shininess', label: 'Shininess', kind: 'range', min: 1, max: 128, step: 1, default: 30, hideWhen: (p) => p.mode !== 'lit-bevel' },
-    { key: 'lightColor', label: 'Key light color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
     { key: 'specularColor', label: 'Specular color', kind: 'color', default: '#ffffff', hideWhen: (p) => p.mode !== 'lit-bevel' },
 
     { kind: 'header', label: 'Lit bevel — interior', hideWhen: (p) => p.mode !== 'lit-bevel' },
