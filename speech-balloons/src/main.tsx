@@ -10,6 +10,7 @@ import { SingletonExperimentProvider } from '@weasel-js/labkit/state';
 import { localStorageAdapter } from '@weasel-js/labkit';
 import { Lab } from './Lab';
 import { initialDesign, initialRuntime } from './initialState';
+import { ensureLights } from './lightRig';
 import './styles.css';
 
 const STORAGE_KEY = 'speech-balloon-lab-v12';
@@ -51,6 +52,7 @@ function migrateStorage() {
       design.shear = design.lean;
       delete design.lean;
     }
+    ensureLights(design);
     const oldRuntime = old.runtime as Record<string, unknown>;
     const oldZoom = typeof oldRuntime.zoom === 'number' ? oldRuntime.zoom : 1.2;
     const workspace = {
@@ -86,6 +88,8 @@ function migrateWorkspaces() {
         delete config.lean;
         dirty = true;
       }
+      // Synthesize the scene light rig from legacy fill params.
+      if (ensureLights(config)) dirty = true;
     }
     if (dirty) {
       localStorage.setItem(NEW_WORKSPACES_KEY, JSON.stringify(workspaces));
