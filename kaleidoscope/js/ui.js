@@ -14,7 +14,7 @@ export function bindSidebar(scene, store, { update, reroll }) {
   const cUpdate = coalesce(update), cReroll = coalesce(reroll);
 
   const setModeVisibility = () => {
-    document.querySelectorAll('[data-mode]').forEach(elm => {
+    document.querySelectorAll('#sidebar [data-mode]').forEach(elm => {
       elm.classList.toggle('mode-hidden', elm.dataset.mode !== scene.mode);
     });
   };
@@ -42,7 +42,7 @@ export function bindSidebar(scene, store, { update, reroll }) {
   $('ctl-jitter').value = scene.rotationJitter;
   $('ctl-jitter').oninput = (e) => { scene.rotationJitter = +e.target.value; cReroll(); };
   $('ctl-seed').value = scene.seed;
-  $('ctl-seed').onchange = (e) => { scene.seed = +e.target.value; reroll(); };
+  $('ctl-seed').onchange = (e) => { scene.seed = +e.target.value; e.target.value = scene.seed; reroll(); };
   $('ctl-shuffle').onclick = () => {
     scene.seed = Math.floor(Math.random() * 2 ** 31);
     $('ctl-seed').value = scene.seed;

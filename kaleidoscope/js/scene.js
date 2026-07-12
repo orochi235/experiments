@@ -36,7 +36,7 @@ export function scatter(scene, store) {
     x: randRange(rand, 0, scene.chamber.width),
     y: randRange(rand, 0, scene.chamber.height),
     rotation: randRange(rand, -scene.rotationJitter, scene.rotationJitter),
-    scale: randRange(rand, scene.sizeRange[0], scene.sizeRange[1]),
+    scale: randRange(rand, Math.min(...scene.sizeRange), Math.max(...scene.sizeRange)),
     colorIndex: randInt(rand, scene.palette.colors.length),
   }));
 }
