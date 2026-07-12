@@ -356,6 +356,7 @@ export function assertClose(name, a, b, tol = 1e-6) {
 }
 
 export async function runSelftest() {
+  results.length = 0;  // reruns from the console shouldn't accumulate
   const { mulberry32, randRange, randInt } = await import('./rng.js');
 
   // RNG determinism
@@ -371,9 +372,11 @@ export async function runSelftest() {
   assert('rng: randInt respects bounds',
     Array.from({ length: 100 }, () => randInt(e, 4)).every(v => Number.isInteger(v) && v >= 0 && v < 4));
 
-  await testColor();
-  await testScene();
-  await testEngines();
+  // Isolate groups: a throwing group records a FAIL instead of killing the
+  // suite and the summary line.
+  for (const [group, fn] of [['color', testColor], ['scene', testScene], ['engines', testEngines]]) {
+    try { await fn(); } catch (err) { assert(`${group}: test group threw (${err.message})`, false); }
+  }
 
   const failed = results.filter(r => !r.pass);
   console.log(`selftest: ${results.length - failed.length}/${results.length} passed`);
