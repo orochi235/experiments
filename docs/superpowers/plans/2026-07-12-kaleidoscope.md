@@ -924,6 +924,8 @@ async function testEngines() {
   renderPreview(svg, scene, fakeStore);
   assert('engines: radial mirror renders 2×order wedges',
     svg.querySelectorAll('[data-wedge]').length === 12);
+  assert('engines: mirrored wedge reflects then rotates',
+    svg.querySelector('[data-wedge="1"]').getAttribute('transform') === 'rotate(30) scale(1,-1)');
   scene.radial.mirror = false;
   renderPreview(svg, scene, fakeStore);
   assert('engines: radial no-mirror renders order wedges',
@@ -992,18 +994,24 @@ function buildRadial(svgEl, scene, store) {
   }));
 
   const defs = el('defs');
-  // Chamber placed radially: x → [0, R] outward from apex, y centered on the axis.
+  // Hash-supplied state bypasses the slider's [3,16] — clamp so a garbage
+  // order can't hang the tab building wedges.
+  const order = Math.min(32, Math.max(1, Math.trunc(scene.radial.order) || 1));
+  const n = order * (scene.radial.mirror ? 2 : 1);
+  const wedge = 360 / n;
+  const half = (wedge / 2) * (Math.PI / 180);
+  // Chamber placed radially: x → [0, R] outward from apex, y centered on the
+  // axis. Scale must cover the whole sector: wedges wider than 60° need
+  // |y| up to R·sin(half), taller than the h·(R/w) band; the arc clip trims
+  // the radial overshoot.
   const { width: w, height: h } = scene.chamber;
-  const s = R / w;
+  const s = Math.max(R / w, (2 * R * Math.sin(half)) / h);
   const placed = el('g', { id: 'radial-chamber' });
   const inner = el('g', { transform: `translate(0,${(-h * s) / 2}) scale(${s})` });
   inner.appendChild(chamberGroup(scene, store, {}));
   placed.appendChild(inner);
   defs.appendChild(placed);
 
-  const n = scene.radial.order * (scene.radial.mirror ? 2 : 1);
-  const wedge = 360 / n;
-  const half = (wedge / 2) * (Math.PI / 180);
   const sector = `M0,0 L${R * Math.cos(-half)},${R * Math.sin(-half)} ` +
     `A${R},${R} 0 0 1 ${R * Math.cos(half)},${R * Math.sin(half)} Z`;
   const clip = el('clipPath', { id: 'radial-sector' });
@@ -1243,17 +1251,19 @@ In `buildRadial`, replace the block that creates `placed`, `clip`, and the wedge
 // shared: builds a mirrored/rotated wedge motif of the chamber, radius R,
 // appending its defs into `defs` and returning the motif <g>.
 function wedgeMotif(defs, scene, store, { order, mirror, R, idPrefix, dataWedge = false }) {
+  order = Math.min(32, Math.max(1, Math.trunc(order) || 1));  // hash-supplied state bypasses the slider
+  const n = order * (mirror ? 2 : 1);
+  const wedge = 360 / n;
+  const half = (wedge / 2) * (Math.PI / 180);
   const { width: w, height: h } = scene.chamber;
-  const s = R / w;
+  // Cover the whole sector: wedges wider than 60° need |y| up to R·sin(half).
+  const s = Math.max(R / w, (2 * R * Math.sin(half)) / h);
   const placed = el('g', { id: `${idPrefix}-chamber` });
   const inner = el('g', { transform: `translate(0,${(-h * s) / 2}) scale(${s})` });
   inner.appendChild(chamberGroup(scene, store, {}));
   placed.appendChild(inner);
   defs.appendChild(placed);
 
-  const n = order * (mirror ? 2 : 1);
-  const wedge = 360 / n;
-  const half = (wedge / 2) * (Math.PI / 180);
   const clip = el('clipPath', { id: `${idPrefix}-sector` });
   clip.appendChild(el('path', {
     d: `M0,0 L${R * Math.cos(-half)},${R * Math.sin(-half)} ` +
@@ -1410,9 +1420,16 @@ function wirePointerHandlers(svgEl, scene, onChange) {
       const p = svgPoint(svgEl, mv.clientX, mv.clientY);
       part.x = Math.min(scene.chamber.width, Math.max(0, orig.x + p.x - start.x));
       part.y = Math.min(scene.chamber.height, Math.max(0, orig.y + p.y - start.y));
-      onChange('tweak');
+      // 60fps path: move this <g> in place and let main.js mutate the preview's
+      // matching <use>; a full renderPreview costs 70-180ms at density 30.
+      g.setAttribute('transform',
+        `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+      onChange('drag', part);
     };
-    svgEl.onpointerup = () => { svgEl.onpointermove = svgEl.onpointerup = null; };
+    svgEl.onpointerup = () => {
+      svgEl.onpointermove = svgEl.onpointerup = null;
+      onChange('tweak');   // full re-render + autosave on release
+    };
   };
 }
 ```
@@ -1437,7 +1454,15 @@ import { renderChamber } from './editor.js';
 **Correction to apply while implementing:** `arguments.callee` is illegal in modules — structure it as a named callback instead:
 
 ```js
-  const onEditorChange = (kind) => {
+  const onEditorChange = (kind, part) => {
+    if (kind === 'drag' && part) {
+      // Cheap mid-drag path: mutate the dragged part's <use> inside the
+      // preview's chamber def — every wedge/tile instance follows via <use>.
+      const u = $('preview-svg').querySelector(`use[data-part-id="${part.id}"]`);
+      if (u) u.setAttribute('transform',
+        `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+      return;
+    }
     if (kind === 'tweak') renderPreview($('preview-svg'), scene, store);
     renderChamber($('chamber-svg'), scene, store, onEditorChange);
     saveLocal(scene);
