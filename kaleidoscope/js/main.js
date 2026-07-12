@@ -1,5 +1,6 @@
 import { loadParts } from './parts.js';
-import { defaultScene, scatter, decodeHash, saveLocal, partColor } from './scene.js';
+import { defaultScene, scatter, decodeHash, encodeHash, saveLocal, loadLocal, partColor } from './scene.js';
+import { getPreset } from './palettes.js';
 import { renderPreview } from './engines.js';
 import { renderChamber, getSelected, clearSelection } from './editor.js';
 import { bindSidebar } from './ui.js';
@@ -14,11 +15,22 @@ async function boot() {
   }
 
   const store = await loadParts('assets');
-  let scene = defaultScene();
+
+  let scene;
   const fromHash = decodeHash(location.hash);
-  if (fromHash) Object.assign(scene, fromHash, { palette: scene.palette });
-  if (!scene.partSet.length) scene.partSet = store.list.map(p => p.id);
-  scatter(scene, store);
+  if (fromHash) {
+    const { paletteName, ...knobs } = fromHash;
+    scene = { ...defaultScene(), ...knobs, palette: getPreset(paletteName) };
+    if (!scene.partSet.length) scene.partSet = store.list.map(p => p.id);
+    scatter(scene, store);          // hash = seed+knobs, so scatter reproduces it
+  } else {
+    scene = loadLocal();            // full state incl. tweaks
+    if (!scene) {
+      scene = defaultScene();
+      scene.partSet = store.list.map(p => p.id);
+      scatter(scene, store);
+    }
+  }
 
   function renderSelectionSwatches() {
     const sel = getSelected(scene);
@@ -60,6 +72,7 @@ async function boot() {
     renderChamber($('chamber-svg'), scene, store, onEditorChange);
     document.body.style.setProperty('--bg', scene.palette.background);
     saveLocal(scene);
+    history.replaceState(null, '', encodeHash(scene));
     renderSelectionSwatches();
   }
   update();
@@ -71,17 +84,22 @@ async function boot() {
 
   const exportSize = () => {
     const v = $('ctl-export-preset').value;
-    if (v === 'custom') return [+$('ctl-export-w').value, +$('ctl-export-h').value];
-    return v.split('x').map(Number);
+    const [w, h] = v === 'custom'
+      ? [+$('ctl-export-w').value, +$('ctl-export-h').value]
+      : v.split('x').map(Number);
+    return (w > 0 && h > 0 && w <= 16384 && h <= 16384) ? [w, h] : null;
   };
   $('ctl-export-preset').onchange = (e) => {
     $('export-custom').hidden = e.target.value !== 'custom';
   };
-  $('ctl-export-png').onclick = () => downloadPng(scene, store, ...exportSize());
-  $('ctl-export-svg').onclick = () => downloadSvg(scene, store, ...exportSize());
+  $('ctl-export-png').onclick = () => { const s = exportSize(); if (s) downloadPng(scene, store, ...s); };
+  $('ctl-export-svg').onclick = () => { const s = exportSize(); if (s) downloadSvg(scene, store, ...s); };
 
-  // Later tasks extend boot(): persistence load (Task 15).
   window.__kaleido = { scene, store, update };  // console access during development
 }
 
-boot();
+boot().catch((err) => {
+  console.error('kaleidoscope: boot failed', err);
+  const hint = document.querySelector('header .hint');
+  if (hint) hint.textContent = 'Failed to load: ' + err.message;
+});
