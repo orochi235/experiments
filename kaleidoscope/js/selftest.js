@@ -39,6 +39,28 @@ export async function runSelftest() {
 }
 
 // Filled in by later tasks:
-async function testColor() {}
+async function testColor() {
+  const { hexToOklch, oklchToHex, remapColor } = await import('./color.js');
+
+  const rt = oklchToHex(hexToOklch('#c91a09'));
+  assert('color: hex→oklch→hex round-trips', rt === '#c91a09' || nearHex(rt, '#c91a09', 2));
+
+  assert('color: remap base to itself is identity-ish',
+    nearHex(remapColor('#9ba19d', '#9ba19d', '#9ba19d'), '#9ba19d', 2));
+
+  // A darker shade of gray base remapped onto red stays darker than red
+  const shade = remapColor('#5c605e', '#9ba19d', '#c91a09');
+  const L = (h) => hexToOklch(h).L;
+  assert('color: shade ordering preserved', L(shade) < L('#c91a09'));
+
+  assert('color: remap is deterministic',
+    remapColor('#5c605e', '#9ba19d', '#c91a09') === shade);
+}
+
+function nearHex(a, b, tol) {
+  const p = (h) => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return x.every((v, i) => Math.abs(v - y[i]) <= tol);
+}
 async function testScene() {}
 async function testEngines() {}
