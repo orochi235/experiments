@@ -48,7 +48,7 @@ hash (fresh scatter from seed+knobs+palette) over the saved tweaks. If
 `localStorage` holds corrupted JSON, the app falls back to defaults rather
 than failing to load.
 
-**Export.** Pick a resolution preset (5K/4K/QHD/desktop/iPhone) or choose
+**Export.** Pick a resolution preset (5K/4K/QHD/iPhone) or choose
 Custom and enter a width/height; PNG rasterizes the current composition at
 that size, SVG downloads the same composition as a standalone document with
 symbols and palette baked in. Custom dimensions are validated (must be
@@ -65,7 +65,7 @@ neutral base color and recolored at runtime. From the brick-icons repo root:
     while read -r part _; do
       [ -z "$part" ] || [ "${part#\#}" != "$part" ] && continue
       brick-icons "$part" --format svg --shading outline --shade-style flat3 \
-        --part-color 0x9ba19d -o <this dir>/assets/"$part".svg
+        --part-color 0x9ba19d --svg-bg white -o <this dir>/assets/"$part".svg
     done < parts.txt
 
 Then regenerate `assets/manifest.json` (`baseColor` — must match the

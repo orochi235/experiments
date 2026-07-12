@@ -27,7 +27,7 @@ export async function loadParts(baseUrl = 'assets') {
   document.body.appendChild(host);
 
   const cache = new Map();  // `${partId}|${color}` -> <symbol> element
-  // TODO(task-12): unbounded growth — a live color picker scrubbing hundreds of
+  // TODO: unbounded growth — a live color picker scrubbing hundreds of
   // hexes mints ~50KB of dead DOM per (part,color); add eviction of symbols not
   // used by the current render, or a transient scratch symbol for picker drags.
   const base = manifest.baseColor;

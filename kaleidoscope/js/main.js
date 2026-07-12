@@ -18,18 +18,22 @@ async function boot() {
 
   let scene;
   const fromHash = decodeHash(location.hash);
-  if (fromHash) {
+  const local = loadLocal();
+  // update() keeps the URL hash current, so on a plain reload the hash is our
+  // own writing and the autosave (which carries tweaks) must win. Only a
+  // foreign/shared hash — one that doesn't match the autosave's knobs — takes
+  // the hash path.
+  if (fromHash && !(local && encodeHash(local) === location.hash)) {
     const { paletteName, ...knobs } = fromHash;
     scene = { ...defaultScene(), ...knobs, palette: getPreset(paletteName) };
     if (!scene.partSet.length) scene.partSet = store.list.map(p => p.id);
     scatter(scene, store);          // hash = seed+knobs, so scatter reproduces it
+  } else if (local) {
+    scene = local;                  // full state incl. tweaks
   } else {
-    scene = loadLocal();            // full state incl. tweaks
-    if (!scene) {
-      scene = defaultScene();
-      scene.partSet = store.list.map(p => p.id);
-      scatter(scene, store);
-    }
+    scene = defaultScene();
+    scene.partSet = store.list.map(p => p.id);
+    scatter(scene, store);
   }
 
   function renderSelectionSwatches() {
