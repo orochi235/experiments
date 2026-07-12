@@ -833,14 +833,16 @@ export function encodeHash(scene) {
   const { seed, mode, radial, tiling, density, sizeRange, rotationJitter, partSet } = scene;
   const payload = { seed, mode, radial, tiling, density, sizeRange, rotationJitter,
     partSet, paletteName: scene.palette.name };
-  return '#s=' + btoa(JSON.stringify(payload)).replaceAll('+', '-').replaceAll('/', '_');
+  return '#s=' + btoa(JSON.stringify(payload)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 
 export function decodeHash(hash) {
   const m = /^#s=([A-Za-z0-9_-]+)$/.exec(hash ?? '');
   if (!m) return null;
   try {
-    const p = JSON.parse(atob(m[1].replaceAll('-', '+').replaceAll('_', '/')));
+    let b64 = m[1].replaceAll('-', '+').replaceAll('_', '/');
+    while (b64.length % 4) b64 += '=';
+    const p = JSON.parse(atob(b64));
     if (typeof p.seed !== 'number') return null;
     return p;
   } catch { return null; }
