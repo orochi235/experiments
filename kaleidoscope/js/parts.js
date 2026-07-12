@@ -26,7 +26,10 @@ export async function loadParts(baseUrl = 'assets') {
   host.setAttribute('aria-hidden', 'true');
   document.body.appendChild(host);
 
-  const cache = new Map();  // `${partId}|${color}` -> symbol id
+  const cache = new Map();  // `${partId}|${color}` -> <symbol> element
+  // TODO(task-12): unbounded growth — a live color picker scrubbing hundreds of
+  // hexes mints ~50KB of dead DOM per (part,color); add eviction of symbols not
+  // used by the current render, or a transient scratch symbol for picker drags.
   const base = manifest.baseColor;
 
   function recoloredInner(part, color) {
@@ -39,35 +42,38 @@ export async function loadParts(baseUrl = 'assets') {
     });
   }
 
-  // brick-icons SVGs define gradients as id="g0", id="g1", ... — identical
-  // ids across parts/colors would collide in the shared document (first-in-
-  // document wins, silently corrupting shading), so namespace them per symbol.
+  // brick-icons SVGs define gradients as id="g0", id="g1", ... plus a part-
+  // specific silhouette <clipPath id="sclip"> — identical ids across parts/
+  // colors would collide in the shared document (first-in-document wins:
+  // corrupted shading, linework clipped by the wrong part's silhouette), so
+  // namespace every id per symbol. Rewriting all ids is verified safe: assets
+  // contain no href="#..." and no external url() refs.
   function namespaceIds(markup, ns) {
     return markup
-      .replaceAll('id="g', `id="${ns}-g`)
-      .replaceAll('url(#g', `url(#${ns}-g`);
+      .replaceAll('id="', `id="${ns}-`)
+      .replaceAll('url(#', `url(#${ns}-`);
+  }
+
+  function symbolFor(partId, color) {
+    color = color.toLowerCase();
+    const key = `${partId}|${color}`;
+    if (!cache.has(key)) {
+      const part = parts.get(partId);
+      const sym = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
+      sym.id = `sym-${partId}-${color.slice(1)}`;
+      sym.setAttribute('viewBox', part.viewBox);
+      sym.innerHTML = namespaceIds(recoloredInner(part, color), `${partId}-${color.slice(1)}`);
+      host.appendChild(sym);
+      cache.set(key, sym);
+    }
+    return cache.get(key);
   }
 
   return {
     list: manifest.parts,
     baseColor: base,
-    symbolId(partId, color) {
-      const key = `${partId}|${color}`;
-      if (!cache.has(key)) {
-        const part = parts.get(partId);
-        const sym = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
-        sym.id = `sym-${partId}-${color.slice(1)}`;
-        sym.setAttribute('viewBox', part.viewBox);
-        sym.innerHTML = namespaceIds(recoloredInner(part, color), `${partId}-${color.slice(1)}`);
-        host.appendChild(sym);
-        cache.set(key, sym.id);
-      }
-      return cache.get(key);
-    },
-    symbolMarkup(partId, color) {
-      this.symbolId(partId, color);  // ensure cached
-      return document.getElementById(`sym-${partId}-${color.slice(1)}`).outerHTML;
-    },
+    symbolId: (partId, color) => symbolFor(partId, color).id,
+    symbolMarkup: (partId, color) => symbolFor(partId, color).outerHTML,
   };
 }
 
