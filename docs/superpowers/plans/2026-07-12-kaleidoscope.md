@@ -690,16 +690,18 @@ const PLACEHOLDER = (id) => `
   <text x="50" y="55" text-anchor="middle" fill="#e05555" font-size="16" font-family="monospace">${id}</text>`;
 ```
 
-Gradient `id` collision note: brick-icons SVGs define gradients as `id="g0"…` — identical ids across parts would collide in a shared document. **Add id namespacing to `recoloredInner`:** after color replacement, also rewrite `id="g` → `id="${partId}-${color.slice(1)}-g` and `url(#g` → `url(#${partId}-${color.slice(1)}-g`. Include this in the implementation:
+Internal-id collision note: brick-icons SVGs define gradients as `id="g0"…` AND a part-specific silhouette clip path `id="sclip"` — identical ids across parts/colors collide in a shared document (first-in-document wins, silently mis-clipping every later part's linework). **Namespace ALL ids** (the assets contain no `href="#…"` and no external `url()` refs, so blanket rewriting is safe):
 
 ```js
 function namespaceIds(markup, ns) {
   return markup
-    .replaceAll('id="g', `id="${ns}-g`)
-    .replaceAll('url(#g', `url(#${ns}-g`);
+    .replaceAll('id="', `id="${ns}-`)
+    .replaceAll('url(#', `url(#${ns}-`);
 }
 // in symbolId(): sym.innerHTML = namespaceIds(recoloredInner(part, color), `${partId}-${color.slice(1)}`);
 ```
+
+Also in `symbolId()`: normalize `color = color.toLowerCase()` at the top (case-variant hexes would mint duplicate symbols), cache the `<symbol>` element itself rather than its id string (avoids document-level `getElementById` and makes `symbolMarkup` destructuring-safe via local helpers, not `this`), and leave a `TODO(task-12)` noting the cache needs eviction or a transient-scratch-symbol path before a live color picker scrubs it with hundreds of hexes.
 
 - [ ] **Step 2: Manual verification in console** (on the served page):
 
