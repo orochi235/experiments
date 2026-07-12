@@ -55,6 +55,18 @@ async function testColor() {
 
   assert('color: remap is deterministic',
     remapColor('#5c605e', '#9ba19d', '#c91a09') === shade);
+
+  // Full asset shade ramp onto red stays monotone in L (catches base-noise
+  // amplification producing lightness kinks in gradient bands)
+  const ramp = ['#555956', '#595c5a', '#757976', '#8b918d', '#979d99', '#9aa09c', '#9ea4a0', '#cad1cc'];
+  const Ls = ramp.map(s => hexToOklch(remapColor(s, '#9ba19d', '#c91a09')).L);
+  assert('color: remapped ramp is monotone', Ls.every((v, i) => i === 0 || v >= Ls[i - 1] - 1e-4));
+
+  // Highlight onto light yellow stays near the target hue (catches
+  // per-channel gamut clipping shifting hue toward green)
+  const hY = hexToOklch('#f2cd37').h;
+  const hHi = hexToOklch(remapColor('#cad1cc', '#9ba19d', '#f2cd37')).h;
+  assert('color: yellow highlight hue stays true', Math.abs(hHi - hY) < 6 * Math.PI / 180);
 }
 
 function nearHex(a, b, tol) {
