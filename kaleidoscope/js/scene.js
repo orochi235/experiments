@@ -21,11 +21,16 @@ export function defaultScene() {
 
 // Reroll chamber.parts from seed + knobs. Discards tweaks by design.
 export function scatter(scene, store) {
-  const enabled = scene.partSet.length
+  const all = store.list.map(p => p.id);
+  const filtered = scene.partSet.length
     ? scene.partSet.filter(id => store.list.some(p => p.id === id))
-    : store.list.map(p => p.id);
+    : all;
+  const enabled = filtered.length ? filtered : all;  // stale/emptied partSet: fall back
+  // Persisted or hash-supplied state bypasses the slider's [3,60] — clamp so a
+  // garbage density can't crash Array.from or hang the tab.
+  const density = Math.min(200, Math.max(0, Math.trunc(scene.density) || 0));
   const rand = mulberry32(scene.seed);
-  scene.chamber.parts = Array.from({ length: scene.density }, (_, i) => ({
+  scene.chamber.parts = Array.from({ length: density }, (_, i) => ({
     id: i,
     partRef: randPick(rand, enabled),
     x: randRange(rand, 0, scene.chamber.width),
@@ -41,8 +46,12 @@ export const partColor = (scene, part) =>
 
 export const serialize = (scene) => JSON.stringify(scene);
 export function deserialize(json) {
-  const s = { ...defaultScene(), ...JSON.parse(json) };
-  s.chamber = { ...defaultScene().chamber, ...s.chamber };
+  const d = defaultScene();
+  const s = { ...d, ...JSON.parse(json) };
+  // Deep-merge nested keys so older saves survive schema growth.
+  for (const k of ['chamber', 'radial', 'tiling', 'palette']) s[k] = { ...d[k], ...s[k] };
+  if (!Array.isArray(s.palette.colors) || !s.palette.colors.length) s.palette = getPreset(s.palette.name);
+  if (!Array.isArray(s.sizeRange) || s.sizeRange.length !== 2) s.sizeRange = d.sizeRange;
   return s;
 }
 

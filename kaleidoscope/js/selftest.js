@@ -105,5 +105,15 @@ async function testScene() {
     dec.radial.order === s1.radial.order && dec.tiling.group === s1.tiling.group);
   assert('scene: hash omits tweaks', dec.chamber === undefined);
   assert('scene: decodeHash rejects garbage', decodeHash('#s=%%%') === null);
+  assert('scene: decodeHash rejects valid-base64 non-scene', decodeHash('#s=YWJj') === null);
+  assert('scene: all-stale partSet falls back to full list', (() => {
+    const s = defaultScene(); s.seed = 3; s.partSet = ['not-a-part'];
+    scatter(s, fakeStore);
+    return s.chamber.parts.length > 0 && s.chamber.parts.every(p => p.partRef !== undefined);
+  })());
+  assert('scene: deserialize recovers from empty palette colors', (() => {
+    const bad = { ...defaultScene(), palette: { name: 'classic-brights', colors: [], background: '#000000' } };
+    return deserialize(JSON.stringify(bad)).palette.colors.length > 0;
+  })());
 }
 async function testEngines() {}
