@@ -1,0 +1,29 @@
+{
+  "parts": [
+    { "id": "3001", "name": "Brick 2 x 4" },
+    { "id": "3003", "name": "Brick 2 x 2" },
+    { "id": "3004", "name": "Brick 1 x 2" },
+    { "id": "3005", "name": "Brick 1 x 1" },
+    { "id": "3010", "name": "Brick 1 x 4" },
+    { "id": "3020", "name": "Plate 2 x 4" },
+    { "id": "3022", "name": "Plate 2 x 2" },
+    { "id": "3023", "name": "Plate 1 x 2" },
+    { "id": "3024", "name": "Plate 1 x 1" },
+    { "id": "3795", "name": "Plate 2 x 6" },
+    { "id": "3068b", "name": "Tile 2 x 2" },
+    { "id": "3069b", "name": "Tile 1 x 2" },
+    { "id": "3070b", "name": "Tile 1 x 1" },
+    { "id": "3040b", "name": "Slope 45 2 x 1" },
+    { "id": "3039", "name": "Slope 45 2 x 2" },
+    { "id": "54200", "name": "Slope 30 1 x 1 Cheese" },
+    { "id": "3941", "name": "Brick Round 2 x 2" },
+    { "id": "4073", "name": "Plate Round 1 x 1" },
+    { "id": "3062b", "name": "Brick Round 1 x 1" },
+    { "id": "3700", "name": "Technic Brick 1 x 2 with 1 Hole" },
+    { "id": "3701", "name": "Technic Brick 1 x 4 with 3 Holes" },
+    { "id": "32062", "name": "Technic Axle 2" },
+    { "id": "87087", "name": "Brick 1 x 1 with Stud on Side" },
+    { "id": "15573", "name": "Plate 1 x 2 with 1 Jumper Stud" }
+  ],
+  "baseColor": "#9ba19d"
+}

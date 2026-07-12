@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 170" preserveAspectRatio="xMidYMid meet">
+<rect width="100%" height="100%" fill="white"/>
+<g stroke-linejoin="round">
+<path d="M 6.00 71.58 L 128.00 132.58 L 250.00 71.58 L 128.00 10.58 L 6.00 71.58 Z" fill="#cad1cc" fill-rule="evenodd" stroke="#cad1cc" stroke-width="0.8"/>
+<path d="M 250.00 71.58 L 128.00 132.58 L 128.00 158.73 L 250.00 97.73 L 250.00 71.58 Z" fill="#5d615e" fill-rule="evenodd" stroke="#5d615e" stroke-width="0.8"/>
+<path d="M 128.00 158.73 L 128.00 132.58 L 6.00 71.58 L 6.00 97.73 L 128.00 158.73 Z" fill="#848985" fill-rule="evenodd" stroke="#848985" stroke-width="0.8"/>
+</g>
+<defs><clipPath id="sclip"><path d="M 11.10 101.40 L 11.10 102.08 L 128.00 160.53 L 244.90 102.08 L 244.90 101.40 L 251.00 98.35 L 251.00 70.97 L 128.00 9.46 L 5.00 70.97 L 5.00 98.35 Z" clip-rule="evenodd"/></clipPath></defs>
+<g stroke="black" fill="none" stroke-linecap="round" clip-path="url(#sclip)">
+<path d="M 12.10 100.78 L 12.10 101.47 L 128.00 159.42 L 243.90 101.47 L 243.90 100.78 L 250.00 97.73 L 250.00 71.58 L 128.00 10.58 L 6.00 71.58 L 6.00 97.73 L 12.10 100.78 Z" stroke-width="2.00" stroke-linejoin="miter" stroke-miterlimit="5"/>
+<line x1="6.00" y1="97.73" x2="128.00" y2="158.73" stroke-width="2.00"/>
+<line x1="128.00" y1="158.73" x2="250.00" y2="97.73" stroke-width="2.00"/>
+<line x1="128.00" y1="10.58" x2="250.00" y2="71.58" stroke-width="2.00"/>
+<line x1="6.00" y1="71.58" x2="128.00" y2="10.58" stroke-width="2.00"/>
+<line x1="6.00" y1="71.58" x2="128.00" y2="132.58" stroke-width="2.00"/>
+<line x1="128.00" y1="132.58" x2="250.00" y2="71.58" stroke-width="2.00"/>
+<line x1="250.00" y1="71.58" x2="250.00" y2="97.73" stroke-width="2.00"/>
+<line x1="128.00" y1="132.58" x2="128.00" y2="158.73" stroke-width="2.00"/>
+<line x1="6.00" y1="71.58" x2="6.00" y2="97.73" stroke-width="2.00"/>
+<line x1="12.10" y1="101.47" x2="128.00" y2="159.42" stroke-width="2.00"/>
+<line x1="128.00" y1="159.42" x2="243.90" y2="101.47" stroke-width="2.00"/>
+</g>
+</svg>

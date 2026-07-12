@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 170" preserveAspectRatio="xMidYMid meet">
+<rect width="100%" height="100%" fill="white"/>
+<g stroke-linejoin="round">
+<path d="M 18.27 60.87 L 128.00 115.73 L 237.73 60.87 L 128.00 6.00 Z" fill="#cad1cc" fill-rule="evenodd" stroke="#cad1cc" stroke-width="0.8"/>
+<path d="M 237.73 60.87 L 128.00 115.73 L 128.00 162.77 L 237.73 107.90 Z" fill="#5d615e" fill-rule="evenodd" stroke="#5d615e" stroke-width="0.8"/>
+<path d="M 128.00 162.77 L 128.00 115.73 L 18.27 60.87 L 18.27 107.90 Z" fill="#848985" fill-rule="evenodd" stroke="#848985" stroke-width="0.8"/>
+</g>
+<defs><clipPath id="sclip"><path d="M 17.27 60.25 L 17.27 108.52 L 28.24 114.01 L 28.24 115.24 L 128.00 165.12 L 227.76 115.24 L 227.76 114.01 L 238.73 108.52 L 238.73 60.25 L 128.00 4.88 Z" clip-rule="evenodd"/></clipPath></defs>
+<g stroke="black" fill="none" stroke-linecap="round" clip-path="url(#sclip)">
+<path d="M 18.27 60.87 L 18.27 107.90 L 29.24 113.39 L 29.24 114.62 L 128.00 164.00 L 226.76 114.62 L 226.76 113.39 L 237.73 107.90 L 237.73 60.87 L 128.00 6.00 Z" stroke-width="2.00" stroke-linejoin="miter" stroke-miterlimit="5"/>
+<line x1="18.27" y1="107.90" x2="128.00" y2="162.77" stroke-width="2.00"/>
+<line x1="128.00" y1="162.77" x2="237.73" y2="107.90" stroke-width="2.00"/>
+<line x1="128.00" y1="6.00" x2="237.73" y2="60.86" stroke-width="2.00"/>
+<line x1="18.27" y1="60.86" x2="128.00" y2="6.00" stroke-width="2.00"/>
+<line x1="18.27" y1="60.86" x2="128.00" y2="115.73" stroke-width="2.00"/>
+<line x1="128.00" y1="115.73" x2="237.73" y2="60.86" stroke-width="2.00"/>
+<line x1="237.73" y1="60.86" x2="237.73" y2="107.90" stroke-width="2.00"/>
+<line x1="128.00" y1="115.73" x2="128.00" y2="164.00" stroke-width="2.00"/>
+<line x1="18.27" y1="60.86" x2="18.27" y2="107.90" stroke-width="2.00"/>
+<line x1="29.24" y1="114.62" x2="128.00" y2="164.00" stroke-width="2.00"/>
+<line x1="128.00" y1="164.00" x2="226.76" y2="114.62" stroke-width="2.00"/>
+<line x1="226.76" y1="112.83" x2="226.76" y2="114.62" stroke-width="2.00"/>
+<line x1="29.24" y1="112.61" x2="29.24" y2="114.62" stroke-width="2.00"/>
+</g>
+</svg>
