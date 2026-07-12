@@ -1,5 +1,5 @@
 import { loadParts } from './parts.js';
-import { defaultScene, scatter, decodeHash, encodeHash, saveLocal, loadLocal, partColor } from './scene.js';
+import { defaultScene, scatter, decodeHash, encodeHash, saveLocal, loadLocal, serialize, deserialize, partColor } from './scene.js';
 import { getPreset } from './palettes.js';
 import { renderPreview } from './engines.js';
 import { renderChamber, getSelected, clearSelection } from './editor.js';
@@ -94,6 +94,35 @@ async function boot() {
   };
   $('ctl-export-png').onclick = () => { const s = exportSize(); if (s) downloadPng(scene, store, ...s); };
   $('ctl-export-svg').onclick = () => { const s = exportSize(); if (s) downloadSvg(scene, store, ...s); };
+
+  // Durable full-scene copies (incl. tweaks) as downloadable/loadable JSON.
+  $('ctl-scene-save').onclick = () => {
+    const blob = new Blob([serialize(scene)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `kaleidoscope-scene-${scene.seed}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  $('ctl-scene-load').onclick = () => $('ctl-scene-file').click();
+  $('ctl-scene-file').onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      // update/reroll/onEditorChange close over this same `scene` binding, so
+      // reassigning here is visible to them; bindSidebar captured the old
+      // object by value, so re-bind to sync the controls to the loaded scene.
+      scene = deserialize(await file.text());   // hardened: deep-merges + recovers bad nested state
+      if (!scene.partSet.length) scene.partSet = store.list.map(p => p.id);
+      clearSelection();  // a stale selection would attach to an unrelated loaded part
+      bindSidebar(scene, store, { update, reroll });
+      window.__kaleido.scene = scene;
+      update();
+    } catch (err) {
+      document.querySelector('header .hint').textContent = 'Scene load failed: ' + err.message;
+    }
+    e.target.value = '';
+  };
 
   window.__kaleido = { scene, store, update };  // console access during development
 }

@@ -53,7 +53,9 @@ Custom and enter a width/height; PNG rasterizes the current composition at
 that size, SVG downloads the same composition as a standalone document with
 symbols and palette baked in. Custom dimensions are validated (must be
 positive integers up to 16384px) — invalid values simply no-op instead of
-downloading a broken file.
+downloading a broken file. **Save scene… / Load scene…** round-trip the full
+scene (including tweaks) as a JSON file for durable copies that outlive
+`localStorage`.
 
 ## Regenerating assets
 
