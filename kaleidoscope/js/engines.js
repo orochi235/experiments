@@ -9,6 +9,7 @@ const el = (tag, attrs = {}) => {
 
 export const PREVIEW_R = 500;                    // radial preview radius
 export const WRAP_MARGIN = 0.2;                  // tiling: clone parts within 20% of an edge
+export const TILE_VIEW = 1000;                   // tiling preview viewBox is 0..1000 square
 
 // One <g> containing a <use> per chamber part. With {wrap:true}, parts near an
 // edge are cloned across the opposite edge (toroidal) so tiles read seamless.
@@ -89,6 +90,81 @@ function buildRadial(svgEl, scene, store) {
   }
 }
 
-function buildTiling() {
-  throw new Error('tiling engine: implemented in Task 9');
+function buildTiling(svgEl, scene, store) {
+  svgEl.setAttribute('viewBox', `0 0 ${TILE_VIEW} ${TILE_VIEW}`);
+  svgEl.setAttribute('preserveAspectRatio', 'xMidYMid slice');
+
+  const defs = el('defs');
+  const { width: w, height: h } = scene.chamber;
+  const k = scene.tiling.tileSize / w;          // chamber units → preview units
+  const src = el('g', { id: 'tiling-chamber' });
+  src.appendChild(chamberGroup(scene, store, { wrap: true }));
+  defs.appendChild(src);
+
+  const clipRect = el('clipPath', { id: 'tile-cell' });
+  clipRect.appendChild(el('rect', { width: w, height: h }));
+  defs.appendChild(clipRect);
+
+  const pattern = el('pattern', { id: 'tile', patternUnits: 'userSpaceOnUse' });
+  const use = (transform) => {
+    const g = el('g', transform ? { transform } : {});
+    const u = el('use', { href: '#tiling-chamber', 'clip-path': 'url(#tile-cell)' });
+    g.appendChild(u);
+    return g;
+  };
+
+  const group = scene.tiling.group;
+  if (group === 'p1') {
+    pattern.setAttribute('width', w * k); pattern.setAttribute('height', h * k);
+    pattern.appendChild(el('g', { transform: `scale(${k})` })).appendChild(use());
+  } else if (group === 'pm') {
+    pattern.setAttribute('width', 2 * w * k); pattern.setAttribute('height', h * k);
+    const g = pattern.appendChild(el('g', { transform: `scale(${k})` }));
+    g.appendChild(use());
+    g.appendChild(use(`translate(${2 * w},0) scale(-1,1)`));
+  } else if (group === 'pmm') {
+    pattern.setAttribute('width', 2 * w * k); pattern.setAttribute('height', 2 * h * k);
+    const g = pattern.appendChild(el('g', { transform: `scale(${k})` }));
+    g.appendChild(use());
+    g.appendChild(use(`translate(${2 * w},0) scale(-1,1)`));
+    g.appendChild(use(`translate(0,${2 * h}) scale(1,-1)`));
+    g.appendChild(use(`translate(${2 * w},${2 * h}) scale(-1,-1)`));
+  } else if (group === 'p4m') {
+    // Square cell: chamber clipped to the below-diagonal triangle + its
+    // diagonal reflection, then that cell reflected pmm-style into 2×2.
+    const s = Math.min(w, h);
+    const tri = el('clipPath', { id: 'tile-tri' });
+    tri.appendChild(el('path', { d: `M0,0 L${s},0 L${s},${s} Z` }));
+    defs.appendChild(tri);
+    const cell = el('g', { id: 'p4m-cell' });
+    const t1 = el('g', { 'clip-path': 'url(#tile-tri)' });
+    t1.appendChild(el('use', { href: '#tiling-chamber' }));
+    const t2 = el('g', { 'clip-path': 'url(#tile-tri)', transform: 'matrix(0,1,1,0,0,0)' });
+    t2.appendChild(el('use', { href: '#tiling-chamber' }));
+    cell.appendChild(t1); cell.appendChild(t2);
+    defs.appendChild(cell);
+    pattern.setAttribute('width', 2 * s * k); pattern.setAttribute('height', 2 * s * k);
+    const g = pattern.appendChild(el('g', { transform: `scale(${k})` }));
+    for (const t of ['', `translate(${2 * s},0) scale(-1,1)`,
+                     `translate(0,${2 * s}) scale(1,-1)`, `translate(${2 * s},${2 * s}) scale(-1,-1)`]) {
+      const gg = el('g', t ? { transform: t } : {});
+      gg.appendChild(el('use', { href: '#p4m-cell' }));
+      g.appendChild(gg);
+    }
+  } else {
+    buildHexTiling(svgEl, defs, pattern, scene, store, k);  // Task 10 (p6m, p3m1)
+  }
+
+  defs.appendChild(pattern);
+  svgEl.appendChild(defs);
+  svgEl.appendChild(el('rect', {
+    width: TILE_VIEW, height: TILE_VIEW, fill: scene.palette.background,
+  }));
+  svgEl.appendChild(el('rect', {
+    width: TILE_VIEW, height: TILE_VIEW, fill: 'url(#tile)',
+  }));
+}
+
+function buildHexTiling() {
+  throw new Error('hex tiling: implemented in Task 10');
 }

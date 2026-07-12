@@ -144,4 +144,23 @@ async function testEngines() {
     svg.querySelectorAll('[data-wedge]').length === 6);
   assert('engines: background rect uses palette background',
     svg.querySelector('rect').getAttribute('fill') === scene.palette.background);
+
+  for (const [group, expectedUses] of [['p1', 1], ['pm', 2], ['pmm', 4]]) {
+    scene.mode = 'tiling'; scene.tiling = { group, tileSize: 300 };
+    renderPreview(svg, scene, fakeStore);
+    assert(`engines: ${group} tile composes ${expectedUses} chamber copies`,
+      svg.querySelectorAll('pattern use[href="#tiling-chamber"]').length === expectedUses);
+    assert(`engines: ${group} pattern rect present`,
+      svg.querySelector('rect[fill^="url(#"]') !== null);
+  }
+  // p4m composes via an intermediate cell def: 2 chamber uses in the cell,
+  // 4 cell uses in the pattern (cell lives in <defs>, not under <pattern>).
+  scene.mode = 'tiling'; scene.tiling = { group: 'p4m', tileSize: 300 };
+  renderPreview(svg, scene, fakeStore);
+  assert('engines: p4m cell mirrors chamber across the diagonal',
+    svg.querySelectorAll('#p4m-cell use[href="#tiling-chamber"]').length === 2);
+  assert('engines: p4m pattern stamps 4 cells',
+    svg.querySelectorAll('pattern use[href="#p4m-cell"]').length === 4);
+  assert('engines: p4m pattern rect present',
+    svg.querySelector('rect[fill^="url(#"]') !== null);
 }
