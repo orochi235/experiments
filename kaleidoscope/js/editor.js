@@ -120,6 +120,22 @@ function wirePointerHandlers(svgEl, scene, onChange) {
       scene.chamber.parts = scene.chamber.parts.filter(p => p.id !== selectedId);
       selectedId = null;
       onChange('tweak');
+      return;
+    }
+    // Stacking: paint order is array order. ] forward, [ backward,
+    // shift ({ / }) all the way to back/front.
+    if (selectedId !== null && ['[', ']', '{', '}'].includes(ev.key)) {
+      const parts = scene.chamber.parts;
+      const i = parts.findIndex(p => p.id === selectedId);
+      const j = ev.key === ']' ? Math.min(parts.length - 1, i + 1)
+              : ev.key === '[' ? Math.max(0, i - 1)
+              : ev.key === '}' ? parts.length - 1
+              : 0;
+      if (i !== j) {
+        const [p] = parts.splice(i, 1);
+        parts.splice(j, 0, p);
+        onChange('tweak');
+      }
     }
   };
 }

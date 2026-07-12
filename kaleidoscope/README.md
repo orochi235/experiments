@@ -23,6 +23,7 @@ keyboard focus, then):
 - **Drag** a part to move it.
 - **Scroll** over a selected part to rotate it; **shift+scroll** to scale it.
 - **Delete** (or Backspace) removes the selected part.
+- **`[` / `]`** move the selected part backward/forward in the stacking order; **`{` / `}`** send it all the way to back/front.
 - Selecting a part reveals a color-override row under the chamber: click a
   palette swatch or use the custom color picker to recolor just that part.
 
