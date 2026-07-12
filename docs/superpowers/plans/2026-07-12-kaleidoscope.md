@@ -462,6 +462,18 @@ async function testColor() {
 
   assert('color: remap is deterministic',
     remapColor('#5c605e', '#9ba19d', '#c91a09') === shade);
+
+  // Full asset shade ramp onto red stays monotone in L (catches base-noise
+  // amplification producing lightness kinks in gradient bands)
+  const ramp = ['#555956', '#595c5a', '#757976', '#8b918d', '#979d99', '#9aa09c', '#9ea4a0', '#cad1cc'];
+  const Ls = ramp.map(s => hexToOklch(remapColor(s, '#9ba19d', '#c91a09')).L);
+  assert('color: remapped ramp is monotone', Ls.every((v, i) => i === 0 || v >= Ls[i - 1] - 1e-4));
+
+  // Highlight onto light yellow stays near the target hue (catches
+  // per-channel gamut clipping shifting hue toward green)
+  const hY = hexToOklch('#f2cd37').h;
+  const hHi = hexToOklch(remapColor('#cad1cc', '#9ba19d', '#f2cd37')).h;
+  assert('color: yellow highlight hue stays true', Math.abs(hHi - hY) < 6 * Math.PI / 180);
 }
 
 function nearHex(a, b, tol) {
@@ -494,35 +506,52 @@ export function hexToOklch(hex) {
   return { L, C: Math.hypot(A, B), h: Math.atan2(B, A) };
 }
 
-export function oklchToHex({ L, C, h }) {
+function oklchToSrgb({ L, C, h }) {
   const A = C * Math.cos(h), B = C * Math.sin(h);
   const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3;
   const m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
   const s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3;
-  const r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-  const g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-  const b = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
-  const to255 = (c) => Math.round(255 * Math.min(1, Math.max(0, linearToSrgb(c))));
-  return '#' + [r, g, b].map(c => to255(c).toString(16).padStart(2, '0')).join('');
+  return [
+    +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  ].map(linearToSrgb);
+}
+
+export function oklchToHex(c) {
+  const to255 = (v) => Math.round(255 * Math.min(1, Math.max(0, v)));
+  return '#' + oklchToSrgb(c).map(v => to255(v).toString(16).padStart(2, '0')).join('');
+}
+
+// Largest in-gamut chroma at (L, h): per-channel clipping shifts hue, so
+// out-of-gamut colors reduce chroma (hue and lightness held) instead.
+function fitChroma({ L, C, h }) {
+  const fits = (c) => oklchToSrgb({ L, C: c, h }).every(v => v >= -1e-4 && v <= 1 + 1e-4);
+  if (fits(C)) return C;
+  let lo = 0, hi = C;
+  for (let i = 0; i < 12; i++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) lo = mid; else hi = mid;
+  }
+  return lo;
 }
 
 // Map `hex`'s relationship to `baseHex` onto `newBaseHex`.
 export function remapColor(hex, baseHex, newBaseHex) {
   const c = hexToOklch(hex), b = hexToOklch(baseHex), n = hexToOklch(newBaseHex);
+  // Below this chroma the base is effectively gray and its per-shade hue and
+  // chroma variation is quantization noise (the neutral asset base #9ba19d
+  // has C ≈ 0.009): keep the new base's hue, scale chroma with lightness.
+  const baseIsGray = b.C < 2e-2;
   const rL = b.L > 1e-6 ? c.L / b.L : 1;
-  const rC = b.C > 1e-3 ? c.C / b.C : 1;   // gray base: keep new base's chroma scaled by lightness only
-  const dh = b.C > 1e-3 ? c.h - b.h : 0;
-  return oklchToHex({
-    L: Math.min(1, n.L * rL),
-    C: b.C > 1e-3 ? n.C * rC : n.C * rL,
-    h: n.h + dh,
-  });
+  const L = Math.min(1, Math.max(0, n.L * rL));
+  const C = baseIsGray ? n.C * rL : n.C * (c.C / b.C);
+  const h = baseIsGray ? n.h : n.h + (c.h - b.h);
+  return oklchToHex({ L, C: fitChroma({ L, C, h }), h });
 }
 ```
 
-Note the gray-base branch: the canonical asset color `#9ba19d` is near-achromatic, so hue offsets from it are noise — shades keep the new base's hue and scale chroma with lightness.
-
-- [ ] **Step 4: Verify** — reload `?selftest`. Expected: all `color:` assertions PASS.
+- [ ] **Step 4: Verify** — reload `?selftest`. Expected: all `color:` assertions PASS (summary 10/10).
 
 - [ ] **Step 5: Commit**
 
