@@ -120,6 +120,7 @@ Module contracts (used consistently by every task below):
   .swatch.active { outline: 2px solid var(--accent); }
   #part-list { max-height: 140px; overflow-y: auto; }
   #part-list label { justify-content: flex-start; }
+  #sidebar input.dim-input { width: 64px; }
 </style>
 </head>
 <body>
@@ -196,8 +197,8 @@ Module contracts (used consistently by every task below):
       </select>
     </label>
     <label id="export-custom" hidden>W×H
-      <span><input type="number" id="ctl-export-w" value="1920" style="width:64px"> ×
-      <input type="number" id="ctl-export-h" value="1080" style="width:64px"></span>
+      <span><input type="number" id="ctl-export-w" value="1920" class="dim-input"> ×
+      <input type="number" id="ctl-export-h" value="1080" class="dim-input"></span>
     </label>
     <button id="ctl-export-png">Export PNG</button>
     <button id="ctl-export-svg">Export SVG</button>
