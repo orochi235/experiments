@@ -44,6 +44,43 @@ export function renderPreview(svgEl, scene, store) {
   else buildTiling(svgEl, scene, store);
 }
 
+// Shared: builds a mirrored/rotated wedge motif of the chamber, radius R,
+// appending its defs into `defs` and returning the motif <g>.
+function wedgeMotif(defs, scene, store, { order, mirror, R, idPrefix, dataWedge = false }) {
+  order = Math.min(32, Math.max(1, Math.trunc(order) || 1));  // hash-supplied state bypasses the slider
+  const n = order * (mirror ? 2 : 1);
+  const wedge = 360 / n;
+  const half = (wedge / 2) * (Math.PI / 180);
+  const { width: w, height: h } = scene.chamber;
+  // Cover the whole sector: wedges wider than 60° need |y| up to R·sin(half).
+  const s = Math.max(R / w, (2 * R * Math.sin(half)) / h);
+  const placed = el('g', { id: `${idPrefix}-chamber` });
+  const inner = el('g', { transform: `translate(0,${(-h * s) / 2}) scale(${s})` });
+  inner.appendChild(chamberGroup(scene, store, {}));
+  placed.appendChild(inner);
+  defs.appendChild(placed);
+
+  const clip = el('clipPath', { id: `${idPrefix}-sector` });
+  clip.appendChild(el('path', {
+    d: `M0,0 L${R * Math.cos(-half)},${R * Math.sin(-half)} ` +
+       `A${R},${R} 0 0 1 ${R * Math.cos(half)},${R * Math.sin(half)} Z`,
+  }));
+  defs.appendChild(clip);
+
+  const motif = el('g');
+  for (let k = 0; k < n; k++) {
+    const mirrored = mirror && k % 2 === 1;
+    const gk = el('g', {
+      ...(dataWedge ? { 'data-wedge': k } : {}),
+      transform: `rotate(${k * wedge})${mirrored ? ' scale(1,-1)' : ''}`,
+      'clip-path': `url(#${idPrefix}-sector)`,
+    });
+    gk.appendChild(el('use', { href: `#${idPrefix}-chamber` }));
+    motif.appendChild(gk);
+  }
+  return motif;
+}
+
 function buildRadial(svgEl, scene, store) {
   const R = PREVIEW_R;
   svgEl.setAttribute('viewBox', `${-R} ${-R} ${2 * R} ${2 * R}`);
@@ -51,43 +88,12 @@ function buildRadial(svgEl, scene, store) {
   svgEl.appendChild(el('rect', {
     x: -R, y: -R, width: 2 * R, height: 2 * R, fill: scene.palette.background,
   }));
-
   const defs = el('defs');
-  // Hash-supplied state bypasses the slider's [3,16] — clamp so a garbage
-  // order can't hang the tab building wedges.
-  const order = Math.min(32, Math.max(1, Math.trunc(scene.radial.order) || 1));
-  const n = order * (scene.radial.mirror ? 2 : 1);
-  const wedge = 360 / n;
-  const half = (wedge / 2) * (Math.PI / 180);
-  // Chamber placed radially: x → [0, R] outward from apex, y centered on the
-  // axis. Scale must cover the whole sector: wedges wider than 60° need
-  // |y| up to R·sin(half), taller than the h·(R/w) band; the arc clip trims
-  // the radial overshoot.
-  const { width: w, height: h } = scene.chamber;
-  const s = Math.max(R / w, (2 * R * Math.sin(half)) / h);
-  const placed = el('g', { id: 'radial-chamber' });
-  const inner = el('g', { transform: `translate(0,${(-h * s) / 2}) scale(${s})` });
-  inner.appendChild(chamberGroup(scene, store, {}));
-  placed.appendChild(inner);
-  defs.appendChild(placed);
-
-  const sector = `M0,0 L${R * Math.cos(-half)},${R * Math.sin(-half)} ` +
-    `A${R},${R} 0 0 1 ${R * Math.cos(half)},${R * Math.sin(half)} Z`;
-  const clip = el('clipPath', { id: 'radial-sector' });
-  clip.appendChild(el('path', { d: sector }));
-  defs.appendChild(clip);
   svgEl.appendChild(defs);
-
-  for (let k = 0; k < n; k++) {
-    const mirrored = scene.radial.mirror && k % 2 === 1;
-    const gk = el('g', {
-      'data-wedge': k,
-      transform: `rotate(${k * wedge})${mirrored ? ' scale(1,-1)' : ''}`,
-      'clip-path': 'url(#radial-sector)',
-    });
-    gk.appendChild(el('use', { href: '#radial-chamber' }));
-    svgEl.appendChild(gk);
-  }
+  svgEl.appendChild(wedgeMotif(defs, scene, store, {
+    order: scene.radial.order, mirror: scene.radial.mirror,
+    R, idPrefix: 'radial', dataWedge: true,
+  }));
 }
 
 function buildTiling(svgEl, scene, store) {
@@ -168,6 +174,21 @@ function buildTiling(svgEl, scene, store) {
   }));
 }
 
-function buildHexTiling() {
-  throw new Error('hex tiling: implemented in Task 10');
+function buildHexTiling(svgEl, defs, pattern, scene, store, k) {
+  const group = scene.tiling.group;                 // 'p6m' | 'p3m1'
+  const r = scene.chamber.width;                    // motif radius in chamber units
+  const motif = wedgeMotif(defs, scene, store, {
+    order: group === 'p6m' ? 6 : 3, mirror: true, R: r, idPrefix: 'hex',
+  });
+  motif.id = 'hex-motif';
+  defs.appendChild(motif);
+
+  // Hex lattice: vectors (√3r, 0) and (√3r/2, 1.5r). Rect tile W=√3r, H=3r
+  // holds one full column plus the half-offset row; corner stamps wrap it.
+  const W = Math.sqrt(3) * r, H = 3 * r;
+  pattern.setAttribute('width', W * k); pattern.setAttribute('height', H * k);
+  const g = pattern.appendChild(el('g', { transform: `scale(${k})` }));
+  for (const [cx, cy] of [[0, 0], [W, 0], [W / 2, H / 2], [0, H], [W, H]]) {
+    g.appendChild(el('use', { href: '#hex-motif', transform: `translate(${cx},${cy})` }));
+  }
 }

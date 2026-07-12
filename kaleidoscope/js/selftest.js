@@ -163,4 +163,12 @@ async function testEngines() {
     svg.querySelectorAll('pattern use[href="#p4m-cell"]').length === 4);
   assert('engines: p4m pattern rect present',
     svg.querySelector('rect[fill^="url(#"]') !== null);
+
+  for (const group of ['p6m', 'p3m1']) {
+    scene.mode = 'tiling'; scene.tiling = { group, tileSize: 300 };
+    renderPreview(svg, scene, fakeStore);
+    assert(`engines: ${group} builds a motif`, svg.querySelector('#hex-motif') !== null);
+    assert(`engines: ${group} stamps motif on hex lattice (5 stamps)`,
+      svg.querySelectorAll('pattern > g > use[href="#hex-motif"]').length === 5);
+  }
 }
