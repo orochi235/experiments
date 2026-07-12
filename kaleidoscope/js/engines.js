@@ -52,18 +52,24 @@ function buildRadial(svgEl, scene, store) {
   }));
 
   const defs = el('defs');
-  // Chamber placed radially: x → [0, R] outward from apex, y centered on the axis.
+  // Hash-supplied state bypasses the slider's [3,16] — clamp so a garbage
+  // order can't hang the tab building wedges.
+  const order = Math.min(32, Math.max(1, Math.trunc(scene.radial.order) || 1));
+  const n = order * (scene.radial.mirror ? 2 : 1);
+  const wedge = 360 / n;
+  const half = (wedge / 2) * (Math.PI / 180);
+  // Chamber placed radially: x → [0, R] outward from apex, y centered on the
+  // axis. Scale must cover the whole sector: wedges wider than 60° need
+  // |y| up to R·sin(half), taller than the h·(R/w) band; the arc clip trims
+  // the radial overshoot.
   const { width: w, height: h } = scene.chamber;
-  const s = R / w;
+  const s = Math.max(R / w, (2 * R * Math.sin(half)) / h);
   const placed = el('g', { id: 'radial-chamber' });
   const inner = el('g', { transform: `translate(0,${(-h * s) / 2}) scale(${s})` });
   inner.appendChild(chamberGroup(scene, store, {}));
   placed.appendChild(inner);
   defs.appendChild(placed);
 
-  const n = scene.radial.order * (scene.radial.mirror ? 2 : 1);
-  const wedge = 360 / n;
-  const half = (wedge / 2) * (Math.PI / 180);
   const sector = `M0,0 L${R * Math.cos(-half)},${R * Math.sin(-half)} ` +
     `A${R},${R} 0 0 1 ${R * Math.cos(half)},${R * Math.sin(half)} Z`;
   const clip = el('clipPath', { id: 'radial-sector' });

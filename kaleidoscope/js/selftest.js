@@ -136,6 +136,8 @@ async function testEngines() {
   renderPreview(svg, scene, fakeStore);
   assert('engines: radial mirror renders 2×order wedges',
     svg.querySelectorAll('[data-wedge]').length === 12);
+  assert('engines: mirrored wedge reflects then rotates',
+    svg.querySelector('[data-wedge="1"]').getAttribute('transform') === 'rotate(30) scale(1,-1)');
   scene.radial.mirror = false;
   renderPreview(svg, scene, fakeStore);
   assert('engines: radial no-mirror renders order wedges',
