@@ -1,7 +1,8 @@
 import { loadParts } from './parts.js';
 import { defaultScene, scatter, decodeHash, saveLocal, partColor } from './scene.js';
 import { renderPreview } from './engines.js';
-import { renderChamber, getSelected } from './editor.js';
+import { renderChamber, getSelected, clearSelection } from './editor.js';
+import { bindSidebar } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -62,8 +63,12 @@ async function boot() {
   }
   update();
 
-  // Later tasks extend boot(): editor pane (Task 11), sidebar (Task 13),
-  // export (Task 14), persistence load (Task 15).
+  const reroll = () => { clearSelection(); scatter(scene, store); update(); };
+  // clearSelection: after a reroll the new random parts reuse the same numeric
+  // ids, so a stale selection would silently attach to an unrelated part.
+  bindSidebar(scene, store, { update, reroll });
+
+  // Later tasks extend boot(): export (Task 14), persistence load (Task 15).
   window.__kaleido = { scene, store, update };  // console access during development
 }
 
