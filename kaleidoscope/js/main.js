@@ -1,5 +1,5 @@
 import { loadParts } from './parts.js';
-import { defaultScene, scatter, decodeHash, encodeHash, saveLocal, loadLocal, serialize, deserialize, partColor } from './scene.js';
+import { defaultScene, scatter, decodeHash, encodeHash, saveLocal, loadLocal, serialize, deserialize, partColor, partTransform } from './scene.js';
 import { getPreset } from './palettes.js';
 import { renderPreview } from './engines.js';
 import { renderChamber, getSelected, clearSelection } from './editor.js';
@@ -62,7 +62,7 @@ async function boot() {
       // preview's chamber def — every wedge/tile instance follows via <use>.
       const u = $('preview-svg').querySelector(`use[data-part-id="${part.id}"]`);
       if (u) u.setAttribute('transform',
-        `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+        partTransform(scene, part, store.rel?.[part.partRef] ?? 1));
       return;
     }
     if (kind === 'tweak') renderPreview($('preview-svg'), scene, store);

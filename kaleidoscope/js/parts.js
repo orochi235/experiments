@@ -72,6 +72,7 @@ export async function loadParts(baseUrl = 'assets') {
   return {
     list: manifest.parts,
     baseColor: base,
+    rel: Object.fromEntries(manifest.parts.map(p => [p.id, p.rel ?? 1])),
     symbolId: (partId, color) => symbolFor(partId, color).id,
     symbolMarkup: (partId, color) => symbolFor(partId, color).outerHTML,
   };

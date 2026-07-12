@@ -1,4 +1,4 @@
-import { partColor, PART_UNIT } from './scene.js';
+import { partColor, partTransform, PART_UNIT } from './scene.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}) => {
@@ -60,7 +60,8 @@ export function chamberGroup(scene, store, { wrap = false } = {}) {
       g.appendChild(el('use', {
         href: '#' + store.symbolId(part.partRef, partColor(scene, part)),
         x: -PART_UNIT / 2, y: -PART_UNIT / 2, width: PART_UNIT, height: PART_UNIT,
-        transform: `translate(${part.x + ox},${part.y + oy}) rotate(${part.rotation}) scale(${part.scale})`,
+        transform: partTransform(scene, { ...part, x: part.x + ox, y: part.y + oy },
+          store.rel?.[part.partRef] ?? 1),
         'data-part-id': part.id,
       }));
     }

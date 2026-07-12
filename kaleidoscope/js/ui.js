@@ -39,6 +39,8 @@ export function bindSidebar(scene, store, { update, reroll }) {
   $('ctl-sizemin').oninput = (e) => { scene.sizeRange[0] = +e.target.value; cReroll(); };
   $('ctl-sizemax').value = scene.sizeRange[1];
   $('ctl-sizemax').oninput = (e) => { scene.sizeRange[1] = +e.target.value; cReroll(); };
+  $('ctl-proportional').checked = !!scene.proportional;
+  $('ctl-proportional').onchange = (e) => { scene.proportional = e.target.checked; update(); };
   $('ctl-jitter').value = scene.rotationJitter;
   $('ctl-jitter').oninput = (e) => { scene.rotationJitter = +e.target.value; cReroll(); };
   $('ctl-seed').value = scene.seed;

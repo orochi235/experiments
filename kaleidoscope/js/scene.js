@@ -16,6 +16,7 @@ export function defaultScene() {
     density: 14,
     sizeRange: [0.5, 1.4],
     rotationJitter: 180,
+    proportional: false,   // scale parts by their real-world relative size
   };
 }
 
@@ -41,6 +42,12 @@ export function scatter(scene, store) {
   }));
 }
 
+// Single source of truth for a part instance's transform. `rel` is the
+// part's real-world relative size (from the manifest); applied only when
+// scene.proportional is on, so tweaked scales keep their meaning either way.
+export const partTransform = (scene, part, rel = 1) =>
+  `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale * (scene.proportional ? rel : 1)})`;
+
 export const partColor = (scene, part) =>
   part.colorOverride ?? scene.palette.colors[part.colorIndex % scene.palette.colors.length];
 
@@ -57,9 +64,9 @@ export function deserialize(json) {
 
 // URL hash carries seed + knobs only (no tweaks): cheap sharing of rerollable state.
 export function encodeHash(scene) {
-  const { seed, mode, radial, tiling, density, sizeRange, rotationJitter, partSet } = scene;
+  const { seed, mode, radial, tiling, density, sizeRange, rotationJitter, partSet, proportional } = scene;
   const payload = { seed, mode, radial, tiling, density, sizeRange, rotationJitter,
-    partSet, paletteName: scene.palette.name };
+    partSet, proportional, paletteName: scene.palette.name };
   return '#s=' + btoa(JSON.stringify(payload)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
 

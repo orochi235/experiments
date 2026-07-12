@@ -1,4 +1,4 @@
-import { partColor, PART_UNIT } from './scene.js';
+import { partColor, partTransform, PART_UNIT } from './scene.js';
 import { sampledRegion } from './engines.js';
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -41,7 +41,7 @@ export function renderChamber(svgEl, scene, store, onChange) {
 
   for (const part of scene.chamber.parts) {
     const g = el('g', {
-      transform: `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`,
+      transform: partTransform(scene, part, store.rel?.[part.partRef] ?? 1),
       'data-id': part.id, class: 'part',
     });
     g.appendChild(el('use', {
@@ -57,7 +57,7 @@ export function renderChamber(svgEl, scene, store, onChange) {
     svgEl.appendChild(g);
   }
 
-  wirePointerHandlers(svgEl, scene, onChange);
+  wirePointerHandlers(svgEl, scene, store, onChange);
 }
 
 function svgPoint(svgEl, clientX, clientY) {
@@ -65,7 +65,8 @@ function svgPoint(svgEl, clientX, clientY) {
   return pt.matrixTransform(svgEl.getScreenCTM().inverse());
 }
 
-function wirePointerHandlers(svgEl, scene, onChange) {
+function wirePointerHandlers(svgEl, scene, store, onChange) {
+  const transformOf = (part) => partTransform(scene, part, store.rel?.[part.partRef] ?? 1);
   svgEl.onpointerdown = (ev) => {
     if (svgEl.onpointermove) return;  // a second pointer must not clobber an active drag
     let g = ev.target.closest('g[data-id]');
@@ -84,8 +85,7 @@ function wirePointerHandlers(svgEl, scene, onChange) {
       part.y = Math.min(scene.chamber.height, Math.max(0, orig.y + p.y - start.y));
       // 60fps path: move this <g> in place and let main.js mutate the preview's
       // matching <use>; a full renderPreview costs 70-180ms at density 30.
-      g.setAttribute('transform',
-        `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+      g.setAttribute('transform', transformOf(part));
       onChange('drag', part);
     };
     const end = () => {
@@ -107,8 +107,7 @@ function wirePointerHandlers(svgEl, scene, onChange) {
     // Wheel ticks arrive in bursts: cheap 'drag' path per tick, one full
     // 'tweak' render after the burst settles (full renderPreview costs
     // 70-180ms at density 30).
-    svgEl.querySelector(`g[data-id="${part.id}"]`)?.setAttribute('transform',
-      `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+    svgEl.querySelector(`g[data-id="${part.id}"]`)?.setAttribute('transform', transformOf(part));
     onChange('drag', part);
     clearTimeout(wheelTimer);
     wheelTimer = setTimeout(() => onChange('tweak'), 150);
