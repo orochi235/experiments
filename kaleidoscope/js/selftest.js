@@ -62,11 +62,13 @@ async function testColor() {
   const Ls = ramp.map(s => hexToOklch(remapColor(s, '#9ba19d', '#c91a09')).L);
   assert('color: remapped ramp is monotone', Ls.every((v, i) => i === 0 || v >= Ls[i - 1] - 1e-4));
 
-  // Highlight onto light yellow stays near the target hue (catches
-  // per-channel gamut clipping shifting hue toward green)
-  const hY = hexToOklch('#f2cd37').h;
-  const hHi = hexToOklch(remapColor('#cad1cc', '#9ba19d', '#f2cd37')).h;
-  assert('color: yellow highlight hue stays true', Math.abs(hHi - hY) < 6 * Math.PI / 180);
+  // Out-of-gamut highlight keeps the target hue after chroma fitting
+  // (catches per-channel gamut clipping shifting hue). Red keeps enough
+  // fitted chroma for a well-defined output hue; very light targets clamp
+  // to near-white where hue is float noise.
+  const hR = hexToOklch('#c91a09').h;
+  const hHi = hexToOklch(remapColor('#cad1cc', '#9ba19d', '#c91a09')).h;
+  assert('color: fitted highlight hue stays true', Math.abs(hHi - hR) < 6 * Math.PI / 180);
 }
 
 function nearHex(a, b, tol) {
