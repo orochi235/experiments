@@ -3,6 +3,7 @@ import { defaultScene, scatter, decodeHash, saveLocal, partColor } from './scene
 import { renderPreview } from './engines.js';
 import { renderChamber, getSelected, clearSelection } from './editor.js';
 import { bindSidebar } from './ui.js';
+import { downloadPng, downloadSvg } from './export.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,7 +69,18 @@ async function boot() {
   // ids, so a stale selection would silently attach to an unrelated part.
   bindSidebar(scene, store, { update, reroll });
 
-  // Later tasks extend boot(): export (Task 14), persistence load (Task 15).
+  const exportSize = () => {
+    const v = $('ctl-export-preset').value;
+    if (v === 'custom') return [+$('ctl-export-w').value, +$('ctl-export-h').value];
+    return v.split('x').map(Number);
+  };
+  $('ctl-export-preset').onchange = (e) => {
+    $('export-custom').hidden = e.target.value !== 'custom';
+  };
+  $('ctl-export-png').onclick = () => downloadPng(scene, store, ...exportSize());
+  $('ctl-export-svg').onclick = () => downloadSvg(scene, store, ...exportSize());
+
+  // Later tasks extend boot(): persistence load (Task 15).
   window.__kaleido = { scene, store, update };  // console access during development
 }
 
