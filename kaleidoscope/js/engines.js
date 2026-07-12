@@ -106,13 +106,17 @@ function buildTiling(svgEl, scene, store) {
   // tileSize can't yield a NaN/degenerate pattern.
   const tileSize = Math.min(600, Math.max(50, Number(scene.tiling.tileSize) || 300));
   const k = tileSize / w;                       // chamber units → preview units
-  const src = el('g', { id: 'tiling-chamber' });
-  src.appendChild(chamberGroup(scene, store, { wrap: true }));
-  defs.appendChild(src);
+  const group = scene.tiling.group;
+  const hex = group === 'p6m' || group === 'p3m1';
+  if (!hex) {                                   // hex mode never references these defs
+    const src = el('g', { id: 'tiling-chamber' });
+    src.appendChild(chamberGroup(scene, store, { wrap: true }));
+    defs.appendChild(src);
 
-  const clipRect = el('clipPath', { id: 'tile-cell' });
-  clipRect.appendChild(el('rect', { width: w, height: h }));
-  defs.appendChild(clipRect);
+    const clipRect = el('clipPath', { id: 'tile-cell' });
+    clipRect.appendChild(el('rect', { width: w, height: h }));
+    defs.appendChild(clipRect);
+  }
 
   const pattern = el('pattern', { id: 'tile', patternUnits: 'userSpaceOnUse' });
   const use = (transform) => {
@@ -122,7 +126,6 @@ function buildTiling(svgEl, scene, store) {
     return g;
   };
 
-  const group = scene.tiling.group;
   if (group === 'p1') {
     pattern.setAttribute('width', w * k); pattern.setAttribute('height', h * k);
     pattern.appendChild(el('g', { transform: `scale(${k})` })).appendChild(use());
@@ -161,7 +164,7 @@ function buildTiling(svgEl, scene, store) {
       g.appendChild(gg);
     }
   } else {
-    buildHexTiling(svgEl, defs, pattern, scene, store, k);  // Task 10 (p6m, p3m1)
+    buildHexTiling(defs, pattern, scene, store, k);  // Task 10 (p6m, p3m1)
   }
 
   defs.appendChild(pattern);
@@ -174,21 +177,29 @@ function buildTiling(svgEl, scene, store) {
   }));
 }
 
-function buildHexTiling(svgEl, defs, pattern, scene, store, k) {
+function buildHexTiling(defs, pattern, scene, store, k) {
   const group = scene.tiling.group;                 // 'p6m' | 'p3m1'
   const r = scene.chamber.width;                    // motif radius in chamber units
   const motif = wedgeMotif(defs, scene, store, {
     order: group === 'p6m' ? 6 : 3, mirror: true, R: r, idPrefix: 'hex',
   });
   motif.id = 'hex-motif';
+  // p6m: rotate the motif a half-wedge so its mirror axes (15° + 30°k) land
+  // on the hex lattice's mirrors (30°k) — unrotated, the pattern is chiral p6.
+  // p3m1 must stay unrotated or its mirrors move onto translation axes (p31m).
+  if (group === 'p6m') motif.setAttribute('transform', 'rotate(15)');
   defs.appendChild(motif);
 
   // Hex lattice: vectors (√3r, 0) and (√3r/2, 1.5r). Rect tile W=√3r, H=3r
-  // holds one full column plus the half-offset row; corner stamps wrap it.
+  // holds one full column plus the half-offset row. The offset row also needs
+  // horizontal neighbors: its discs overflow the vertical tile edges by
+  // r(1−√3/2) and SVG patterns clip to the tile, so stamp both sides.
   const W = Math.sqrt(3) * r, H = 3 * r;
   pattern.setAttribute('width', W * k); pattern.setAttribute('height', H * k);
   const g = pattern.appendChild(el('g', { transform: `scale(${k})` }));
-  for (const [cx, cy] of [[0, 0], [W, 0], [W / 2, H / 2], [0, H], [W, H]]) {
+  for (const [cx, cy] of [[0, 0], [W, 0],
+                          [-W / 2, H / 2], [W / 2, H / 2], [3 * W / 2, H / 2],
+                          [0, H], [W, H]]) {
     g.appendChild(el('use', { href: '#hex-motif', transform: `translate(${cx},${cy})` }));
   }
 }

@@ -168,7 +168,7 @@ async function testEngines() {
     scene.mode = 'tiling'; scene.tiling = { group, tileSize: 300 };
     renderPreview(svg, scene, fakeStore);
     assert(`engines: ${group} builds a motif`, svg.querySelector('#hex-motif') !== null);
-    assert(`engines: ${group} stamps motif on hex lattice (5 stamps)`,
-      svg.querySelectorAll('pattern > g > use[href="#hex-motif"]').length === 5);
+    assert(`engines: ${group} stamps motif on hex lattice (7 stamps)`,
+      svg.querySelectorAll('pattern > g > use[href="#hex-motif"]').length === 7);
   }
 }
