@@ -52,14 +52,16 @@ function svgPoint(svgEl, clientX, clientY) {
 
 function wirePointerHandlers(svgEl, scene, onChange) {
   svgEl.onpointerdown = (ev) => {
-    const g = ev.target.closest('g[data-id]');
+    if (svgEl.onpointermove) return;  // a second pointer must not clobber an active drag
+    let g = ev.target.closest('g[data-id]');
     if (!g) { selectedId = null; onChange('select'); return; }
     selectedId = Number(g.dataset.id);
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     const start = svgPoint(svgEl, ev.clientX, ev.clientY);
     const orig = { x: part.x, y: part.y };
     svgEl.setPointerCapture(ev.pointerId);
-    onChange('select');
+    onChange('select');  // rebuilds the pane to draw the highlight...
+    g = svgEl.querySelector(`g[data-id="${part.id}"]`);  // ...so re-bind to the fresh node
 
     svgEl.onpointermove = (mv) => {
       const p = svgPoint(svgEl, mv.clientX, mv.clientY);
@@ -71,9 +73,10 @@ function wirePointerHandlers(svgEl, scene, onChange) {
         `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
       onChange('drag', part);
     };
-    svgEl.onpointerup = () => {
-      svgEl.onpointermove = svgEl.onpointerup = null;
-      onChange('tweak');   // full re-render + autosave on release
+    const end = () => {
+      svgEl.onpointermove = svgEl.onpointerup = svgEl.onpointercancel = null;
+      onChange('tweak');   // full re-render + autosave on release/cancel
     };
+    svgEl.onpointerup = svgEl.onpointercancel = end;
   };
 }
