@@ -1513,7 +1513,8 @@ git commit -m "kaleidoscope: chamber editor with select and drag"
 - [ ] **Step 1: Add wheel + keyboard handlers to `wirePointerHandlers` in `js/editor.js`** (append inside the function):
 
 ```js
-  let wheelTimer = 0;
+  // wheelTimer lives at module scope (like selectedId): settle timers must
+  // survive renderChamber rebuilds or orphaned timers double-render.
   svgEl.onwheel = (ev) => {
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     if (!part) return;

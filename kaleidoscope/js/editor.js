@@ -8,6 +8,7 @@ const el = (tag, attrs = {}) => {
 };
 
 let selectedId = null;
+let wheelTimer = 0;  // module scope: settle timers must survive renderChamber rebuilds
 export const getSelected = (scene) =>
   scene.chamber.parts.find(p => p.id === selectedId) ?? null;
 export const clearSelection = () => { selectedId = null; };
@@ -80,7 +81,6 @@ function wirePointerHandlers(svgEl, scene, onChange) {
     svgEl.onpointerup = svgEl.onpointercancel = end;
   };
 
-  let wheelTimer = 0;
   svgEl.onwheel = (ev) => {
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     if (!part) return;
