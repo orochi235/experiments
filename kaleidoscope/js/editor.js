@@ -1,4 +1,5 @@
 import { partColor, PART_UNIT } from './scene.js';
+import { sampledRegion } from './engines.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}) => {
@@ -24,6 +25,19 @@ export function renderChamber(svgEl, scene, store, onChange) {
   svgEl.appendChild(el('rect', {
     width: w, height: h, fill: 'none', stroke: '#7ac8ff44', 'stroke-dasharray': '6 4',
   }));
+
+  // Highlight the region the current engine samples (wedge / triangle);
+  // parts outside it don't appear in the pattern. Clipped to the chamber.
+  const region = sampledRegion(scene);
+  if (region) {
+    const defs = el('defs');
+    const clip = el('clipPath', { id: 'chamber-bounds' });
+    clip.appendChild(el('rect', { width: w, height: h }));
+    defs.appendChild(clip);
+    svgEl.appendChild(defs);
+    const p = el('path', { d: region, class: 'sampled-region', 'clip-path': 'url(#chamber-bounds)' });
+    svgEl.appendChild(p);
+  }
 
   for (const part of scene.chamber.parts) {
     const g = el('g', {
@@ -85,7 +99,9 @@ function wirePointerHandlers(svgEl, scene, onChange) {
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     if (!part) return;
     ev.preventDefault();
-    const d = Math.sign(ev.deltaY);
+    // macOS converts shift+vertical-wheel into deltaX; fall back so
+    // shift+scroll (scale) actually receives a delta.
+    const d = Math.sign(ev.deltaY || ev.deltaX);
     if (ev.shiftKey) part.scale = Math.min(3, Math.max(0.2, part.scale * (1 - d * 0.06)));
     else part.rotation = (part.rotation + d * 5) % 360;
     // Wheel ticks arrive in bursts: cheap 'drag' path per tick, one full

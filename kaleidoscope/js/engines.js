@@ -11,6 +11,36 @@ export const PREVIEW_R = 500;                    // radial preview radius
 export const WRAP_MARGIN = 0.2;                  // tiling: clone parts within 20% of an edge
 export const TILE_VIEW = 1000;                   // tiling preview viewBox is 0..1000 square
 
+// Region of the chamber the current engine actually samples, as an SVG path
+// in chamber coordinates — the editor overlays it so you can see which parts
+// feed the pattern. null = the whole chamber is sampled.
+export function sampledRegion(scene) {
+  const { width: w, height: h } = scene.chamber;
+  const group = scene.tiling.group;
+  if (scene.mode === 'tiling') {
+    if (group === 'p4m') {
+      const s = Math.min(w, h);
+      return `M0,0 L${s},0 L${s},${s} Z`;   // fundamental triangle
+    }
+    if (group !== 'p6m' && group !== 'p3m1') return null;  // p1/pm/pmm: all of it
+  }
+  // Wedge modes (radial, p6m, p3m1): mirror of wedgeMotif's placement math —
+  // apex at (0, h/2), half-angle π/n, radius R/s in chamber units.
+  const radial = scene.mode === 'radial';
+  const order = radial
+    ? Math.min(32, Math.max(1, Math.trunc(scene.radial.order) || 1))
+    : (group === 'p6m' ? 6 : 3);
+  const mirror = radial ? scene.radial.mirror : true;
+  const n = order * (mirror ? 2 : 1);
+  const half = Math.PI / n;
+  const R = radial ? PREVIEW_R : w;
+  const s = Math.max(R / w, (2 * R * Math.sin(half)) / h);
+  const r = R / s;
+  const cy = h / 2;
+  return `M0,${cy} L${r * Math.cos(-half)},${cy + r * Math.sin(-half)} ` +
+    `A${r},${r} 0 0 1 ${r * Math.cos(half)},${cy + r * Math.sin(half)} Z`;
+}
+
 // One <g> containing a <use> per chamber part. With {wrap:true}, parts near an
 // edge are cloned across the opposite edge (toroidal) so tiles read seamless.
 export function chamberGroup(scene, store, { wrap = false } = {}) {

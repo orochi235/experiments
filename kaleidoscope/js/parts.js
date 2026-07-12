@@ -62,7 +62,7 @@ export async function loadParts(baseUrl = 'assets') {
       const sym = document.createElementNS('http://www.w3.org/2000/svg', 'symbol');
       sym.id = `sym-${partId}-${color.slice(1)}`;
       sym.setAttribute('viewBox', part.viewBox);
-      sym.innerHTML = namespaceIds(recoloredInner(part, color), `${partId}-${color.slice(1)}`);
+      sym.innerHTML = namespaceIds(recoloredInner(part, color), `p${partId}-${color.slice(1)}`);  // 'p': ids must not start with a digit (strict XML parsers)
       host.appendChild(sym);
       cache.set(key, sym);
     }

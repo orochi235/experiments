@@ -25,6 +25,7 @@ export function buildSvgDocument(scene, store, w, h) {
   });
 
   svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  svg.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
   svg.setAttribute('width', w); svg.setAttribute('height', h);
 
   let markup = svg.outerHTML;
@@ -51,6 +52,12 @@ export function buildSvgDocument(scene, store, w, h) {
     store.symbolMarkup(p.partRef, partColor(scene, p))));
   const defsMarkup = `<defs>${[...symbols].join('')}</defs>`;
   markup = markup.replace('>', `>${defsMarkup}`);
+
+  // Strict SVG 1.1 renderers (Illustrator, macOS Preview/Quick Look) only
+  // follow xlink:href on <use> — SVG2's plain href paints blank there. Emit
+  // both. (Only <use> elements carry href in this document.)
+  markup = markup.replace(/ href="([^"]+)"/g, ' href="$1" xlink:href="$1"');
+
   return `<?xml version="1.0" encoding="UTF-8"?>\n${markup}`;
 }
 

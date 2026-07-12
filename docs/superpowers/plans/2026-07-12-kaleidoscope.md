@@ -1519,7 +1519,9 @@ git commit -m "kaleidoscope: chamber editor with select and drag"
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     if (!part) return;
     ev.preventDefault();
-    const d = Math.sign(ev.deltaY);
+    // macOS converts shift+vertical-wheel into deltaX; fall back so
+    // shift+scroll (scale) actually receives a delta.
+    const d = Math.sign(ev.deltaY || ev.deltaX);
     if (ev.shiftKey) part.scale = Math.min(3, Math.max(0.2, part.scale * (1 - d * 0.06)));
     else part.rotation = (part.rotation + d * 5) % 360;
     // Wheel ticks arrive in bursts: cheap 'drag' path per tick, one full
