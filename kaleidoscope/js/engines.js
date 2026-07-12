@@ -96,7 +96,10 @@ function buildTiling(svgEl, scene, store) {
 
   const defs = el('defs');
   const { width: w, height: h } = scene.chamber;
-  const k = scene.tiling.tileSize / w;          // chamber units → preview units
+  // Hash-supplied state bypasses the slider's [100,600] — clamp so a garbage
+  // tileSize can't yield a NaN/degenerate pattern.
+  const tileSize = Math.min(600, Math.max(50, Number(scene.tiling.tileSize) || 300));
+  const k = tileSize / w;                       // chamber units → preview units
   const src = el('g', { id: 'tiling-chamber' });
   src.appendChild(chamberGroup(scene, store, { wrap: true }));
   defs.appendChild(src);
