@@ -76,5 +76,34 @@ function nearHex(a, b, tol) {
   const [x, y] = [p(a), p(b)];
   return x.every((v, i) => Math.abs(v - y[i]) <= tol);
 }
-async function testScene() {}
+async function testScene() {
+  const { defaultScene, scatter, serialize, deserialize, encodeHash, decodeHash } =
+    await import('./scene.js');
+  const fakeStore = { list: [{ id: '3001' }, { id: '3941' }, { id: '4070' }] };
+
+  const s1 = defaultScene(), s2 = defaultScene();
+  s1.seed = s2.seed = 42;
+  scatter(s1, fakeStore); scatter(s2, fakeStore);
+  assert('scene: scatter is deterministic',
+    JSON.stringify(s1.chamber.parts) === JSON.stringify(s2.chamber.parts));
+  assert('scene: scatter respects density', s1.chamber.parts.length === s1.density);
+  assert('scene: parts land inside chamber', s1.chamber.parts.every(p =>
+    p.x >= 0 && p.x <= s1.chamber.width && p.y >= 0 && p.y <= s1.chamber.height));
+  assert('scene: scatter only uses enabled parts', (() => {
+    const s = defaultScene(); s.seed = 7; s.partSet = ['3941'];
+    scatter(s, fakeStore);
+    return s.chamber.parts.every(p => p.partRef === '3941');
+  })());
+
+  const round = deserialize(serialize(s1));
+  assert('scene: serialize round-trips', JSON.stringify(round) === JSON.stringify(s1));
+
+  const h = encodeHash(s1);
+  const dec = decodeHash(h);
+  assert('scene: hash round-trips seed+knobs',
+    dec.seed === s1.seed && dec.mode === s1.mode && dec.density === s1.density &&
+    dec.radial.order === s1.radial.order && dec.tiling.group === s1.tiling.group);
+  assert('scene: hash omits tweaks', dec.chamber === undefined);
+  assert('scene: decodeHash rejects garbage', decodeHash('#s=%%%') === null);
+}
 async function testEngines() {}
