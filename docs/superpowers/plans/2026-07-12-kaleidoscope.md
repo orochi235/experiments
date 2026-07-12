@@ -538,6 +538,10 @@ function fitChroma({ L, C, h }) {
   return lo;
 }
 
+// How much of a shade's above-base lightness survives remapping (0 = flatten
+// all highlights to the base color, 1 = keep the baked lighting as-is).
+const HIGHLIGHT_COMPRESSION = 0.45;
+
 // Map `hex`'s relationship to `baseHex` onto `newBaseHex`.
 export function remapColor(hex, baseHex, newBaseHex) {
   const c = hexToOklch(hex), b = hexToOklch(baseHex), n = hexToOklch(newBaseHex);
@@ -546,8 +550,13 @@ export function remapColor(hex, baseHex, newBaseHex) {
   // has C ≈ 0.009): keep the new base's hue, scale chroma with lightness.
   const baseIsGray = b.C < 2e-2;
   const rL = b.L > 1e-6 ? c.L / b.L : 1;
-  const L = Math.min(1, Math.max(0, n.L * rL));
-  const C = baseIsGray ? n.C * rL : n.C * (c.C / b.C);
+  // Compress above-base ratios: the baked LDView lighting makes top faces
+  // read too bright relative to the rest of the part once remapped, and on
+  // light targets rL > 1 clamps to flat white. Shadows (rL <= 1) untouched;
+  // the L ceiling keeps highlights tinted instead of pure white.
+  const rLc = rL <= 1 ? rL : 1 + (rL - 1) * HIGHLIGHT_COMPRESSION;
+  const L = Math.min(0.985, Math.max(0, n.L * rLc));
+  const C = baseIsGray ? n.C * rLc : n.C * (c.C / b.C);
   const h = baseIsGray ? n.h : n.h + (c.h - b.h);
   return oklchToHex({ L, C: fitChroma({ L, C, h }), h });
 }
