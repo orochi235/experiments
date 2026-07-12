@@ -79,4 +79,31 @@ function wirePointerHandlers(svgEl, scene, onChange) {
     };
     svgEl.onpointerup = svgEl.onpointercancel = end;
   };
+
+  let wheelTimer = 0;
+  svgEl.onwheel = (ev) => {
+    const part = scene.chamber.parts.find(p => p.id === selectedId);
+    if (!part) return;
+    ev.preventDefault();
+    const d = Math.sign(ev.deltaY);
+    if (ev.shiftKey) part.scale = Math.min(3, Math.max(0.2, part.scale * (1 - d * 0.06)));
+    else part.rotation = (part.rotation + d * 5) % 360;
+    // Wheel ticks arrive in bursts: cheap 'drag' path per tick, one full
+    // 'tweak' render after the burst settles (full renderPreview costs
+    // 70-180ms at density 30).
+    svgEl.querySelector(`g[data-id="${part.id}"]`)?.setAttribute('transform',
+      `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+    onChange('drag', part);
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => onChange('tweak'), 150);
+  };
+
+  svgEl.tabIndex = 0;  // focusable for keyboard events
+  svgEl.onkeydown = (ev) => {
+    if ((ev.key === 'Delete' || ev.key === 'Backspace') && selectedId !== null) {
+      scene.chamber.parts = scene.chamber.parts.filter(p => p.id !== selectedId);
+      selectedId = null;
+      onChange('tweak');
+    }
+  };
 }
