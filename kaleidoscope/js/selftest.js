@@ -116,4 +116,30 @@ async function testScene() {
     return deserialize(JSON.stringify(bad)).palette.colors.length > 0;
   })());
 }
-async function testEngines() {}
+async function testEngines() {
+  const { chamberGroup, renderPreview } = await import('./engines.js');
+  const { defaultScene, scatter } = await import('./scene.js');
+  const fakeStore = {
+    list: [{ id: 'x' }],
+    symbolId: (id, color) => `sym-${id}-${color.slice(1)}`,
+  };
+  const scene = defaultScene();
+  scene.seed = 5; scene.density = 4;
+  scatter(scene, fakeStore);
+
+  const g = chamberGroup(scene, fakeStore, {});
+  assert('engines: chamber has one use per part',
+    g.querySelectorAll('use').length === 4);
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  scene.mode = 'radial'; scene.radial = { order: 6, mirror: true };
+  renderPreview(svg, scene, fakeStore);
+  assert('engines: radial mirror renders 2×order wedges',
+    svg.querySelectorAll('[data-wedge]').length === 12);
+  scene.radial.mirror = false;
+  renderPreview(svg, scene, fakeStore);
+  assert('engines: radial no-mirror renders order wedges',
+    svg.querySelectorAll('[data-wedge]').length === 6);
+  assert('engines: background rect uses palette background',
+    svg.querySelector('rect').getAttribute('fill') === scene.palette.background);
+}
