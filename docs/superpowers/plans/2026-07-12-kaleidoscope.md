@@ -1419,14 +1419,16 @@ function svgPoint(svgEl, clientX, clientY) {
 
 function wirePointerHandlers(svgEl, scene, onChange) {
   svgEl.onpointerdown = (ev) => {
-    const g = ev.target.closest('g[data-id]');
+    if (svgEl.onpointermove) return;  // a second pointer must not clobber an active drag
+    let g = ev.target.closest('g[data-id]');
     if (!g) { selectedId = null; onChange('select'); return; }
     selectedId = Number(g.dataset.id);
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     const start = svgPoint(svgEl, ev.clientX, ev.clientY);
     const orig = { x: part.x, y: part.y };
     svgEl.setPointerCapture(ev.pointerId);
-    onChange('select');
+    onChange('select');  // rebuilds the pane to draw the highlight...
+    g = svgEl.querySelector(`g[data-id="${part.id}"]`);  // ...so re-bind to the fresh node
 
     svgEl.onpointermove = (mv) => {
       const p = svgPoint(svgEl, mv.clientX, mv.clientY);
@@ -1438,10 +1440,12 @@ function wirePointerHandlers(svgEl, scene, onChange) {
         `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
       onChange('drag', part);
     };
-    svgEl.onpointerup = () => {
-      svgEl.onpointermove = svgEl.onpointerup = null;
-      onChange('tweak');   // full re-render + autosave on release
+    const end = () => {
+      svgEl.onpointermove = svgEl.onpointerup = svgEl.onpointercancel = null;
+      onChange('tweak');   // full re-render + autosave on release/cancel
     };
+    svgEl.onpointerup = svgEl.onpointercancel = end;  // cancel too, or a system
+    // gesture mid-drag leaves a zombie hover-drag with no save
   };
 }
 ```
@@ -1509,6 +1513,7 @@ git commit -m "kaleidoscope: chamber editor with select and drag"
 - [ ] **Step 1: Add wheel + keyboard handlers to `wirePointerHandlers` in `js/editor.js`** (append inside the function):
 
 ```js
+  let wheelTimer = 0;
   svgEl.onwheel = (ev) => {
     const part = scene.chamber.parts.find(p => p.id === selectedId);
     if (!part) return;
@@ -1516,7 +1521,14 @@ git commit -m "kaleidoscope: chamber editor with select and drag"
     const d = Math.sign(ev.deltaY);
     if (ev.shiftKey) part.scale = Math.min(3, Math.max(0.2, part.scale * (1 - d * 0.06)));
     else part.rotation = (part.rotation + d * 5) % 360;
-    onChange('tweak');
+    // Wheel ticks arrive in bursts: cheap 'drag' path per tick, one full
+    // 'tweak' render after the burst settles (full renderPreview costs
+    // 70-180ms at density 30).
+    svgEl.querySelector(`g[data-id="${part.id}"]`)?.setAttribute('transform',
+      `translate(${part.x},${part.y}) rotate(${part.rotation}) scale(${part.scale})`);
+    onChange('drag', part);
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(() => onChange('tweak'), 150);
   };
 
   svgEl.tabIndex = 0;  // focusable for keyboard events
@@ -1677,7 +1689,10 @@ export function bindSidebar(scene, store, { update, reroll }) {
 ```js
 import { bindSidebar } from './ui.js';
 // inside boot(), after the first update():
-  const reroll = () => { scatter(scene, store); update(); };
+  const reroll = () => { clearSelection(); scatter(scene, store); update(); };
+  // clearSelection: after a reroll the new random parts reuse the same numeric
+  // ids, so a stale selection would silently attach to an unrelated part.
+  // (import clearSelection from './editor.js' alongside renderChamber)
   bindSidebar(scene, store, { update, reroll });
 ```
 
