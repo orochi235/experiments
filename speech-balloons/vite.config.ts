@@ -14,9 +14,21 @@ import react from '@vitejs/plugin-react';
 const weaselRoot = fileURLToPath(new URL('../../weasel', import.meta.url));
 const aliasModule = (await import(
   /* @vite-ignore */ new URL(`file://${weaselRoot}/scripts/vite-aliases.ts`).href
-)) as { weaselAliases: (root: string) => { find: string | RegExp; replacement: string }[] };
+)) as {
+  weaselAliases: (
+    root: string,
+    overrides?: { find: string | RegExp; replacement: string }[],
+  ) => { find: string | RegExp; replacement: string }[];
+};
+// tokens.css is generated rather than authored, so it does not sit where the alias generator's
+// `<package>/<subpath>` rule looks for it. The generator expects this one to be overridden.
 const weaselAliases = aliasModule
-  .weaselAliases(weaselRoot)
+  .weaselAliases(weaselRoot, [
+    {
+      find: '@weasel-js/theme/tokens.css',
+      replacement: `${weaselRoot}/packages/theme/src/generated/tokens.css`,
+    },
+  ])
   .filter((a) => !String(a.find).includes('labkit'));
 
 export default defineConfig({
