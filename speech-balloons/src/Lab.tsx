@@ -13,7 +13,7 @@ import {
   SelectRow,
   SliderRow,
   TextRow,
-  useExperimentState,
+  useTrialState,
   useLabStore,
 } from '@weasel-js/labkit';
 import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@weasel-js/labkit/undo';
@@ -162,11 +162,11 @@ const FONT_OPTIONS = [
 ];
 
 export function Lab() {
-  const { config: design, state: runtime, setConfig, setState } = useExperimentState<RuntimeState, DesignState>();
+  const { config: design, state: runtime, setConfig, setState } = useTrialState<RuntimeState, DesignState>();
   const store = useLabStore();
-  const updateUndo = store.updateWorkspaceUndoStack;
-  const currentUndoStack = store.workspaces.find((w) => w.id === 'balloon')?.undoStack ?? emptyStack();
-  const view = store.workspaces.find((w) => w.id === 'balloon')?.view ?? { zoom: 1.2, pan: { x: 0, y: 0 } };
+  const updateUndo = store.updateTrialUndoStack;
+  const currentUndoStack = store.trials.find((w) => w.id === 'balloon')?.undoStack ?? emptyStack();
+  const view = store.trials.find((w) => w.id === 'balloon')?.view ?? { zoom: 1.2, pan: { x: 0, y: 0 } };
 
   // Refs hold the latest staged value so chained setDesign / setRuntime calls
   // in the same tick compose instead of clobbering. Without these, two
@@ -427,7 +427,7 @@ export function Lab() {
     const fitW = (rect.width - pad * 2) / (design.width + 2 * reach);
     const fitH = (rect.height - pad * 2) / (design.height + 2 * reach);
     const fit = Math.max(0.1, Math.min(4, Math.min(fitW, fitH)));
-    store.updateWorkspaceView('balloon', { ...view, zoom: fit });
+    store.updateTrialView('balloon', { ...view, zoom: fit });
   }, [design.width, design.height, reach, store, view]);
   const tailEffects = design.effects.filter((e) => e.kind === 'tail');
   // Sticky palette slot per tail id. Explicit slots in params win; tails
@@ -691,7 +691,7 @@ export function Lab() {
             </div>
             <div className="sb-zoom-bar">
               <span className="sb-zoom-label">Zoom</span>
-              <button type="button" onClick={() => store.updateWorkspaceView('balloon', { ...view, zoom: Math.max(0.1, view.zoom - 0.1) })} title="Zoom out">−</button>
+              <button type="button" onClick={() => store.updateTrialView('balloon', { ...view, zoom: Math.max(0.1, view.zoom - 0.1) })} title="Zoom out">−</button>
               <input
                 className="sb-zoom-slider"
                 type="range"
@@ -699,11 +699,11 @@ export function Lab() {
                 max={4}
                 step={0.05}
                 value={view.zoom}
-                onChange={(e) => store.updateWorkspaceView('balloon', { ...view, zoom: Number(e.target.value) })}
+                onChange={(e) => store.updateTrialView('balloon', { ...view, zoom: Number(e.target.value) })}
               />
-              <button type="button" onClick={() => store.updateWorkspaceView('balloon', { ...view, zoom: Math.min(4, view.zoom + 0.1) })} title="Zoom in">+</button>
+              <button type="button" onClick={() => store.updateTrialView('balloon', { ...view, zoom: Math.min(4, view.zoom + 0.1) })} title="Zoom in">+</button>
               <span className="sb-zoom-readout">{Math.round(view.zoom * 100)}%</span>
-              <button type="button" onClick={() => store.updateWorkspaceView('balloon', { ...view, zoom: 1 })} title="Reset to 100%">1:1</button>
+              <button type="button" onClick={() => store.updateTrialView('balloon', { ...view, zoom: 1 })} title="Reset to 100%">1:1</button>
               <button type="button" onClick={fitZoomToStage} title="Fit content to viewport">Fit</button>
             </div>
           </section>
