@@ -15,6 +15,7 @@ import {
   TextRow,
   useTrialState,
   useLabStore,
+  ZoomControl,
 } from '@weasel-js/labkit';
 import { pushSnapshot, undo as undoStackOp, redo as redoStackOp, emptyStack } from '@weasel-js/labkit/undo';
 import { SpeechBalloon, bareBaseRadiusRange } from './SpeechBalloon';
@@ -161,12 +162,18 @@ const FONT_OPTIONS = [
   { label: 'System serif', value: 'ui-serif, Georgia, serif' },
 ];
 
+/** This trial's `view`, which labkit persists but treats as opaque. */
+interface BalloonView {
+  zoom: number;
+  pan: { x: number; y: number };
+}
+
 export function Lab() {
   const { config: design, state: runtime, setConfig, setState } = useTrialState<RuntimeState, DesignState>();
   const store = useLabStore();
   const updateUndo = store.updateTrialUndoStack;
   const currentUndoStack = store.trials.find((w) => w.id === 'balloon')?.undoStack ?? emptyStack();
-  const view = store.trials.find((w) => w.id === 'balloon')?.view ?? { zoom: 1.2, pan: { x: 0, y: 0 } };
+  const view = (store.trials.find((w) => w.id === 'balloon')?.view as BalloonView | undefined) ?? { zoom: 1.2, pan: { x: 0, y: 0 } };
 
   // Refs hold the latest staged value so chained setDesign / setRuntime calls
   // in the same tick compose instead of clobbering. Without these, two
@@ -499,6 +506,7 @@ export function Lab() {
 
   return (
     <LabShell
+      mode="dark"
       title="I'll take 'Balloons' for $600, Alex"
       header={
         <div className="sb-toolbar-actions">
@@ -535,21 +543,15 @@ export function Lab() {
     >
       <div className="sb-lab-body">
         <div className="sb-toolbar-fields">
-          {/* Font select, multi-line text textarea, and size-to-content checkbox keep
-              raw HTML — none fit the labkit PropertyRow stacked label+control shape. */}
-          <label className="sb-field">
-            <span>Font</span>
-            <select
-              value={runtime.fontFamily}
-              onChange={(e) => setRuntime((r) => ({ ...r, fontFamily: e.target.value }))}
-            >
-              {FONT_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* The multi-line text area and the checkboxes keep raw HTML: there is
+              no multi-line property row, and a checkbox here is a toolbar toggle
+              rather than a labelled panel row. */}
+          <SelectRow
+            label="Font"
+            value={runtime.fontFamily}
+            options={FONT_OPTIONS}
+            onChange={(v) => setRuntime((r) => ({ ...r, fontFamily: v }))}
+          />
           <SliderRow
             label="Size"
             value={runtime.fontSize}
@@ -690,19 +692,12 @@ export function Lab() {
               />
             </div>
             <div className="sb-zoom-bar">
-              <span className="sb-zoom-label">Zoom</span>
-              <button type="button" onClick={() => store.updateTrialView('balloon', { ...view, zoom: Math.max(0.1, view.zoom - 0.1) })} title="Zoom out">−</button>
-              <input
-                className="sb-zoom-slider"
-                type="range"
+              <ZoomControl
+                zoom={view.zoom}
                 min={0.1}
                 max={4}
-                step={0.05}
-                value={view.zoom}
-                onChange={(e) => store.updateTrialView('balloon', { ...view, zoom: Number(e.target.value) })}
+                onZoomChange={(z) => store.updateTrialView('balloon', { ...view, zoom: z })}
               />
-              <button type="button" onClick={() => store.updateTrialView('balloon', { ...view, zoom: Math.min(4, view.zoom + 0.1) })} title="Zoom in">+</button>
-              <span className="sb-zoom-readout">{Math.round(view.zoom * 100)}%</span>
               <button type="button" onClick={() => store.updateTrialView('balloon', { ...view, zoom: 1 })} title="Reset to 100%">1:1</button>
               <button type="button" onClick={fitZoomToStage} title="Fit content to viewport">Fit</button>
             </div>
